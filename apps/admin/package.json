@@ -13,6 +13,7 @@
     "next": "^14.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "@simplewebauthn/browser": "^10.0.0",
     "@locker/types": "workspace:*",
     "@locker/config": "workspace:*"
   },

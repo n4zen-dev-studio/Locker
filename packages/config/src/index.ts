@@ -4,10 +4,16 @@ type ApiEnv = {
   CORS_ORIGIN: string
   JWT_SECRET: string
   API_DB_PATH: string
+  API_ORIGIN: string
+  RP_ID: string
+  RP_NAME: string
+  DEV_AUTH_ENABLED: boolean
+  ADMIN_ORIGIN: string
 }
 
 type AdminEnv = {
   NEXT_PUBLIC_API_BASE_URL: string
+  NEXT_PUBLIC_DEV_AUTH_ENABLED: string
 }
 
 function parsePort(value: string | undefined, fallback: number): number {
@@ -24,19 +30,31 @@ function parseNodeEnv(value: string | undefined): ApiEnv["NODE_ENV"] {
   return "development"
 }
 
+function parseBool(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) return fallback
+  return value === "true" || value === "1"
+}
+
 export function getApiEnv(): ApiEnv {
   return {
     PORT: parsePort(process.env.API_PORT, 4000),
     NODE_ENV: parseNodeEnv(process.env.NODE_ENV),
     CORS_ORIGIN: process.env.API_CORS_ORIGIN || "http://localhost:3000",
     JWT_SECRET: process.env.JWT_SECRET || "dev-secret-change-me",
-    API_DB_PATH: process.env.API_DB_PATH || "./.data/locker.db"
+    API_DB_PATH: process.env.API_DB_PATH || "./.data/locker.db",
+    API_ORIGIN: process.env.API_ORIGIN || "http://localhost:4000",
+    RP_ID: process.env.RP_ID || "localhost",
+    RP_NAME: process.env.RP_NAME || "Locker",
+    DEV_AUTH_ENABLED: parseBool(process.env.DEV_AUTH_ENABLED, true),
+    ADMIN_ORIGIN: process.env.ADMIN_ORIGIN || "http://localhost:3000"
   }
 }
 
 export function getAdminEnv(): AdminEnv {
   return {
     NEXT_PUBLIC_API_BASE_URL:
-      process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
+      process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000",
+    NEXT_PUBLIC_DEV_AUTH_ENABLED:
+      process.env.NEXT_PUBLIC_DEV_AUTH_ENABLED || "true"
   }
 }

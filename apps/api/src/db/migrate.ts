@@ -49,7 +49,30 @@ export function runMigrations(db: Database.Database): void {
       createdAt TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS webauthn_credentials (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      credentialId TEXT NOT NULL UNIQUE,
+      publicKey TEXT NOT NULL,
+      counter INTEGER NOT NULL,
+      transports TEXT NULL,
+      createdAt TEXT NOT NULL,
+      lastUsedAt TEXT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS webauthn_challenges (
+      userId TEXT NOT NULL,
+      type TEXT NOT NULL,
+      challenge TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      PRIMARY KEY (userId, type)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
   `)
+
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN displayName TEXT")
+  } catch {}
 }
