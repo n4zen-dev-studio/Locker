@@ -1,4 +1,4 @@
-import { FC, useCallback, useState } from "react"
+import { FC, useCallback, useEffect, useState } from "react"
 import { Alert, AppState, Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
@@ -9,7 +9,8 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
 import { listNotes, resetNotes, Note } from "@/locker/storage/notesRepo"
-import { resetVaultMeta } from "@/locker/storage/vaultMetaRepo"
+import { getMeta, removeMeta } from "@/locker/storage/vaultMetaRepo"
+import { disablePasskeyDevOnly, isPasskeyEnabled } from "@/locker/auth/passkey"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
 export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function VaultHomeScreen(
@@ -21,6 +22,8 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
 
   const [notes, setNotes] = useState<Note[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [unlockMethod, setUnlockMethod] = useState<string | null>(null)
+  const [metaVersion, setMetaVersion] = useState<1 | 2 | null>(null)
 
   const refreshNotes = useCallback(() => {
     const key = vaultSession.getKey()
@@ -33,6 +36,18 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
     }
   }, [])
 
+  const refreshMeta = useCallback(async () => {
+    const meta = getMeta()
+    setMetaVersion(meta ? meta.v : null)
+    if (meta?.v === 2 && (await isPasskeyEnabled())) {
+      setUnlockMethod("Passkey")
+    } else if (meta?.v === 1) {
+      setUnlockMethod("Legacy PIN")
+    } else {
+      setUnlockMethod(null)
+    }
+  }, [])
+
   useFocusEffect(
     useCallback(() => {
       if (!vaultSession.isUnlocked()) {
@@ -40,7 +55,8 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
         return
       }
       refreshNotes()
-    }, [navigation, refreshNotes]),
+      refreshMeta()
+    }, [navigation, refreshNotes, refreshMeta]),
   )
 
   useFocusEffect(
@@ -53,6 +69,10 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
       return () => sub.remove()
     }, [navigation]),
   )
+
+  useEffect(() => {
+    refreshMeta()
+  }, [refreshMeta])
 
   const handleLock = () => {
     vaultSession.clear()
@@ -68,12 +88,17 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
         style: "destructive",
         onPress: () => {
           resetNotes()
-          resetVaultMeta()
+          removeMeta()
           vaultSession.clear()
           navigation.replace("VaultLocked")
         },
       },
     ])
+  }
+
+  const handleDisablePasskey = async () => {
+    await disablePasskeyDevOnly()
+    refreshMeta()
   }
 
   return (
@@ -85,6 +110,12 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
         <Text preset="subheading" style={themed($subtitle)}>
           Device Vault
         </Text>
+        {unlockMethod ? (
+          <Text style={themed($metaText)}>Unlock method: {unlockMethod}</Text>
+        ) : null}
+        {__DEV__ && metaVersion ? (
+          <Text style={themed($metaText)}>Meta version: v{metaVersion}</Text>
+        ) : null}
       </View>
 
       <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultNote", {})}>
@@ -127,6 +158,14 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
         )}
       </ScrollView>
 
+      {__DEV__ && metaVersion === 2 ? (
+        <Pressable style={themed($devButton)} onPress={handleDisablePasskey}>
+          <Text preset="bold" style={themed($devText)}>
+            Disable Passkey (Dev)
+          </Text>
+        </Pressable>
+      ) : null}
+
       <Pressable style={themed($lockButton)} onPress={handleLock}>
         <Text preset="bold" style={themed($lockText)}>
           Lock Vault
@@ -144,7 +183,7 @@ const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingTop: spacing.xl,
-  marginBottom: spacing.lg,
+  marginBottom: spacing.md,
 })
 
 const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
@@ -153,6 +192,11 @@ const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
 
 const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral300,
+})
+
+const $metaText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral400,
+  marginTop: 6,
 })
 
 const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
@@ -203,6 +247,19 @@ const $emptyCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $emptyText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral300,
+})
+
+const $devButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  paddingVertical: spacing.sm,
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: "rgba(255, 255, 255, 0.2)",
+  marginBottom: spacing.sm,
+})
+
+const $devText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral200,
 })
 
 const $lockButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
