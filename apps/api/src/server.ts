@@ -1,10 +1,18 @@
+import "./env"
+
 import Fastify from "fastify"
 import cors from "@fastify/cors"
 import { getApiEnv } from "@locker/config"
-
-const env = getApiEnv()
+import { registerAuthRoutes } from "./routes/auth"
+import { registerDeviceRoutes } from "./routes/devices"
+import { registerVaultRoutes } from "./routes/vaults"
+import { registerBlobRoutes } from "./routes/blobs"
+import { registerChangeRoutes } from "./routes/changes"
 
 async function main() {
+   const env = getApiEnv() 
+   console.log("[api] getApiEnv JWT_SECRET length:", env.JWT_SECRET?.length)
+
   const app = Fastify({
     logger: true
   })
@@ -15,7 +23,7 @@ async function main() {
   })
 
   app.get("/health", async () => {
-    return { ok: true, service: "locker-api" }
+    return { ok: true }
   })
 
   app.get("/v1/meta", async () => {
@@ -25,6 +33,12 @@ async function main() {
       now: new Date().toISOString()
     }
   })
+
+  await registerAuthRoutes(app)
+  await registerDeviceRoutes(app)
+  await registerVaultRoutes(app)
+  await registerBlobRoutes(app)
+  await registerChangeRoutes(app)
 
   const address = await app.listen({ port: env.PORT, host: "0.0.0.0" })
   app.log.info(`listening at ${address}`)
