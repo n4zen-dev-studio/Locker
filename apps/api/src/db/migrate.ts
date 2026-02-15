@@ -17,6 +17,14 @@ export function runMigrations(db: Database.Database): void {
       lastSeenAt TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS device_link_codes (
+      code TEXT PRIMARY KEY,
+      userId TEXT,
+      expiresAt TEXT,
+      usedAt TEXT NULL,
+      createdAt TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS vaults (
       id TEXT PRIMARY KEY,
       ownerUserId TEXT,

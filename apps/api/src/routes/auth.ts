@@ -4,6 +4,7 @@ import crypto from "crypto"
 import { getDb } from "../db/db"
 import { signToken } from "../auth/jwt"
 import { getApiEnv } from "@locker/config"
+import { authMiddleware } from "../middleware/auth"
 
 const loginSchema = z.object({
   email: z.string().email()
@@ -68,5 +69,19 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     const token = signToken({ sub: user.id, email: user.email })
     reply.send({ token, user })
+  })
+
+  app.get("/v1/me", { preHandler: authMiddleware }, async (request, reply) => {
+    const user = request.user!
+    const db = getDb()
+    const row = db
+      .prepare("SELECT id, email, createdAt, displayName FROM users WHERE id = ?")
+      .get(user.id) as { id: string; email: string | null; createdAt: string; displayName?: string | null } | undefined
+
+    if (!row) {
+      reply.code(404).send({ error: "User not found" })
+      return
+    }
+    reply.send({ user: row })
   })
 }
