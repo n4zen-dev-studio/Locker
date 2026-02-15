@@ -14,6 +14,21 @@ import { getDb } from "../db/db"
 import { signToken } from "../auth/jwt"
 import { authMiddleware } from "../middleware/auth"
 
+const DISCOVERABLE_USER_ID = "__discoverable__"
+
+
+type UserRow = { id: string; email: string | null; displayName: string | null }
+type UserIdRow = { id: string }
+type CredIdRow = { credentialId: string }
+type CredentialRow = {
+  id: string
+  userId: string
+  credentialId: string
+  publicKey: string
+  counter: number
+  transports: string | null
+}
+
 const registerOptionsSchema = z.object({
   email: z.string().email().optional(),
   displayName: z.string().min(1).optional(),
@@ -30,12 +45,30 @@ const authOptionsSchema = z.object({
 })
 
 const authVerifySchema = z.object({
-  userId: z.string().min(1),
+  userId: z.string().min(1).optional(),
   response: z.any(),
 })
 
-const toUserID = (id: string) => new TextEncoder().encode(id)
+const normalizeCredId = (id: string) => {
+  // If it's already base64url, keep it. Otherwise convert base64 -> base64url.
+  const hasUrlChars = id.includes("-") || id.includes("_")
+  if (hasUrlChars) return id
 
+  // convert base64 => base64url, strip padding
+  return id.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")
+}
+
+const toBuf = (v: unknown): Buffer => {
+  if (Buffer.isBuffer(v)) return v
+  if (v instanceof Uint8Array) return Buffer.from(v)
+  if (v instanceof ArrayBuffer) return Buffer.from(new Uint8Array(v))
+  // fallback for weird types
+  return Buffer.from(v as any)
+}
+
+
+
+const toUserID = (id: string) => new TextEncoder().encode(id)
 
 export async function registerWebAuthnRoutes(app: FastifyInstance) {
   const env = getApiEnv()
@@ -52,7 +85,7 @@ export async function registerWebAuthnRoutes(app: FastifyInstance) {
     let user: { id: string; email: string | null; displayName?: string | null } | undefined
 
     if (parse.data.email) {
-      user = db.prepare("SELECT id, email, displayName FROM users WHERE email = ?").get(parse.data.email)
+      user = db.prepare("SELECT id, email, displayName FROM users WHERE email = ?").get(parse.data.email) as UserRow | undefined
     }
 
     if (!user) {
@@ -66,7 +99,7 @@ export async function registerWebAuthnRoutes(app: FastifyInstance) {
 
     const existingCreds = db.prepare(
       "SELECT credentialId FROM webauthn_credentials WHERE userId = ?"
-    ).all(user.id) as { credentialId: string }[]
+    ).all(user.id) as CredIdRow[]
 
     const options = await generateRegistrationOptions({
       rpName: env.RP_NAME,
@@ -75,16 +108,14 @@ export async function registerWebAuthnRoutes(app: FastifyInstance) {
       userName: user.email ?? `user-${user.id.slice(0, 6)}`,
       attestationType: "none",
       authenticatorSelection: {
-  authenticatorAttachment: "platform",
-  residentKey: "preferred",
-  userVerification: "preferred",
-},
+        residentKey: "preferred",
+        userVerification: "preferred",
+      },
       supportedAlgorithmIDs: [-7],
       excludeCredentials: existingCreds.map((cred) => ({
-        id: cred.credentialId, 
+        id: cred.credentialId,   
         type: "public-key",
       })),
-
     })
 
     db.prepare(
@@ -125,33 +156,49 @@ export async function registerWebAuthnRoutes(app: FastifyInstance) {
     }
 
     const { credentialPublicKey, credentialID, counter } = verification.registrationInfo
-    const credentialId = isoBase64URL.fromBuffer(credentialID)
-    const publicKey = isoBase64URL.fromBuffer(credentialPublicKey)
-    const transports = (parse.data.response?.transports ?? null) as string[] | null
-    const now = new Date().toISOString()
-    const existingCred = db
-  .prepare("SELECT id, userId FROM webauthn_credentials WHERE credentialId = ?")
-  .get(credentialId) as { id: string; userId: string } | undefined
 
-if (existingCred) {
-  if (existingCred.userId === parse.data.userId) {
-    // idempotent success
-    db.prepare("DELETE FROM webauthn_challenges WHERE userId = ? AND type = ?")
-      .run(parse.data.userId, "registration")
-
-    const user = db
-      .prepare("SELECT id, email, displayName FROM users WHERE id = ?")
-      .get(parse.data.userId) as { id: string; email: string | null; displayName: string | null }
-
-    const token = signToken({ sub: user.id, email: user.email ?? user.id })
-    reply.send({ token, user })
-    return
-  }
-
-  reply.code(409).send({ error: "Passkey already registered to a different user" })
+// Store the credentialId exactly as the browser provides (base64url string)
+const credentialId = String(parse.data.response?.id || "")
+if (!credentialId) {
+  reply.code(400).send({ error: "Missing credential id in response" })
   return
 }
 
+// Store public key as base64url string
+const publicKey = isoBase64URL.fromBuffer(Buffer.from(credentialPublicKey))
+
+// (optional) sanity check that server-derived credentialID matches browser id
+const serverDerivedId = isoBase64URL.fromBuffer(toBuf(credentialID))
+if (serverDerivedId && serverDerivedId !== credentialId) {
+  // not fatal, but useful to see if anything is off
+  // eslint-disable-next-line no-console
+  console.warn("[webauthn] credentialId mismatch", { credentialId, serverDerivedId })
+}
+
+    const transports = (parse.data.response?.transports ?? null) as string[] | null
+    const now = new Date().toISOString()
+
+    const existingCred = db
+      .prepare("SELECT id, userId FROM webauthn_credentials WHERE credentialId = ?")
+      .get(credentialId) as { id: string; userId: string } | undefined
+
+    if (existingCred) {
+      if (existingCred.userId === parse.data.userId) {
+        db.prepare("DELETE FROM webauthn_challenges WHERE userId = ? AND type = ?")
+          .run(parse.data.userId, "registration")
+
+        const user = db
+          .prepare("SELECT id, email, displayName FROM users WHERE id = ?")
+          .get(parse.data.userId) as { id: string; email: string | null; displayName: string | null }
+
+        const token = signToken({ sub: user.id, email: user.email ?? user.id })
+        reply.send({ token, user })
+        return
+      }
+
+      reply.code(409).send({ error: "Passkey already registered to a different user" })
+      return
+    }
 
     db.prepare(
       "INSERT INTO webauthn_credentials (id, userId, credentialId, publicKey, counter, transports, createdAt, lastUsedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -169,11 +216,21 @@ if (existingCred) {
     db.prepare("DELETE FROM webauthn_challenges WHERE userId = ? AND type = ?")
       .run(parse.data.userId, "registration")
 
-    const user = db.prepare("SELECT id, email, displayName FROM users WHERE id = ?").get(parse.data.userId)
+    const user = db
+      .prepare("SELECT id, email, displayName FROM users WHERE id = ?")
+      .get(parse.data.userId) as UserRow | undefined
+
+    if (!user) {
+      reply.code(404).send({ error: "User not found" })
+      return
+    }
+
     const token = signToken({ sub: user.id, email: user.email ?? user.id })
     reply.send({ token, user })
+
   })
 
+  // Targeted sign-in (email/userId) uses allowCredentials
   app.post("/v1/auth/webauthn/authenticate/options", async (request, reply) => {
     const parse = authOptionsSchema.safeParse(request.body)
     if (!parse.success) {
@@ -184,9 +241,9 @@ if (existingCred) {
     const db = getDb()
     let user: { id: string } | undefined
     if (parse.data.userId) {
-      user = db.prepare("SELECT id FROM users WHERE id = ?").get(parse.data.userId)
+      user = db.prepare("SELECT id FROM users WHERE id = ?").get(parse.data.userId) as UserIdRow | undefined
     } else if (parse.data.email) {
-      user = db.prepare("SELECT id FROM users WHERE email = ?").get(parse.data.email)
+      user = db.prepare("SELECT id FROM users WHERE email = ?").get(parse.data.email) as UserRow | undefined
     }
 
     if (!user) {
@@ -196,7 +253,7 @@ if (existingCred) {
 
     const creds = db.prepare(
       "SELECT credentialId FROM webauthn_credentials WHERE userId = ?"
-    ).all(user.id) as { credentialId: string }[]
+    ).all(user.id) as CredIdRow[]
 
     if (creds.length === 0) {
       reply.code(400).send({ error: "No passkeys registered" })
@@ -206,10 +263,9 @@ if (existingCred) {
     const options = await generateAuthenticationOptions({
       rpID: env.RP_ID,
       allowCredentials: creds.map((cred) => ({
-        id: cred.credentialId, 
+        id: cred.credentialId,    
         type: "public-key",
       })),
-
       userVerification: "preferred",
     })
 
@@ -221,6 +277,22 @@ if (existingCred) {
     reply.send({ userId: user.id, options })
   })
 
+  // Discoverable sign-in (no allowCredentials, user derived from credentialId)
+  app.post("/v1/auth/webauthn/authenticate/options/discoverable", async (_request, reply) => {
+    const db = getDb()
+    const options = await generateAuthenticationOptions({
+      rpID: env.RP_ID,
+      userVerification: "preferred",
+    })
+
+    const now = new Date().toISOString()
+    db.prepare(
+      "INSERT INTO webauthn_challenges (userId, type, challenge, createdAt) VALUES (?, ?, ?, ?) ON CONFLICT(userId, type) DO UPDATE SET challenge=excluded.challenge, createdAt=excluded.createdAt"
+    ).run(DISCOVERABLE_USER_ID, "authentication", options.challenge, now)
+
+    reply.send({ options })
+  })
+
   app.post("/v1/auth/webauthn/authenticate/verify", async (request, reply) => {
     const parse = authVerifySchema.safeParse(request.body)
     if (!parse.success) {
@@ -229,16 +301,26 @@ if (existingCred) {
     }
 
     const db = getDb()
+    const challengeOwner = parse.data.userId ?? DISCOVERABLE_USER_ID
     const challengeRow = db.prepare(
       "SELECT challenge FROM webauthn_challenges WHERE userId = ? AND type = ?"
-    ).get(parse.data.userId, "authentication") as { challenge?: string } | undefined
+    ).get(challengeOwner, "authentication") as { challenge?: string } | undefined
 
     if (!challengeRow?.challenge) {
       reply.code(400).send({ error: "Challenge not found" })
       return
     }
 
-    const credentialId = parse.data.response?.id as string
+const rawId = parse.data.response?.id as string
+if (!rawId) {
+  reply.code(400).send({ error: "Missing credential" })
+  return
+}
+
+const credentialId = normalizeCredId(rawId)
+console.log("[webauthn] verify rawId:", rawId)
+console.log("[webauthn] verify normalized:", credentialId)
+console.log("[webauthn] db has:", db.prepare("SELECT credentialId FROM webauthn_credentials LIMIT 5").all())
     if (!credentialId) {
       reply.code(400).send({ error: "Missing credential" })
       return
@@ -255,8 +337,13 @@ if (existingCred) {
       transports: string | null
     } | undefined
 
-    if (!credential || credential.userId !== parse.data.userId) {
+    if (!credential) {
       reply.code(400).send({ error: "Credential not found" })
+      return
+    }
+
+    if (parse.data.userId && credential.userId !== parse.data.userId) {
+      reply.code(400).send({ error: "Credential mismatch" })
       return
     }
 
@@ -267,8 +354,8 @@ if (existingCred) {
       expectedRPID: env.RP_ID,
       requireUserVerification: false,
       authenticator: {
-        credentialID: isoBase64URL.toBuffer(credential.credentialId),
-        credentialPublicKey: isoBase64URL.toBuffer(credential.publicKey),
+        credentialID: credential.credentialId,
+        credentialPublicKey: Buffer.from(isoBase64URL.toBuffer(credential.publicKey)),
         counter: credential.counter,
         transports: credential.transports ? JSON.parse(credential.transports) : undefined,
       },
@@ -284,11 +371,20 @@ if (existingCred) {
       .run(verification.authenticationInfo.newCounter, now, credential.id)
 
     db.prepare("DELETE FROM webauthn_challenges WHERE userId = ? AND type = ?")
-      .run(parse.data.userId, "authentication")
+      .run(challengeOwner, "authentication")
 
-    const user = db.prepare("SELECT id, email, displayName FROM users WHERE id = ?").get(parse.data.userId)
+    const user = db
+      .prepare("SELECT id, email, displayName FROM users WHERE id = ?")
+      .get(credential.userId) as UserRow | undefined
+
+    if (!user) {
+      reply.code(404).send({ error: "User not found" })
+      return
+    }
+
     const token = signToken({ sub: user.id, email: user.email ?? user.id })
     reply.send({ token, user })
+
   })
 
   app.get("/v1/me/passkeys", { preHandler: authMiddleware }, async (request, reply) => {

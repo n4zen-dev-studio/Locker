@@ -28,7 +28,6 @@ export default function LoginPage() {
           body: JSON.stringify({ email: email || undefined, displayName: displayName || undefined })
         }
       )
-      console.log("Options passed to WebAuthn:", options)
 
       const response = await startRegistration(options)
       const verify = await api.request<{ token: string; user: User }>(
@@ -59,6 +58,27 @@ export default function LoginPage() {
       const verify = await api.request<{ token: string; user: User }>(
         "/v1/auth/webauthn/authenticate/verify",
         { method: "POST", body: JSON.stringify({ userId, response }) }
+      )
+      setStoredToken(verify.token)
+      setStoredUser(verify.user)
+      router.push("/dashboard")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Authentication failed"
+      setError(message)
+    }
+  }
+
+  async function handleDiscoverableLogin() {
+    setError(null)
+    try {
+      const { options } = await api.request<{ options: any }>(
+        "/v1/auth/webauthn/authenticate/options/discoverable",
+        { method: "POST", body: JSON.stringify({}) }
+      )
+      const response = await startAuthentication(options)
+      const verify = await api.request<{ token: string; user: User }>(
+        "/v1/auth/webauthn/authenticate/verify",
+        { method: "POST", body: JSON.stringify({ response }) }
       )
       setStoredToken(verify.token)
       setStoredUser(verify.user)
@@ -128,6 +148,9 @@ export default function LoginPage() {
             Sign in
           </button>
         </form>
+        <button onClick={handleDiscoverableLogin} style={{ padding: "8px 12px", marginTop: 8 }}>
+          Sign in on this device
+        </button>
       </section>
 
       {env.NEXT_PUBLIC_DEV_AUTH_ENABLED === "true" ? (
