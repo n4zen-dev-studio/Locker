@@ -1,3 +1,4 @@
+import { Platform } from "react-native"
 import { DEFAULT_API_BASE_URL } from "../config"
 import { getToken } from "../auth/tokenStore"
 import { getAccount } from "../storage/accountRepo"
@@ -20,7 +21,8 @@ export function getApiBaseUrl(override?: string): string {
   if (stored) return normalizeApiBaseUrl(stored)
   const account = getAccount()
   if (account?.apiBase) return normalizeApiBaseUrl(account.apiBase)
-  return normalizeApiBaseUrl(DEFAULT_API_BASE_URL)
+  const platformDefault = Platform.OS === "android" ? "http://10.0.2.2:4000" : "http://localhost:4000"
+  return normalizeApiBaseUrl(DEFAULT_API_BASE_URL || platformDefault)
 }
 
 async function buildHeaders(init: RequestInit, token: string | null, hasBody: boolean): Promise<Headers> {

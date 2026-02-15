@@ -1,6 +1,6 @@
 import { load, remove, save } from "@/utils/storage"
 
-const SERVER_URL_KEY = "locker:server:url:v1"
+const SERVER_URL_KEY = "locker:net:apiBaseUrl"
 
 export function getServerUrl(): string | null {
   return load<string>(SERVER_URL_KEY)
