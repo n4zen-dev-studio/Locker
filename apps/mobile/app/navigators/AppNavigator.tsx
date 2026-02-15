@@ -9,7 +9,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack"
 
 import Config from "@/config"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
-import { WelcomeScreen } from "@/screens/WelcomeScreen"
+import { CalculatorScreen } from "@/screens/CalculatorScreen"
+import { VaultLockedScreen } from "@/screens/VaultLockedScreen"
 import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
@@ -31,6 +32,7 @@ const AppStack = () => {
 
   return (
     <Stack.Navigator
+      initialRouteName="Calculator"
       screenOptions={{
         headerShown: false,
         navigationBarColor: colors.background,
@@ -39,7 +41,8 @@ const AppStack = () => {
         },
       }}
     >
-      <Stack.Screen name="Welcome" component={WelcomeScreen} />
+      <Stack.Screen name="Calculator" component={CalculatorScreen} />
+      <Stack.Screen name="VaultLocked" component={VaultLockedScreen} />
       {/** 🔥 Your screens go here */}
       {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}
     </Stack.Navigator>
