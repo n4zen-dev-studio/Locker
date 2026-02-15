@@ -25,6 +25,14 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = functio
           Vault Locked
         </Text>
         <Text style={themed($body)}>Passkey unlock will be added in Phase 3.</Text>
+        <Pressable
+          style={themed($primaryButton)}
+          onPress={() => navigation.navigate("VaultPin")}
+        >
+          <Text preset="bold" style={themed($primaryButtonText)}>
+            Unlock (Local PIN)
+          </Text>
+        </Pressable>
         <Pressable style={themed($button)} onPress={() => navigation.goBack()}>
           <Text preset="bold" style={themed($buttonText)}>
             Back to Calculator
@@ -63,6 +71,18 @@ const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
 const $body: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral200,
   marginBottom: 24,
+})
+
+const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  backgroundColor: colors.palette.primary300,
+  borderRadius: 14,
+  paddingVertical: spacing.md,
+  alignItems: "center",
+  marginBottom: 12,
+})
+
+const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral900,
 })
 
 const $button: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
