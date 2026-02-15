@@ -2,7 +2,7 @@ import { FastifyInstance } from "fastify"
 import crypto from "crypto"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
-import { getBlob, putBlob } from "../blobStore/fsBlobStore"
+import { deleteBlob, getBlob, putBlob } from "../blobStore/fsBlobStore"
 
 const MAX_BLOB_BYTES = 50 * 1024 * 1024
 
@@ -105,6 +105,41 @@ export async function registerBlobRoutes(app: FastifyInstance) {
 
       reply.header("content-type", record?.contentType || "application/octet-stream")
       reply.send(data)
+    }
+  )
+
+  app.delete(
+    "/v1/vaults/:vaultId/blobs/:blobId",
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const user = request.user!
+      const { vaultId, blobId } = request.params as { vaultId: string; blobId: string }
+
+      const db = getDb()
+      const vault = db.prepare("SELECT deletedAt FROM vaults WHERE id = ?").get(vaultId) as
+        | { deletedAt?: string | null }
+        | undefined
+      if (!vault) return reply.code(404).send({ error: "Not found" })
+      if (vault.deletedAt) return reply.code(404).send({ error: "Vault deleted" })
+
+      const member = db
+        .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
+        .get(vaultId, user.id) as { role?: string } | undefined
+
+      if (!member || member.role !== "owner") return reply.code(403).send({ error: "Forbidden" })
+
+      await deleteBlob(vaultId, blobId)
+
+      const now = new Date().toISOString()
+      const tx = db.transaction(() => {
+        db.prepare("DELETE FROM blobs WHERE id = ? AND vaultId = ?").run(blobId, vaultId)
+        db.prepare("INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)")
+          .run(vaultId, "blob_del", blobId, now)
+      })
+
+      tx()
+
+      reply.send({ ok: true })
     }
   )
 }

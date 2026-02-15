@@ -24,6 +24,7 @@ import { getNote, listNoteIds, saveNote, saveNoteFromSync, deleteNote } from "..
 
 const NOTE_PREFIX = "note-v1-"
 const INDEX_BLOB_ID = "notes-index-v1"
+const SYNC_KEY_CHECK_BLOB_ID = "sync-key-check-v1"
 
 let networkOnline = true
 let status: { state: "idle" | "syncing" | "error"; lastError?: string; lastSyncAt?: string } = {
@@ -94,6 +95,8 @@ export async function syncNow(): Promise<{ pushed: number; pulled: number; confl
     throw new Error("Remote sync key not set. Pair this device.")
   }
 
+  await ensureSyncKeyCheck(vaultId, token, rvk)
+
   status = { state: "syncing" }
 
   if (__DEV__) {
@@ -128,6 +131,33 @@ export async function syncNow(): Promise<{ pushed: number; pulled: number; confl
     console.error("[sync] error", err)
     const message = err instanceof Error ? err.message : "Sync failed"
     status = { state: "error", lastError: message, lastSyncAt: status.lastSyncAt }
+    throw err
+  }
+}
+
+async function ensureSyncKeyCheck(vaultId: string, token: string, rvk: Uint8Array): Promise<void> {
+  try {
+    const bytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${SYNC_KEY_CHECK_BLOB_ID}`, {}, { token })
+    try {
+      const payload = decryptBlobBytesToJson<any>(rvk, bytes)
+      if (payload?.type !== "sync-key-check") {
+        throw new Error("Invalid sync key check payload")
+      }
+    } catch (err) {
+      if (__DEV__) {
+        console.log("[sync] key check failed", {
+          vaultId,
+          blobId: SYNC_KEY_CHECK_BLOB_ID,
+          sha256: sha256Hex(bytes),
+        })
+      }
+      throw new Error("Wrong sync key for this vault. Re-pair.")
+    }
+  } catch (err) {
+    console.log(err)
+    if (isNotFound(err)) {
+      throw new Error("Sync key not initialized for this vault. Create sync key.")
+    }
     throw err
   }
 }
@@ -236,9 +266,23 @@ async function pullChanges(
           const bytes = await withStep("PULL: GET index blob", () =>
             fetchRaw(`/v1/vaults/${vaultId}/blobs/${INDEX_BLOB_ID}`, {}, { token }),
           )
-          const payload = decryptBlobBytesToJson<any>(rvk, bytes)
-          if (payload?.type === "notes-index" && Array.isArray(payload.ids)) {
-            sawIndex = payload.ids
+          try {
+            const payload = decryptBlobBytesToJson<any>(rvk, bytes)
+            if (payload?.type === "notes-index" && Array.isArray(payload.ids)) {
+              sawIndex = payload.ids
+            } else {
+              sawIndex = []
+            }
+          } catch (err) {
+            if (__DEV__) {
+              console.log("[sync] index decrypt failed", {
+                vaultId,
+                blobId: INDEX_BLOB_ID,
+                sha256: sha256Hex(bytes),
+              })
+            }
+            // Do not abort sync on index failure; rebuild locally.
+            enqueueUpdateIndexData(listNoteIds(vaultId), vaultId, rvk, deviceId)
           }
         } catch (err) {
           if (isNotFound(err)) {
@@ -255,7 +299,19 @@ async function pullChanges(
       const bytes = await withStep(`PULL: GET blob ${change.blobId}`, () =>
         fetchRaw(`/v1/vaults/${vaultId}/blobs/${change.blobId}`, {}, { token }),
       )
-      const payload = decryptBlobBytesToJson<any>(rvk, bytes)
+      let payload: any
+      try {
+        payload = decryptBlobBytesToJson<any>(rvk, bytes)
+      } catch (err) {
+        if (__DEV__) {
+          console.log("[sync] note decrypt failed", {
+            vaultId,
+            blobId: change.blobId,
+            sha256: sha256Hex(bytes),
+          })
+        }
+        continue
+      }
       if (!payload || payload.type !== "note" || !payload.note) continue
 
       const notePayload = payload as {

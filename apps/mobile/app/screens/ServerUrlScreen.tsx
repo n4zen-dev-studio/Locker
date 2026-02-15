@@ -7,92 +7,44 @@ import { Text } from "@/components/Text"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import { vaultSession } from "@/locker/session"
-import { setRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
-import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
-import { fetchJson } from "@/locker/net/apiClient"
-import { setServerUrl } from "@/locker/storage/serverConfigRepo"
-import { sha256Hex } from "@/locker/crypto/sha"
-import { encryptV1 } from "@/locker/crypto/aead"
-import { base64ToBytes, utf8ToBytes } from "@/locker/crypto/encoding"
+import { fetchJson, getApiBaseUrl, normalizeApiBaseUrl } from "@/locker/net/apiClient"
+import { getServerUrl, setServerUrl } from "@/locker/storage/serverConfigRepo"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
-type PairPayload = {
-  t?: string
-  apiBase?: string
-  vaultId?: string
-  rvkB64?: string
-  createdAt?: string
-}
-
-export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairing">> = function VaultImportPairingScreen(
+export const ServerUrlScreen: FC<AppStackScreenProps<"ServerUrl">> = function ServerUrlScreen(
   props,
 ) {
   const { navigation } = props
   const { themed } = useAppTheme()
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
-  const [payload, setPayload] = useState("")
-  const [error, setError] = useState<string | null>(null)
+  const [url, setUrl] = useState("")
   const [status, setStatus] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useFocusEffect(
     useCallback(() => {
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked")
-      }
-    }, [navigation]),
+      const current = getServerUrl() || getApiBaseUrl()
+      setUrl(current)
+    }, []),
   )
 
-  const handleImport = async () => {
+  const handleSave = () => {
+    const normalized = normalizeApiBaseUrl(url)
+    setServerUrl(normalized)
+    setStatus(`Saved: ${normalized}`)
+    setError(null)
+  }
+
+  const handlePing = async () => {
     setError(null)
     setStatus(null)
-    if (!payload.trim()) {
-      setError("Paste pairing payload")
-      return
-    }
-
-    let parsed: PairPayload
+    const normalized = normalizeApiBaseUrl(url)
     try {
-      parsed = JSON.parse(payload) as PairPayload
-    } catch {
-      setError("Invalid JSON")
-      return
-    }
-
-    if (parsed.t !== "locker-pair-v1" || !parsed.vaultId || !parsed.rvkB64) {
-      setError("Invalid pairing payload")
-      return
-    }
-
-    try {
-      if (parsed.apiBase) {
-        setServerUrl(parsed.apiBase)
-      }
-      const rvk = base64ToBytes(parsed.rvkB64)
-      await setRemoteVaultKey(parsed.vaultId, rvk)
-      const payload = {
-        v: 1,
-        type: "sync-key-check",
-        vaultId: parsed.vaultId,
-        createdAt: new Date().toISOString(),
-      }
-      const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(payload)))
-      const bytes = utf8ToBytes(JSON.stringify(envelope))
-      const sha256 = sha256Hex(bytes)
-      await fetchJson<{ ok: boolean }>(
-        `/v1/vaults/${parsed.vaultId}/blobs/sync-key-check-v1?sha256=${sha256}`,
-        {
-          method: "PUT",
-          headers: { "content-type": "application/octet-stream" },
-          body: bytes,
-        },
-      )
-      setRemoteVaultId(parsed.vaultId)
-      setStatus("Pairing imported. You can sync now.")
-      navigation.replace("VaultSettings")
+      const data = await fetchJson<{ ok?: boolean }>("/health", {}, { baseUrl: normalized, token: null })
+      setStatus(`Ping ok: ${JSON.stringify(data)}`)
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Import failed"
+      const message = err instanceof Error ? err.message : "Ping failed"
       setError(message)
     }
   }
@@ -101,28 +53,32 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
     <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
       <View style={themed($header)}>
         <Text preset="heading" style={themed($title)}>
-          Import Pairing
+          Server URL
         </Text>
         <Text preset="subheading" style={themed($subtitle)}>
-          Paste pairing JSON
+          Configure API base URL
         </Text>
       </View>
 
       <TextInput
-        value={payload}
-        onChangeText={setPayload}
-        placeholder='{"t":"locker-pair-v1", ...}'
+        value={url}
+        onChangeText={setUrl}
+        placeholder="http://192.168.0.10:4000"
         placeholderTextColor="#9aa0a6"
-        style={themed($payload)}
-        multiline
+        style={themed($input)}
       />
 
       {error ? <Text style={themed($errorText)}>{error}</Text> : null}
       {status ? <Text style={themed($statusText)}>{status}</Text> : null}
 
-      <Pressable style={themed($primaryButton)} onPress={handleImport}>
+      <Pressable style={themed($primaryButton)} onPress={handleSave}>
         <Text preset="bold" style={themed($primaryButtonText)}>
-          Import Pairing
+          Save
+        </Text>
+      </Pressable>
+      <Pressable style={themed($secondaryButton)} onPress={handlePing}>
+        <Text preset="bold" style={themed($secondaryButtonText)}>
+          Ping
         </Text>
       </Pressable>
 
@@ -154,13 +110,12 @@ const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral300,
 })
 
-const $payload: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
+const $input: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
   backgroundColor: "rgba(255, 255, 255, 0.08)",
   borderRadius: 14,
-  padding: spacing.md,
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.sm,
   color: colors.palette.neutral100,
-  minHeight: 200,
-  textAlignVertical: "top",
   borderWidth: 1,
   borderColor: "rgba(255, 255, 255, 0.15)",
   marginBottom: spacing.md,
@@ -178,13 +133,18 @@ const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral900,
 })
 
-const $linkButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  backgroundColor: "rgba(255, 255, 255, 0.08)",
+  borderRadius: 14,
+  paddingVertical: spacing.md,
   alignItems: "center",
-  marginBottom: spacing.lg,
+  borderWidth: 1,
+  borderColor: "rgba(255, 255, 255, 0.15)",
+  marginBottom: spacing.md,
 })
 
-const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
+const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral100,
 })
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
@@ -195,4 +155,13 @@ const $errorText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
 const $statusText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
   color: colors.palette.neutral300,
   marginBottom: spacing.md,
+})
+
+const $linkButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  marginBottom: spacing.lg,
+})
+
+const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral300,
 })

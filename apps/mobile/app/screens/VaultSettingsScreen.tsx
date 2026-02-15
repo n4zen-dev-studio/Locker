@@ -8,7 +8,7 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
-import { fetchJson, getApiBaseUrl } from "@/locker/net/apiClient"
+import { fetchJson, fetchRaw, getApiBaseUrl } from "@/locker/net/apiClient"
 import { getAccount } from "@/locker/storage/accountRepo"
 import { clearRemoteVaultId, getRemoteVaultId, getRemoteVaultName } from "@/locker/storage/remoteVaultRepo"
 import { getToken } from "@/locker/auth/tokenStore"
@@ -17,12 +17,15 @@ import { sha256Hex } from "@/locker/crypto/sha"
 import { bytesToUtf8, utf8ToBytes } from "@/locker/crypto/encoding"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { getSyncStatus, setNetworkOnline, syncNow } from "@/locker/sync/syncEngine"
-import { getState, setLastCursor, setOutbox } from "@/locker/sync/syncStateRepo"
+import { clearNoteRemoteMeta, getState, setLastCursor, setOutbox } from "@/locker/sync/syncStateRepo"
 import { clearRemoteVaultKey, getRemoteVaultKey, setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { randomBytes } from "@/locker/crypto/random"
+import { decryptBlobBytesToJson, encryptJsonToBlobBytes } from "@/locker/sync/remoteCodec"
+import { listNoteIds } from "@/locker/storage/notesRepo"
 import type { DeviceDTO } from "@locker/types"
 
 const BLOB_ID = "vault-meta-v1"
+const SYNC_KEY_CHECK_BLOB_ID = "sync-key-check-v1"
 
 export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = function VaultSettingsScreen(
   props,
@@ -45,6 +48,15 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
   const vaultId = getRemoteVaultId()
   const vaultName = getRemoteVaultName()
   const vmk = vaultSession.getKey()
+const canCreateSyncKey =
+  !!vaultId &&
+  !!tokenPresent &&
+  !!vmk &&
+  !offline &&
+  !rvkPresent
+
+
+
 
   const refreshPrereqs = useCallback(async () => {
     const token = await getToken()
@@ -60,7 +72,11 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
   const loadDevices = useCallback(async () => {
     if (!vaultId) return
     try {
-      const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/devices`)
+      const token = await getToken()
+if (!token) return
+const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/devices`, {}, { token })
+
+      // const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/devices`)
       setDeviceCount(data.devices.length)
     } catch {
       setDeviceCount(null)
@@ -105,6 +121,8 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
     return null
   }, [vaultId, rvkPresent])
 
+  
+
   const handleCreateSyncKey = async () => {
     if (rvkPresent) return
     if (!vaultId) return
@@ -113,12 +131,44 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
     try {
       const rvk = randomBytes(32)
       await setRemoteVaultKey(vaultId, rvk)
+      await uploadSyncKeyCheck(vaultId, rvk)
       setRvkPresent(true)
       setStatus("Sync key created for this vault")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create sync key"
       setError(message)
     }
+  }
+
+  const uploadSyncKeyCheck = async (id: string, rvk: Uint8Array) => {
+    const payload = {
+      v: 1,
+      type: "sync-key-check",
+      vaultId: id,
+      createdAt: new Date().toISOString(),
+      deviceId: account?.device.id ?? "unknown",
+    }
+    const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(payload)))
+    const envelopeBytes = utf8ToBytes(JSON.stringify(envelope))
+    const sha256 = sha256Hex(envelopeBytes)
+    const token = await getToken()
+    if (!token) throw new Error("Link device first")
+
+    await fetchRaw(
+      `/v1/vaults/${id}/blobs/${SYNC_KEY_CHECK_BLOB_ID}?sha256=${sha256}`,
+      {
+        method: "PUT",
+        headers: {
+          "content-type": "application/octet-stream",
+          authorization: `Bearer ${token}`,
+        },
+        // IMPORTANT: send bytes, not JSON
+        body: envelopeBytes,
+      },
+      { token }, // if your fetchRaw supports token options; remove if it doesn't
+    )
+
+
   }
 
   const handleUploadMeta = async () => {
@@ -147,16 +197,21 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
       const envelopeBytes = utf8ToBytes(JSON.stringify(envelope))
       const sha256 = sha256Hex(envelopeBytes)
 
-      await fetchJson<{ ok: boolean }>(
+     const token = await getToken()
+      if (!token) throw new Error("Link device first")
+
+      await fetchRaw(
         `/v1/vaults/${vaultId}/blobs/${BLOB_ID}?sha256=${sha256}`,
         {
           method: "PUT",
           headers: {
             "content-type": "application/octet-stream",
+            authorization: `Bearer ${token}`,
           },
           body: envelopeBytes,
         },
       )
+
       setStatus("Remote meta uploaded")
       await handleDownloadMeta()
     } catch (err) {
@@ -258,6 +313,106 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
     )
   }
 
+  const handleReencryptRemote = async () => {
+    setError(null)
+    setStatus(null)
+    if (!vaultId || !vmk) {
+      setError("Select a vault and unlock")
+      return
+    }
+    const rvk = await getRemoteVaultKey(vaultId)
+    if (!rvk) {
+      setError("Create sync key first")
+      return
+    }
+
+    try {
+      const token = await getToken()
+      if (!token) {
+        setError("Link device first")
+        return
+      }
+      let cursor = 0
+      let updated = 0
+      while (true) {
+        const data = await fetchJson<{
+          nextCursor: number
+          changes: Array<{ id: number; type: string; blobId?: string | null }>
+        }>(`/v1/vaults/${vaultId}/changes?cursor=${cursor}&limit=100`)
+        const changes = data.changes || []
+        if (changes.length === 0) break
+        for (const change of changes) {
+          cursor = Math.max(cursor, change.id)
+          if (change.type !== "blob_put" || !change.blobId) continue
+          if (change.blobId !== "notes-index-v1" && !change.blobId.startsWith("note-v1-")) continue
+
+          const bytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${change.blobId}`)
+          try {
+            decryptBlobBytesToJson<any>(rvk, bytes)
+            continue
+          } catch {
+            // try legacy VMK
+          }
+          let payload: any
+          try {
+            payload = decryptBlobBytesToJson<any>(vmk, bytes)
+          } catch {
+            continue
+          }
+          const newBytes = encryptJsonToBlobBytes(rvk, payload)
+          const sha256 = sha256Hex(newBytes)
+          const token = await getToken()
+if (!token) throw new Error("Link device first")
+          await fetchRaw(
+            `/v1/vaults/${vaultId}/blobs/${change.blobId}?sha256=${sha256}`,
+            {
+              method: "PUT",
+              headers: {
+                "content-type": "application/octet-stream",
+                authorization: `Bearer ${token}`,
+              },
+              body: newBytes,
+            },
+          )
+          updated += 1
+        }
+
+        if (changes.length < 100) break
+      }
+
+      const indexPayload = {
+        v: 1,
+        type: "notes-index",
+        ids: listNoteIds(vaultId),
+        updatedAt: new Date().toISOString(),
+        deviceId: account?.device.id ?? "unknown",
+        lamport: Date.now(),
+      }
+      const indexBytes = encryptJsonToBlobBytes(rvk, indexPayload)
+      await fetchJson<{ ok: boolean }>(
+        `/v1/vaults/${vaultId}/blobs/notes-index-v1?sha256=${sha256Hex(indexBytes)}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/octet-stream" },
+          body: indexBytes,
+        },
+      )
+
+      setStatus(`Re-encrypted ${updated} blobs`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Re-encrypt failed"
+      setError(message)
+    }
+  }
+
+  const handleClearSyncState = () => {
+    if (!vaultId) return
+    setLastCursor(0)
+    setOutbox([])
+    listNoteIds(vaultId).forEach((id) => clearNoteRemoteMeta(id))
+    setStatus("Local sync state cleared")
+  }
+
   return (
     <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
       <View style={themed($header)}>
@@ -305,19 +460,27 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
         ) : null}
       </View>
 
+
       <View style={themed($card)}>
         <Text preset="bold" style={themed($sectionTitle)}>
           Sync Key
         </Text>
         <Pressable
-          style={[themed($secondaryButton), rvkPresent ? themed($buttonDisabled) : null]}
+          disabled={!canCreateSyncKey}
+          style={[themed($secondaryButton), !canCreateSyncKey ? themed($buttonDisabled) : null]}
           onPress={handleCreateSyncKey}
         >
           <Text preset="bold" style={themed($secondaryButtonText)}>
             Create Sync Key
           </Text>
         </Pressable>
-        {rvkPresent ? <Text style={themed($metaText)}>Sync key already exists.</Text> : null}
+        {rvkPresent ? (
+          <Text style={themed($metaText)}>Sync key already exists for this vault.</Text>
+        ) : (
+          <Text style={themed($metaText)}>
+            Sync key not initialized for this vault. Create it on the owner device, then pair other devices.
+          </Text>
+        )}
       </View>
 
       <View style={themed($card)}>
@@ -394,6 +557,16 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
           <Text style={themed($metaText)}>Last cursor: {getState().lastCursor}</Text>
           <Text style={themed($metaText)}>Queue size: {getState().outbox.length}</Text>
           <Text style={themed($metaText)}>Last sync: {getState().lastSyncAt ?? "n/a"}</Text>
+          <Pressable style={themed($secondaryButton)} onPress={handleReencryptRemote}>
+            <Text preset="bold" style={themed($secondaryButtonText)}>
+              Re-encrypt Remote with Sync Key
+            </Text>
+          </Pressable>
+          <Pressable style={themed($secondaryButton)} onPress={handleClearSyncState}>
+            <Text preset="bold" style={themed($secondaryButtonText)}>
+              Clear Local Sync State
+            </Text>
+          </Pressable>
         </View>
       ) : null}
 
