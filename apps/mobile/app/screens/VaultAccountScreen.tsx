@@ -93,9 +93,9 @@ export const VaultAccountScreen: FC<AppStackScreenProps<"VaultAccount">> = funct
       </Pressable>
 
       {connected ? (
-        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("RemoteVault")}>
+        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultSwitcher")}>
           <Text preset="bold" style={themed($secondaryButtonText)}>
-            Remote Vault
+            Vault Switcher
           </Text>
         </Pressable>
       ) : null}

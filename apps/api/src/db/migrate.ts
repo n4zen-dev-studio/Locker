@@ -29,7 +29,9 @@ export function runMigrations(db: Database.Database): void {
       id TEXT PRIMARY KEY,
       ownerUserId TEXT,
       name TEXT,
-      createdAt TEXT
+      createdAt TEXT,
+      deletedAt TEXT,
+      deletedByUserId TEXT
     );
 
     CREATE TABLE IF NOT EXISTS vault_members (
@@ -82,5 +84,13 @@ export function runMigrations(db: Database.Database): void {
 
   try {
     db.exec("ALTER TABLE users ADD COLUMN displayName TEXT")
+  } catch {}
+
+  try {
+    db.exec("ALTER TABLE vaults ADD COLUMN deletedAt TEXT")
+  } catch {}
+
+  try {
+    db.exec("ALTER TABLE vaults ADD COLUMN deletedByUserId TEXT")
   } catch {}
 }

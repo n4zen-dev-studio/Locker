@@ -7,7 +7,7 @@ export type ApiRequestOptions = {
   baseUrl?: string
 }
 
-function resolveBaseUrl(override?: string): string {
+export function getApiBaseUrl(override?: string): string {
   if (override) return override
   const account = getAccount()
   if (account?.apiBase) return account.apiBase
@@ -29,12 +29,14 @@ export async function fetchJson<T>(
   options: ApiRequestOptions = {},
 ): Promise<T> {
   const token = options.token ?? (await getToken())
-  const baseUrl = resolveBaseUrl(options.baseUrl)
+  const baseUrl = getApiBaseUrl(options.baseUrl)
   const headers = await buildHeaders(init, token, !!init.body)
-  const res = await fetch(`${baseUrl}${path}`, { ...init, headers })
+  const url = `${baseUrl}${path}`
+  const method = (init.method || "GET").toUpperCase()
+  const res = await fetch(url, { ...init, headers })
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || `Request failed: ${res.status}`)
+    const text = await safeReadBody(res)
+    throw new Error(`[HTTP ${res.status}] ${method} ${url} :: ${text}`)
   }
   return res.json() as Promise<T>
 }
@@ -45,13 +47,29 @@ export async function fetchRaw(
   options: ApiRequestOptions = {},
 ): Promise<Uint8Array> {
   const token = options.token ?? (await getToken())
-  const baseUrl = resolveBaseUrl(options.baseUrl)
+  const baseUrl = getApiBaseUrl(options.baseUrl)
   const headers = await buildHeaders(init, token, !!init.body)
-  const res = await fetch(`${baseUrl}${path}`, { ...init, headers })
+  const url = `${baseUrl}${path}`
+  const method = (init.method || "GET").toUpperCase()
+  const res = await fetch(url, { ...init, headers })
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || `Request failed: ${res.status}`)
+    const text = await safeReadBody(res)
+    throw new Error(`[HTTP ${res.status}] ${method} ${url} :: ${text}`)
   }
   const buffer = await res.arrayBuffer()
   return new Uint8Array(buffer)
+}
+
+async function safeReadBody(res: Response): Promise<string> {
+  try {
+    const text = await res.text()
+    return text || "<empty>"
+  } catch {
+    return "<unreadable>"
+  }
+}
+
+export function isNotFound(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  return err.message.includes("[HTTP 404]")
 }

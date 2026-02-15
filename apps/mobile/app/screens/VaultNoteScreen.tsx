@@ -9,6 +9,7 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
 import { deleteNote, getNote, saveNote } from "@/locker/storage/notesRepo"
+import { getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
 export const VaultNoteScreen: FC<AppStackScreenProps<"VaultNote">> = function VaultNoteScreen(
@@ -20,6 +21,7 @@ export const VaultNoteScreen: FC<AppStackScreenProps<"VaultNote">> = function Va
 
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
+  const [vaultId, setVaultId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isExisting, setIsExisting] = useState(false)
 
@@ -32,6 +34,7 @@ export const VaultNoteScreen: FC<AppStackScreenProps<"VaultNote">> = function Va
       const note = getNote(noteId, key)
       setTitle(note.title)
       setBody(note.body)
+      setVaultId(note.vaultId ?? null)
       setIsExisting(true)
       setError(null)
     } catch {
@@ -65,6 +68,7 @@ export const VaultNoteScreen: FC<AppStackScreenProps<"VaultNote">> = function Va
       setIsExisting(false)
       setTitle("")
       setBody("")
+      setVaultId(getRemoteVaultId())
       setError(null)
     }
   }, [noteId])
@@ -72,13 +76,14 @@ export const VaultNoteScreen: FC<AppStackScreenProps<"VaultNote">> = function Va
   const handleSave = () => {
     const key = vaultSession.getKey()
     if (!key) return
-    const saved = saveNote({ id: noteId, title: title.trim(), body }, key)
+    const saved = saveNote({ id: noteId, title: title.trim(), body, vaultId }, key)
     navigation.replace("VaultNote", { noteId: saved.id })
   }
 
   const handleDelete = () => {
     if (!noteId) return
-    deleteNote(noteId)
+    const key = vaultSession.getKey()
+    deleteNote(noteId, key ?? undefined)
     navigation.goBack()
   }
 

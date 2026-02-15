@@ -1,5 +1,5 @@
-import { FC, useCallback, useEffect, useState } from "react"
-import { Alert, AppState, Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-native"
+import { FC, useCallback, useEffect, useMemo, useState } from "react"
+import { AppState, Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
 import { Screen } from "@/components/Screen"
@@ -8,9 +8,13 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
-import { listNotes, resetNotes, Note } from "@/locker/storage/notesRepo"
-import { getMeta, removeMeta } from "@/locker/storage/vaultMetaRepo"
+import { listNotesForVault, Note } from "@/locker/storage/notesRepo"
+import { getMeta } from "@/locker/storage/vaultMetaRepo"
 import { disablePasskeyDevOnly, isPasskeyEnabled } from "@/locker/auth/passkey"
+import { getRemoteVaultId, getRemoteVaultName } from "@/locker/storage/remoteVaultRepo"
+import { getSyncStatus, syncNow } from "@/locker/sync/syncEngine"
+import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
+import { getToken } from "@/locker/auth/tokenStore"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
 export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function VaultHomeScreen(
@@ -21,20 +25,28 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
   const [notes, setNotes] = useState<Note[]>([])
+  const [localNotes, setLocalNotes] = useState<Note[]>([])
   const [error, setError] = useState<string | null>(null)
   const [unlockMethod, setUnlockMethod] = useState<string | null>(null)
   const [metaVersion, setMetaVersion] = useState<1 | 2 | null>(null)
+  const [syncStatus, setSyncStatus] = useState(() => getSyncStatus())
+  const [tokenPresent, setTokenPresent] = useState(false)
+  const [rvkPresent, setRvkPresent] = useState(false)
+
+  const activeVaultId = getRemoteVaultId()
+  const activeVaultName = getRemoteVaultName()
 
   const refreshNotes = useCallback(() => {
     const key = vaultSession.getKey()
     if (!key) return
     try {
-      setNotes(listNotes(key))
+      setNotes(listNotesForVault(key, activeVaultId ?? null))
+      setLocalNotes(listNotesForVault(key, null))
       setError(null)
     } catch {
       setError("Vault data error")
     }
-  }, [])
+  }, [activeVaultId])
 
   const refreshMeta = useCallback(async () => {
     const meta = getMeta()
@@ -48,6 +60,17 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
     }
   }, [])
 
+  const refreshSyncPrereqs = useCallback(async () => {
+    const token = await getToken()
+    setTokenPresent(!!token)
+    if (!activeVaultId) {
+      setRvkPresent(false)
+      return
+    }
+    const rvk = await getRemoteVaultKey(activeVaultId)
+    setRvkPresent(!!rvk)
+  }, [activeVaultId])
+
   useFocusEffect(
     useCallback(() => {
       if (!vaultSession.isUnlocked()) {
@@ -56,7 +79,8 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
       }
       refreshNotes()
       refreshMeta()
-    }, [navigation, refreshNotes, refreshMeta]),
+      refreshSyncPrereqs().catch(() => undefined)
+    }, [navigation, refreshNotes, refreshMeta, refreshSyncPrereqs]),
   )
 
   useFocusEffect(
@@ -71,8 +95,35 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
   )
 
   useEffect(() => {
-    refreshMeta()
+    refreshMeta().catch(() => undefined)
   }, [refreshMeta])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSyncStatus(getSyncStatus())
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const syncReason = useMemo(() => {
+    if (!activeVaultId) return "Select a remote vault"
+    if (!tokenPresent) return "Link device"
+    if (!vaultSession.isUnlocked()) return "Unlock vault"
+    if (!rvkPresent) return "Create sync key"
+    return null
+  }, [activeVaultId, tokenPresent, rvkPresent])
+
+  const handleSyncNow = async () => {
+    if (syncReason) return
+    try {
+      await syncNow()
+      setSyncStatus(getSyncStatus())
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sync failed"
+      setError(message)
+      setSyncStatus(getSyncStatus())
+    }
+  }
 
   const handleLock = () => {
     vaultSession.clear()
@@ -80,74 +131,72 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
     navigation.replace("Calculator")
   }
 
-  const handleReset = () => {
-    Alert.alert("Reset Vault", "This will erase all local vault data.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Reset",
-        style: "destructive",
-        onPress: () => {
-          resetNotes()
-          removeMeta()
-          vaultSession.clear()
-          navigation.replace("VaultLocked")
-        },
-      },
-    ])
-  }
-
   const handleDisablePasskey = async () => {
     await disablePasskeyDevOnly()
-    refreshMeta()
+    refreshMeta().catch(() => undefined)
   }
 
   return (
     <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
       <View style={themed($header)}>
         <Text preset="heading" style={themed($title)}>
-          Locker
+          {activeVaultName ?? "Locker"}
         </Text>
         <Text preset="subheading" style={themed($subtitle)}>
-          Device Vault
+          {activeVaultId ? "Remote Vault" : "Local Vault"}
         </Text>
         {unlockMethod ? (
           <Text style={themed($metaText)}>Unlock method: {unlockMethod}</Text>
         ) : null}
+        <Text style={themed($metaText)}>Sync: {syncStatus.state} · Queue {syncStatus.queueSize}</Text>
         {__DEV__ && metaVersion ? (
           <Text style={themed($metaText)}>Meta version: v{metaVersion}</Text>
         ) : null}
       </View>
 
-      <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultNote", {})}>
-        <Text preset="bold" style={themed($primaryButtonText)}>
-          New Secure Note
-        </Text>
-      </Pressable>
+      <View style={themed($actionsRow)}>
+        <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultNote", {})}>
+          <Text preset="bold" style={themed($primaryButtonText)}>
+            New Secure Note
+          </Text>
+        </Pressable>
+        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultSwitcher")}>
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            Switch Vault
+          </Text>
+        </Pressable>
+        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultSettings")}>
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            Settings
+          </Text>
+        </Pressable>
+      </View>
 
-      <Pressable style={themed($cloudCard)} onPress={() => navigation.navigate("VaultAccount")}>
-        <Text preset="bold" style={themed($cloudTitle)}>
-          Cloud Sync
-        </Text>
-        <Text style={themed($cloudSubtitle)}>Link device and manage remote vault</Text>
-      </Pressable>
+      <View style={themed($syncRow)}>
+        <Pressable
+          style={[themed($syncButton), syncReason ? themed($buttonDisabled) : null]}
+          onPress={handleSyncNow}
+        >
+          <Text preset="bold" style={themed($syncButtonText)}>
+            Sync Now
+          </Text>
+        </Pressable>
+        {syncReason ? <Text style={themed($metaText)}>{syncReason}</Text> : null}
+      </View>
 
       {error ? (
         <View style={themed($errorCard)}>
           <Text style={themed($errorText)}>{error}</Text>
-          {__DEV__ ? (
-            <Pressable style={themed($resetButton)} onPress={handleReset}>
-              <Text preset="bold" style={themed($resetText)}>
-                Reset Vault (Dev)
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
       ) : null}
 
       <ScrollView contentContainerStyle={themed($list)}>
+        <Text preset="bold" style={themed($sectionTitle)}>
+          Notes
+        </Text>
         {notes.length === 0 ? (
           <View style={themed($emptyCard)}>
-            <Text style={themed($emptyText)}>No secure notes yet.</Text>
+            <Text style={themed($emptyText)}>No notes in this vault yet.</Text>
           </View>
         ) : (
           notes.map((note) => (
@@ -163,6 +212,26 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
             </Pressable>
           ))
         )}
+
+        {localNotes.length > 0 ? (
+          <View style={themed($section)}>
+            <Text preset="bold" style={themed($sectionTitle)}>
+              Local Only
+            </Text>
+            {localNotes.map((note) => (
+              <Pressable
+                key={note.id}
+                style={({ pressed }) => [themed($noteCard), pressed && themed($notePressed)]}
+                onPress={() => navigation.navigate("VaultNote", { noteId: note.id })}
+              >
+                <Text preset="bold" style={themed($noteTitle)} numberOfLines={1}>
+                  {note.title || "Untitled"}
+                </Text>
+                <Text style={themed($noteMeta)}>{new Date(note.updatedAt).toLocaleString()}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
 
       {__DEV__ && metaVersion === 2 ? (
@@ -204,6 +273,12 @@ const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
 const $metaText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral400,
   marginTop: 6,
+  fontSize: 12,
+})
+
+const $actionsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+  marginBottom: spacing.lg,
 })
 
 const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
@@ -211,35 +286,57 @@ const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderRadius: 16,
   paddingVertical: spacing.md,
   alignItems: "center",
-  marginBottom: spacing.lg,
 })
 
 const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral900,
 })
 
-const $cloudCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  backgroundColor: "rgba(255, 255, 255, 0.06)",
-  borderRadius: 18,
-  padding: spacing.md,
+const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  backgroundColor: "rgba(255, 255, 255, 0.08)",
+  borderRadius: 16,
+  paddingVertical: spacing.md,
+  alignItems: "center",
   borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.12)",
-  marginBottom: spacing.lg,
+  borderColor: "rgba(255, 255, 255, 0.15)",
 })
 
-const $cloudTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
-  marginBottom: 4,
 })
 
-const $cloudSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral400,
-  fontSize: 12,
+const $syncRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginBottom: spacing.md,
+})
+
+const $syncButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  backgroundColor: colors.palette.secondary300,
+  borderRadius: 14,
+  paddingVertical: spacing.md,
+  alignItems: "center",
+})
+
+const $syncButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral900,
+})
+
+const $buttonDisabled: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.5,
 })
 
 const $list: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingBottom: spacing.xl,
   gap: spacing.md,
+})
+
+const $section: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginTop: spacing.lg,
+  gap: spacing.md,
+})
+
+const $sectionTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral200,
+  marginBottom: 4,
 })
 
 const $noteCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -311,15 +408,5 @@ const $errorCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-  marginBottom: 8,
-})
-
-const $resetButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  alignItems: "center",
-  paddingVertical: spacing.sm,
-})
-
-const $resetText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
 })

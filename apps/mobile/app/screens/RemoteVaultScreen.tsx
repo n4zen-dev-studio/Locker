@@ -1,5 +1,5 @@
-import { FC, useCallback, useState } from "react"
-import { Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
+import { FC, useCallback, useEffect, useState } from "react"
+import { Alert, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
 import { Screen } from "@/components/Screen"
@@ -8,14 +8,18 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
-import { fetchJson, fetchRaw } from "@/locker/net/apiClient"
+import { fetchJson, getApiBaseUrl } from "@/locker/net/apiClient"
 import { getAccount } from "@/locker/storage/accountRepo"
-import { getRemoteVaultId, setRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { clearRemoteVaultId, getRemoteVaultId, setRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { getToken } from "@/locker/auth/tokenStore"
 import { encryptV1, decryptV1, EnvelopeV1 } from "@/locker/crypto/aead"
 import { sha256Hex } from "@/locker/crypto/sha"
 import { bytesToUtf8, utf8ToBytes } from "@/locker/crypto/encoding"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { VaultDTO } from "@locker/types"
+import { getSyncStatus, setNetworkOnline, syncNow } from "@/locker/sync/syncEngine"
+import { getState, setLastCursor, setOutbox } from "@/locker/sync/syncStateRepo"
+import { clearRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 
 const BLOB_ID = "vault-meta-v1"
 
@@ -31,6 +35,33 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [downloadedMeta, setDownloadedMeta] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState(() => getSyncStatus())
+  const [offline, setOffline] = useState(false)
+  const [vaults, setVaults] = useState<VaultDTO[]>([])
+  const [isLoadingVaults, setIsLoadingVaults] = useState(false)
+  const [tokenPresent, setTokenPresent] = useState(false)
+  const [account, setAccount] = useState(() => getAccount())
+
+  const apiBaseUrl = getApiBaseUrl()
+
+  const refreshToken = useCallback(async () => {
+    const token = await getToken()
+    setTokenPresent(!!token)
+  }, [])
+
+  const loadVaults = useCallback(async (acct: ReturnType<typeof getAccount>) => {
+    if (!acct) return
+    setIsLoadingVaults(true)
+    try {
+      const data = await fetchJson<{ vaults: VaultDTO[] }>("/v1/vaults")
+      setVaults(data.vaults || [])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load vaults"
+      setError(message)
+    } finally {
+      setIsLoadingVaults(false)
+    }
+  }, [])
 
   useFocusEffect(
     useCallback(() => {
@@ -38,11 +69,21 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         navigation.replace("VaultLocked")
         return
       }
+
+      const nextAccount = getAccount()
+      setAccount(nextAccount)
       setVaultIdState(getRemoteVaultId())
-    }, [navigation]),
+      setSyncStatus(getSyncStatus())
+
+      void refreshToken()
+      if (nextAccount) void loadVaults(nextAccount)
+    }, [navigation, refreshToken, loadVaults]),
   )
 
-  const account = getAccount()
+  useEffect(() => {
+    const timer = setInterval(() => setSyncStatus(getSyncStatus()), 2000)
+    return () => clearInterval(timer)
+  }, [])
 
   const handleCreateVault = async () => {
     setError(null)
@@ -56,13 +97,21 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         method: "POST",
         body: JSON.stringify({ name: vaultName.trim() || "My Vault" }),
       })
-      setRemoteVaultId(data.vault.id)
+      setRemoteVaultId(data.vault.id, data.vault.name)
       setVaultIdState(data.vault.id)
-      setStatus("Remote vault created")
+      setVaults((prev) => [data.vault, ...prev])
+      setStatus("Remote vault created and set as active")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create vault"
       setError(message)
     }
+  }
+
+  const handleSelectVault = (id: string) => {
+    const vault = vaults.find((item) => item.id === id)
+    setRemoteVaultId(id, vault?.name)
+    setVaultIdState(id)
+    setStatus("Active remote vault set")
   }
 
   const handleUploadMeta = async () => {
@@ -75,7 +124,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
       return
     }
     if (!account || !vaultId) {
-      setError("Link device and select a vault")
+      setError("Select an active remote vault first")
       return
     }
 
@@ -102,6 +151,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         },
       )
       setStatus("Remote meta uploaded")
+      await handleDownloadMeta()
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed"
       setError(message)
@@ -117,12 +167,25 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
       return
     }
     if (!account || !vaultId) {
-      setError("Link device and select a vault")
+      setError("Select an active remote vault first")
       return
     }
 
     try {
-      const bytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${BLOB_ID}`)
+      const token = await getToken()
+      const res = await fetch(`${apiBaseUrl}/v1/vaults/${vaultId}/blobs/${BLOB_ID}`, {
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      })
+      if (res.status === 404) {
+        setStatus("No remote meta found in this vault yet. Upload first.")
+        return
+      }
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`[HTTP ${res.status}] GET ${apiBaseUrl}/v1/vaults/${vaultId}/blobs/${BLOB_ID} :: ${text || "<empty>"}`)
+      }
+      const buffer = await res.arrayBuffer()
+      const bytes = new Uint8Array(buffer)
       const envelope = JSON.parse(bytesToUtf8(bytes)) as EnvelopeV1
       const plaintext = decryptV1(key, envelope)
       const metaJson = bytesToUtf8(plaintext)
@@ -134,8 +197,82 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     }
   }
 
+  const handleSyncNow = async () => {
+    setError(null)
+    setStatus(null)
+    try {
+      const result = await syncNow()
+      setStatus(`Sync complete: pushed ${result.pushed}, pulled ${result.pulled}, conflicts ${result.conflicts}`)
+      setSyncStatus(getSyncStatus())
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sync failed"
+      setError(message)
+      setSyncStatus(getSyncStatus())
+    }
+  }
+
+  const toggleOffline = () => {
+    const next = !offline
+    setOffline(next)
+    setNetworkOnline(!next)
+  }
+
+  const handlePingVault = async () => {
+    setError(null)
+    setStatus(null)
+    try {
+      const me = await fetchJson<{ user: { id: string; email?: string | null } }>("/v1/me")
+      const data = await fetchJson<{ vaults: VaultDTO[] }>("/v1/vaults")
+      const ids = new Set((data.vaults || []).map((v) => v.id))
+      if (vaultId && !ids.has(vaultId)) {
+        setStatus("Active vaultId not in your memberships; select correct vault.")
+        return
+      }
+      setStatus(`Ping ok. User ${me.user.email ?? me.user.id}. Vaults: ${(data.vaults || []).length}`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Ping failed"
+      setError(message)
+    }
+  }
+
+  const handleDeleteRemote = () => {
+    Alert.alert(
+      "Delete Remote Vault",
+      "This deletes the cloud vault and all synced data.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await getToken()
+              const activeVaultId = getRemoteVaultId()
+              if (!activeVaultId || !token) return
+              await fetch(`${apiBaseUrl}/v1/vaults/${activeVaultId}`, {
+                method: "DELETE",
+                headers: { authorization: `Bearer ${token}` },
+              })
+              clearRemoteVaultId()
+              if (activeVaultId) {
+                clearRemoteVaultKey(activeVaultId)
+              }
+              setLastCursor(0)
+              setOutbox([])
+              setVaultIdState(null)
+              setStatus("Remote vault deleted")
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Delete failed"
+              setError(message)
+            }
+          },
+        },
+      ],
+    )
+  }
+
   return (
-    <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
+    <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
       <View style={themed($header)}>
         <Text preset="heading" style={themed($title)}>
           Remote Vault
@@ -143,6 +280,40 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         <Text preset="subheading" style={themed($subtitle)}>
           Zero-trust cloud metadata
         </Text>
+      </View>
+
+      <View style={themed($card)}>
+        <Text preset="bold" style={themed($sectionTitle)}>
+          Connection
+        </Text>
+        <Text style={themed($metaText)}>API Base: {apiBaseUrl}</Text>
+        <Text style={themed($metaText)}>Token: {tokenPresent ? "present" : "missing"}</Text>
+        <Text style={themed($metaText)}>Device ID: {account?.device.id ?? "n/a"}</Text>
+        <Text style={themed($metaText)}>Active Vault ID: {vaultId ?? "n/a"}</Text>
+
+        <Pressable style={themed($secondaryButton)} onPress={handlePingVault}>
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            Ping Active Vault
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={themed($secondaryButton)}
+          onPress={() => navigation.navigate("VaultPairDevice")}
+        >
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            Pair New Device (Show QR)
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={themed($secondaryButton)}
+          onPress={() => navigation.navigate("VaultImportPairing")}
+        >
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            Import Pairing (Paste)
+          </Text>
+        </Pressable>
       </View>
 
       {!account ? (
@@ -156,45 +327,139 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         </View>
       ) : null}
 
-      <View style={themed($card)}>
-        <Text preset="bold" style={themed($sectionTitle)}>
-          Create Remote Vault
-        </Text>
-        <TextInput
-          value={vaultName}
-          onChangeText={setVaultName}
-          placeholder="Vault name"
-          placeholderTextColor="#9aa0a6"
-          style={themed($input)}
-        />
-        <Pressable style={themed($primaryButton)} onPress={handleCreateVault}>
-          <Text preset="bold" style={themed($primaryButtonText)}>
+      {account ? (
+        <View style={themed($card)}>
+          <Text preset="bold" style={themed($sectionTitle)}>
+            Select Remote Vault
+          </Text>
+          {isLoadingVaults ? <Text style={themed($metaText)}>Loading vaults…</Text> : null}
+          {vaults.length === 0 ? (
+            <Text style={themed($metaText)}>No vaults yet. Create one below.</Text>
+          ) : (
+            vaults.map((vault) => (
+              <View key={vault.id} style={themed($vaultRow)}>
+                <View style={themed($vaultInfo)}>
+                  <Text preset="bold" style={themed($vaultName)}>
+                    {vault.name}
+                  </Text>
+                  <Text style={themed($vaultId)}>{vault.id}</Text>
+                </View>
+                {vaultId === vault.id ? (
+                  <Text style={themed($activeBadge)}>Active</Text>
+                ) : (
+                  <Pressable style={themed($secondaryButton)} onPress={() => handleSelectVault(vault.id)}>
+                    <Text preset="bold" style={themed($secondaryButtonText)}>
+                      Use on this device
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            ))
+          )}
+
+          <Text preset="bold" style={themed($sectionTitle)}>
             Create Remote Vault
           </Text>
-        </Pressable>
-        {vaultId ? <Text style={themed($metaText)}>Vault ID: {vaultId}</Text> : null}
-      </View>
+          <TextInput
+            value={vaultName}
+            onChangeText={setVaultName}
+            placeholder="Vault name"
+            placeholderTextColor="#9aa0a6"
+            style={themed($input)}
+          />
+          <Pressable style={themed($primaryButton)} onPress={handleCreateVault}>
+            <Text preset="bold" style={themed($primaryButtonText)}>
+              Create Remote Vault
+            </Text>
+          </Pressable>
+          {vaultId ? <Text style={themed($metaText)}>Active Vault ID: {vaultId}</Text> : null}
+        </View>
+      ) : null}
 
-      <View style={themed($card)}>
-        <Text preset="bold" style={themed($sectionTitle)}>
-          Vault Meta Blob
-        </Text>
-        <Pressable style={themed($secondaryButton)} onPress={handleUploadMeta}>
-          <Text preset="bold" style={themed($secondaryButtonText)}>
-            Upload Remote Meta
+      {account && vaultId ? (
+        <View style={themed($card)}>
+          <Text preset="bold" style={themed($sectionTitle)}>
+            Sync Status
           </Text>
-        </Pressable>
-        <Pressable style={themed($secondaryButton)} onPress={handleDownloadMeta}>
-          <Text preset="bold" style={themed($secondaryButtonText)}>
-            Download Remote Meta
+          <Text style={themed($metaText)}>State: {syncStatus.state}</Text>
+          <Text style={themed($metaText)}>Queue: {syncStatus.queueSize}</Text>
+          {syncStatus.lastSyncAt ? (
+            <Text style={themed($metaText)}>Last sync: {new Date(syncStatus.lastSyncAt).toLocaleString()}</Text>
+          ) : null}
+          {syncStatus.lastError ? <Text style={themed($errorText)}>{syncStatus.lastError}</Text> : null}
+
+          <Pressable style={themed($primaryButton)} onPress={handleSyncNow}>
+            <Text preset="bold" style={themed($primaryButtonText)}>
+              Sync Now
+            </Text>
+          </Pressable>
+
+          <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultNote", {})}>
+            <Text preset="bold" style={themed($primaryButtonText)}>
+              New Secure Note
+            </Text>
+          </Pressable>
+
+          <Pressable style={themed($secondaryButton)} onPress={handleDeleteRemote}>
+            <Text preset="bold" style={themed($secondaryButtonText)}>
+              Delete Remote Vault
+            </Text>
+          </Pressable>
+
+          {__DEV__ ? (
+            <Pressable style={themed($secondaryButton)} onPress={toggleOffline}>
+              <Text preset="bold" style={themed($secondaryButtonText)}>
+                {offline ? "Go Online" : "Toggle Offline"}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {account && vaultId ? (
+        <View style={themed($card)}>
+          <Text preset="bold" style={themed($sectionTitle)}>
+            Vault Meta Blob
           </Text>
-        </Pressable>
-        {downloadedMeta ? (
-          <View style={themed($metaCard)}>
-            <Text style={themed($metaText)}>{downloadedMeta}</Text>
-          </View>
-        ) : null}
-      </View>
+          <Pressable style={themed($secondaryButton)} onPress={handleUploadMeta}>
+            <Text preset="bold" style={themed($secondaryButtonText)}>
+              Upload Remote Meta
+            </Text>
+          </Pressable>
+          <Pressable style={themed($secondaryButton)} onPress={handleDownloadMeta}>
+            <Text preset="bold" style={themed($secondaryButtonText)}>
+              Download Remote Meta
+            </Text>
+          </Pressable>
+          {downloadedMeta ? (
+            <View style={themed($metaCard)}>
+              <Text style={themed($metaText)}>{downloadedMeta}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {account && !vaultId ? (
+        <View style={themed($card)}>
+          <Text style={themed($bodyText)}>
+            Select an active remote vault to enable sync and remote meta actions.
+          </Text>
+        </View>
+      ) : null}
+
+      {__DEV__ ? (
+        <View style={themed($card)}>
+          <Text preset="bold" style={themed($sectionTitle)}>
+            Diagnostics (Dev)
+          </Text>
+          <Text style={themed($metaText)}>Token present: {tokenPresent ? "yes" : "no"}</Text>
+          <Text style={themed($metaText)}>Device ID: {account?.device.id ?? "n/a"}</Text>
+          <Text style={themed($metaText)}>Remote Vault ID: {vaultId ?? "n/a"}</Text>
+          <Text style={themed($metaText)}>Last cursor: {getState().lastCursor}</Text>
+          <Text style={themed($metaText)}>Queue size: {getState().outbox.length}</Text>
+          <Text style={themed($metaText)}>Last sync: {getState().lastSyncAt ?? "n/a"}</Text>
+        </View>
+      ) : null}
 
       {error ? <Text style={themed($errorText)}>{error}</Text> : null}
       {status ? <Text style={themed($statusText)}>{status}</Text> : null}
@@ -209,7 +474,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  flex: 1,
+  // flex: 1,
   backgroundColor: colors.palette.neutral900,
   paddingHorizontal: spacing.xl,
 })
@@ -281,6 +546,29 @@ const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
+})
+
+const $vaultRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginBottom: spacing.md,
+  gap: spacing.sm,
+})
+
+const $vaultInfo: ThemedStyle<ViewStyle> = () => ({
+  gap: 4,
+})
+
+const $vaultName: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral100,
+})
+
+const $vaultId: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral400,
+  fontSize: 12,
+})
+
+const $activeBadge: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.primary300,
+  fontSize: 12,
 })
 
 const $metaCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({

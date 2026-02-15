@@ -9,11 +9,13 @@ type ApiEnv = {
   RP_NAME: string
   DEV_AUTH_ENABLED: boolean
   ADMIN_ORIGIN: string
+  ADMIN_PURGE_ENABLED: boolean
 }
 
 type AdminEnv = {
   NEXT_PUBLIC_API_BASE_URL: string
   NEXT_PUBLIC_DEV_AUTH_ENABLED: string
+  NEXT_PUBLIC_ADMIN_PURGE_ENABLED: string
 }
 
 function parsePort(value: string | undefined, fallback: number): number {
@@ -46,7 +48,8 @@ export function getApiEnv(): ApiEnv {
     RP_ID: process.env.RP_ID || "localhost",
     RP_NAME: process.env.RP_NAME || "Locker",
     DEV_AUTH_ENABLED: parseBool(process.env.DEV_AUTH_ENABLED, true),
-    ADMIN_ORIGIN: process.env.ADMIN_ORIGIN || "http://localhost:3000"
+    ADMIN_ORIGIN: process.env.ADMIN_ORIGIN || "http://localhost:3000",
+    ADMIN_PURGE_ENABLED: parseBool(process.env.ADMIN_PURGE_ENABLED, false),
   }
 }
 
@@ -55,6 +58,8 @@ export function getAdminEnv(): AdminEnv {
     NEXT_PUBLIC_API_BASE_URL:
       process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000",
     NEXT_PUBLIC_DEV_AUTH_ENABLED:
-      process.env.NEXT_PUBLIC_DEV_AUTH_ENABLED || "true"
+      process.env.NEXT_PUBLIC_DEV_AUTH_ENABLED || "true",
+    NEXT_PUBLIC_ADMIN_PURGE_ENABLED:
+      process.env.NEXT_PUBLIC_ADMIN_PURGE_ENABLED || "false",
   }
 }
