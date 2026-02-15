@@ -1,0 +1,110 @@
+########################################
+# General
+########################################
+node_modules/
+.pnpm-store/
+.pnp.*
+package-lock.json
+yarn.lock
+npm-debug.log*
+pnpm-debug.log*
+*.log
+
+########################################
+# Environment files
+########################################
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+!.env.example
+
+########################################
+# TypeScript
+########################################
+*.tsbuildinfo
+
+########################################
+# Build outputs (workspace packages)
+########################################
+packages/**/dist/
+apps/api/dist/
+
+########################################
+# Next.js (admin)
+########################################
+apps/admin/.next/
+apps/admin/out/
+apps/admin/.turbo/
+apps/admin/node_modules/
+
+########################################
+# React Native (mobile / Ignite)
+########################################
+apps/mobile/node_modules/
+apps/mobile/android/.gradle/
+apps/mobile/android/build/
+apps/mobile/android/app/build/
+apps/mobile/android/local.properties
+apps/mobile/android/.idea/
+apps/mobile/android/.cxx/
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+apps/mobile/ios/DerivedData/
+apps/mobile/ios/*.xcworkspace
+apps/mobile/ios/*.xcodeproj/project.xcworkspace
+apps/mobile/ios/*.xcodeproj/xcuserdata/
+apps/mobile/ios/*.xcworkspace/xcuserdata/
+apps/mobile/ios/*.xcuserdata
+apps/mobile/metro-cache/
+apps/mobile/.expo/
+apps/mobile/.expo-shared/
+apps/mobile/dist/
+apps/mobile/web-build/
+
+########################################
+# Expo (if using Dev Client)
+########################################
+apps/mobile/.expo/
+apps/mobile/.expo-shared/
+
+########################################
+# Metro
+########################################
+.metro-cache/
+
+########################################
+# Fastify / API temp
+########################################
+tmp/
+temp/
+
+########################################
+# OS / Editor
+########################################
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+########################################
+# Android / Gradle global
+########################################
+.gradle/
+local.properties
+
+########################################
+# Xcode
+########################################
+*.xcuserstate
+*.xcworkspace
+DerivedData/
+
+########################################
+# Misc
+########################################
+coverage/
+.cache/

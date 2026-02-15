@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "rootDir": "src",
+    "outDir": "dist",
+    "paths": {
+      "@locker/config": ["../../packages/config/src"],
+      "@locker/types": ["../../packages/types/src"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

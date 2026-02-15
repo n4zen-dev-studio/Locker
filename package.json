@@ -1,0 +1,17 @@
+{
+  "name": "locker",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "concurrently -n api,admin -c blue,green \"pnpm --filter locker-api dev\" \"pnpm --filter locker-admin dev\"",
+    "dev:api": "pnpm --filter locker-api dev",
+    "dev:admin": "pnpm --filter locker-admin dev",
+    "typecheck": "pnpm -r --filter @locker/types --filter @locker/config --filter locker-api --filter locker-admin exec tsc -p tsconfig.json --noEmit",
+    "lint": "pnpm -r --filter @locker/types --filter @locker/config --filter locker-api --filter locker-admin lint"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "concurrently": "^9.0.0",
+    "typescript": "^5.0.0"
+  }
+}
