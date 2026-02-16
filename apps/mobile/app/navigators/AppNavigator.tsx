@@ -23,6 +23,8 @@ import { RemoteVaultScreen } from "@/screens/RemoteVaultScreen"
 import { VaultPairDeviceScreen } from "@/screens/VaultPairDeviceScreen"
 import { VaultImportPairingScreen } from "@/screens/VaultImportPairingScreen"
 import { ServerUrlScreen } from "@/screens/ServerUrlScreen"
+import { VaultShareScreen } from "@/screens/VaultShareScreen"
+import { VaultInvitesScreen } from "@/screens/VaultInvitesScreen"
 import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
@@ -66,6 +68,8 @@ const AppStack = () => {
       <Stack.Screen name="RemoteVault" component={RemoteVaultScreen} />
       <Stack.Screen name="VaultPairDevice" component={VaultPairDeviceScreen} />
       <Stack.Screen name="VaultImportPairing" component={VaultImportPairingScreen} />
+      <Stack.Screen name="VaultShare" component={VaultShareScreen} />
+      <Stack.Screen name="VaultInvites" component={VaultInvitesScreen} />
       <Stack.Screen name="ServerUrl" component={ServerUrlScreen} />
       {/** 🔥 Your screens go here */}
       {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}

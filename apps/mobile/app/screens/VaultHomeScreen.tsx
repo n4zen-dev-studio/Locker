@@ -16,6 +16,7 @@ import { getSyncStatus, syncNow } from "@/locker/sync/syncEngine"
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { getToken } from "@/locker/auth/tokenStore"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
+import { ensureUserKeypairUploaded } from "@/locker/keys/userKeyApi"
 
 export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function VaultHomeScreen(
   props,
@@ -106,6 +107,7 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
       refreshNotes()
       refreshMeta()
       refreshSyncPrereqs().catch(() => undefined)
+      ensureUserKeypairUploaded().catch(() => undefined)
     }, [navigation, refreshNotes, refreshMeta, refreshSyncPrereqs]),
   )
 
