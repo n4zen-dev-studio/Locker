@@ -17,8 +17,9 @@ import { sha256Hex } from "@/locker/crypto/sha"
 import { bytesToUtf8, utf8ToBytes } from "@/locker/crypto/encoding"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { VaultDTO } from "@locker/types"
+import { listNoteIds } from "@/locker/storage/notesRepo"
 import { getSyncStatus, setNetworkOnline, syncNow } from "@/locker/sync/syncEngine"
-import { getState, setLastCursor, setOutbox } from "@/locker/sync/syncStateRepo"
+import { clearNoteRemoteMeta, clearTombstonesForVault, getState, setLastCursor, setOutbox } from "@/locker/sync/syncStateRepo"
 import { clearRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 
 const BLOB_ID = "vault-meta-v1"
@@ -202,7 +203,11 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     setStatus(null)
     try {
       const result = await syncNow()
-      setStatus(`Sync complete: pushed ${result.pushed}, pulled ${result.pulled}, conflicts ${result.conflicts}`)
+      if (result.errors.length > 0) {
+        setStatus(`Sync complete with ${result.errors.length} error(s): ${result.errors[0].type}`)
+      } else {
+        setStatus(`Sync complete: pushed ${result.pushed}, pulled ${result.pulled}, conflicts ${result.conflicts}`)
+      }
       setSyncStatus(getSyncStatus())
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sync failed"
@@ -458,6 +463,24 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
           <Text style={themed($metaText)}>Last cursor: {getState().lastCursor}</Text>
           <Text style={themed($metaText)}>Queue size: {getState().outbox.length}</Text>
           <Text style={themed($metaText)}>Last sync: {getState().lastSyncAt ?? "n/a"}</Text>
+          <Text style={themed($metaText)}>Last sync duration: {getState().lastSyncDurationMs ?? 0} ms</Text>
+          <Text style={themed($metaText)}>Changes processed: {getState().lastChangesProcessed ?? 0}</Text>
+          <Text style={themed($metaText)}>Index size: {getState().lastIndexSize ?? 0}</Text>
+          <Text style={themed($metaText)}>Tombstones: {getState().lastTombstonesCount ?? 0}</Text>
+          <Text style={themed($metaText)}>Lamport clock: {getState().lamportClock}</Text>
+          <Pressable style={themed($secondaryButton)} onPress={async () => {
+            if (vaultId) {
+              listNoteIds(vaultId).forEach((id) => clearNoteRemoteMeta(id))
+              clearTombstonesForVault(vaultId)
+            }
+            setLastCursor(0)
+            setOutbox([])
+            await handleSyncNow()
+          }}>
+            <Text preset="bold" style={themed($secondaryButtonText)}>
+              Force Full Rebuild
+            </Text>
+          </Pressable>
         </View>
       ) : null}
 
