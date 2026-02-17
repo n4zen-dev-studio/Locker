@@ -12,7 +12,7 @@ export type NoteRemoteMeta = {
 
 export type OutboxOp = {
   id: string
-  type: "upsert_note" | "delete_note" | "update_index"
+  type: "upsert_note" | "delete_note" | "update_index" | "upsert_attachment_blob"
   noteId?: string
   deviceId?: string
   vaultId: string

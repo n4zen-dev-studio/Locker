@@ -4,6 +4,7 @@ import { sha256Hex } from "@/locker/crypto/sha"
 import { encryptJsonToBlobBytes } from "./remoteCodec"
 import { getOutbox, nextLamport, setOutbox, OutboxOp } from "./syncStateRepo"
 import type { Note } from "../storage/notesRepo"
+import { buildAttachmentBlobId } from "@/locker/attachments/attachmentCodec"
 
 const CONTENT_TYPE = "application/octet-stream"
 
@@ -136,6 +137,29 @@ export function enqueueUpdateIndexData(
     attempts: 0,
     nextRetryAt: undefined,
     lamport,
+  }
+  setOutbox([op, ...getOutbox()])
+}
+
+export function enqueueUpsertAttachmentBlob(input: {
+  vaultId: string
+  bytes: Uint8Array
+  noteId: string
+  attId: string
+}): void {
+  const blobId = buildAttachmentBlobId(input.noteId, input.attId)
+  const bytesB64 = bytesToBase64(input.bytes)
+  const op: OutboxOp = {
+    id: randomId(),
+    type: "upsert_attachment_blob",
+    vaultId: input.vaultId,
+    blobId,
+    bytesB64,
+    sha256Hex: sha256Hex(input.bytes),
+    contentType: CONTENT_TYPE,
+    createdAt: new Date().toISOString(),
+    attempts: 0,
+    nextRetryAt: undefined,
   }
   setOutbox([op, ...getOutbox()])
 }
