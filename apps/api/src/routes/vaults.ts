@@ -6,6 +6,7 @@ import { getApiEnv } from "@locker/config"
 import fs from "fs/promises"
 import path from "path"
 import { authMiddleware } from "../middleware/auth"
+import { recordAuditEvent } from "../db/audit"
 
 const vaultSchema = z.object({
   name: z.string().min(1)
@@ -68,6 +69,13 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       db.prepare(
         "INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)"
       ).run(vaultId, "vault_meta", null, now)
+
+      recordAuditEvent(db, {
+        userId: user.id,
+        vaultId,
+        type: "vault_delete",
+        meta: { deletedAt: now },
+      })
 
       reply.send({ ok: true })
     }
@@ -243,7 +251,144 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       })
 
       tx()
+      recordAuditEvent(db, {
+        userId: user.id,
+        vaultId,
+        type: "member_revoke",
+        meta: { targetUserId: userId },
+      })
 
+      reply.send({ ok: true })
+    }
+  )
+
+  app.get(
+    "/v1/vaults/:vaultId/audit",
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const user = request.user!
+      const { vaultId } = request.params as { vaultId: string }
+      const query = request.query as { cursor?: string; limit?: string }
+      const cursor = Number(query.cursor ?? 0)
+      const limit = Math.min(Number(query.limit ?? 50), 100)
+      const db = getDb()
+
+      const member = db.prepare(
+        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
+      ).get(vaultId, user.id) as { role?: string } | undefined
+
+      if (!member || (member.role !== "owner" && member.role !== "admin")) {
+        reply.code(403).send({ error: "Forbidden" })
+        return
+      }
+
+      const rows = db.prepare(
+        `SELECT id, userId, vaultId, type, meta, createdAt
+         FROM audit_events
+         WHERE vaultId = ? AND id > ?
+         ORDER BY id ASC
+         LIMIT ?`
+      ).all(vaultId, cursor, limit) as Array<{ id: number; userId: string; vaultId: string | null; type: string; meta: string | null; createdAt: string }>
+
+      const events = rows.map((row) => ({
+        ...row,
+        meta: row.meta ? safeParseJson(row.meta) : null,
+      }))
+
+      reply.send({ events, nextCursor: events.length > 0 ? events[events.length - 1].id : cursor })
+    }
+  )
+
+  app.get(
+    "/v1/vaults/:vaultId/health",
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const user = request.user!
+      const { vaultId } = request.params as { vaultId: string }
+      const db = getDb()
+
+      const member = db.prepare(
+        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
+      ).get(vaultId, user.id) as { role?: string } | undefined
+
+      if (!member || (member.role !== "owner" && member.role !== "admin")) {
+        reply.code(403).send({ error: "Forbidden" })
+        return
+      }
+
+      const blobCount = db.prepare("SELECT COUNT(*) as count FROM blobs WHERE vaultId = ?")
+        .get(vaultId) as { count: number }
+      const changeCount = db.prepare("SELECT COUNT(*) as count FROM changes WHERE vaultId = ?")
+        .get(vaultId) as { count: number }
+      const memberCount = db.prepare("SELECT COUNT(*) as count FROM vault_members WHERE vaultId = ?")
+        .get(vaultId) as { count: number }
+      const lastActivity = db.prepare(
+        "SELECT MAX(createdAt) as lastActivity FROM changes WHERE vaultId = ?"
+      ).get(vaultId) as { lastActivity?: string | null }
+
+      reply.send({
+        vaultId,
+        blobCount: blobCount.count,
+        changeCount: changeCount.count,
+        memberCount: memberCount.count,
+        lastActivity: lastActivity.lastActivity ?? null,
+      })
+    }
+  )
+
+  app.post(
+    "/v1/vaults/:vaultId/rotate-rvk",
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const user = request.user!
+      const { vaultId } = request.params as { vaultId: string }
+      const db = getDb()
+
+      const member = db.prepare(
+        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
+      ).get(vaultId, user.id) as { role?: string } | undefined
+
+      if (!member || member.role !== "owner") {
+        reply.code(403).send({ error: "Forbidden" })
+        return
+      }
+
+      const now = new Date().toISOString()
+      const tx = db.transaction(() => {
+        db.prepare(
+          "INSERT INTO vault_rotation_requests (vaultId, requestedAt, requestedByUserId) VALUES (?, ?, ?)"
+        ).run(vaultId, now, user.id)
+        db.prepare("INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)")
+          .run(vaultId, "vault_meta", null, now)
+      })
+
+      tx()
+      recordAuditEvent(db, { userId: user.id, vaultId, type: "rvk_rotate_request", meta: { requestedAt: now } })
+      reply.send({ ok: true })
+    }
+  )
+
+  app.post(
+    "/v1/vaults/:vaultId/envelope-requests",
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const user = request.user!
+      const { vaultId } = request.params as { vaultId: string }
+      const db = getDb()
+
+      const member = db.prepare(
+        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
+      ).get(vaultId, user.id) as { role?: string } | undefined
+
+      if (!member || (member.role !== "owner" && member.role !== "admin")) {
+        reply.code(403).send({ error: "Forbidden" })
+        return
+      }
+
+      const now = new Date().toISOString()
+      db.prepare("INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)")
+        .run(vaultId, "vault_meta", null, now)
+      recordAuditEvent(db, { userId: user.id, vaultId, type: "envelope_resend_request", meta: { requestedAt: now } })
       reply.send({ ok: true })
     }
   )
@@ -252,4 +397,12 @@ export async function registerVaultRoutes(app: FastifyInstance) {
 async function deleteVaultBlobFolder(vaultId: string): Promise<void> {
   const base = path.join(process.cwd(), ".data", "blobs", vaultId)
   await fs.rm(base, { recursive: true, force: true })
+}
+
+function safeParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
 }

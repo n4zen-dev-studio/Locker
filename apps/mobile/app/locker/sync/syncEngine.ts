@@ -4,7 +4,8 @@ import { clearRemoteVaultId, getRemoteVaultId } from "@/locker/storage/remoteVau
 import { vaultSession } from "@/locker/session"
 import { base64ToBytes, bytesToBase64 } from "@/locker/crypto/encoding"
 import { sha256Hex } from "@/locker/crypto/sha"
-import { fetchJson, fetchRaw, getApiBaseUrl } from "@/locker/net/apiClient"
+import { fetchJson, fetchRaw, getApiBaseUrl, putBytes } from "@/locker/net/apiClient"
+import { isApiError } from "@/locker/net/errors"
 import { clearRemoteVaultKey, getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { fetchAndInstallVaultKeyEnvelope } from "@/locker/keys/userKeyApi"
 import {
@@ -58,19 +59,23 @@ export function setNetworkOnline(isOnline: boolean): void {
 }
 
 function isHttpStatus(err: unknown, status: number): boolean {
+  if (isApiError(err)) return err.status === status
   if (!(err instanceof Error)) return false
   return err.message.includes(`[HTTP ${status}]`)
 }
 
 function isNotFound(err: unknown): boolean {
+  if (isApiError(err)) return err.kind === "NOT_FOUND"
   return isHttpStatus(err, 404)
 }
 
 function isUnauthorized(err: unknown): boolean {
+  if (isApiError(err)) return err.kind === "AUTH"
   return isHttpStatus(err, 401)
 }
 
 function isForbidden(err: unknown): boolean {
+  if (isApiError(err)) return err.kind === "FORBIDDEN"
   return isHttpStatus(err, 403)
 }
 
@@ -122,20 +127,24 @@ export async function enqueueDeleteNote(noteId: string): Promise<void> {
 }
 
 
-export async function syncNow(): Promise<{ pushed: number; pulled: number; conflicts: number; errors: SyncError[] }> {
+export async function syncNow(options: { vaultId?: string; signal?: AbortSignal; reason?: string } = {}): Promise<{ pushed: number; pulled: number; conflicts: number; errors: SyncError[] }> {
   if (!networkOnline) {
     throw new Error("Offline mode is enabled")
   }
   const token = await getToken()
   const account = getAccount()
-  const vaultId = getRemoteVaultId()
+  const vaultId = options.vaultId ?? getRemoteVaultId()
   const vmk = vaultSession.getKey()
+  const signal = options.signal
 
   if (!token || !account || !vaultId) {
     throw new Error("Link device and select a remote vault")
   }
   if (!vmk) {
     throw new Error("Vault is locked")
+  }
+  if (signal?.aborted) {
+    throw new Error("Sync cancelled")
   }
   let rvk = await getRemoteVaultKey(vaultId)
   if (!rvk || rvk.length !== 32) {
@@ -152,7 +161,7 @@ export async function syncNow(): Promise<{ pushed: number; pulled: number; confl
 
 
 
-  rvk = await ensureSyncKeyCheckWithRefresh(vaultId, token, rvk)
+  rvk = await ensureSyncKeyCheckWithRefresh(vaultId, token, rvk, signal)
 
 
   status = { state: "syncing" }
@@ -172,12 +181,12 @@ export async function syncNow(): Promise<{ pushed: number; pulled: number; confl
   let changesProcessed = 0
 
   try {
-    const pushResult = await withStep("PUSH", () => flushOutbox(vaultId, token, errors))
+    const pushResult = await withStep("PUSH", () => flushOutbox(vaultId, token, errors, signal))
     pushed += pushResult.pushed
     if (pushResult.touchedNoteIds.size > 0) {
-      await withStep("PUSH: PUT index", () => uploadIndex(vaultId, token, rvk, account.device.id))
+      await withStep("PUSH: PUT index", () => uploadIndex(vaultId, token, rvk, account.device.id, signal))
     }
-    const pullResult = await withStep("PULL", () => pullChanges(vaultId, token, rvk, vmk, account.device.id, errors))
+    const pullResult = await withStep("PULL", () => pullChanges(vaultId, token, rvk, vmk, account.device.id, errors, signal))
     pulled += pullResult.pulled
     conflicts += pullResult.conflicts
     changesProcessed += pullResult.processedChanges
@@ -210,9 +219,14 @@ export async function syncNow(): Promise<{ pushed: number; pulled: number; confl
   }
 }
 
-async function ensureSyncKeyCheck(vaultId: string, token: string, rvk: Uint8Array): Promise<void> {
+async function ensureSyncKeyCheck(
+  vaultId: string,
+  token: string,
+  rvk: Uint8Array,
+  signal?: AbortSignal,
+): Promise<void> {
   try {
-    const bytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${SYNC_KEY_CHECK_BLOB_ID}`, {}, { token })
+    const bytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${SYNC_KEY_CHECK_BLOB_ID}`, {}, { token, signal })
     try {
       const payload = decryptBlobBytesToJson<any>(rvk, bytes)
       assertValidRemotePayload(payload)
@@ -243,15 +257,16 @@ async function ensureSyncKeyCheckWithRefresh(
   vaultId: string,
   token: string,
   rvk: Uint8Array,
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   try {
-    await ensureSyncKeyCheck(vaultId, token, rvk)
+    await ensureSyncKeyCheck(vaultId, token, rvk, signal)
     return rvk
   } catch (err) {
     if (err instanceof Error && err.message.includes("Wrong sync key")) {
       const refreshed = await fetchAndInstallVaultKeyEnvelope(vaultId)
       if (refreshed && refreshed.length === 32) {
-        await ensureSyncKeyCheck(vaultId, token, refreshed)
+        await ensureSyncKeyCheck(vaultId, token, refreshed, signal)
         return refreshed
       }
     }
@@ -264,6 +279,7 @@ async function flushOutbox(
   vaultId: string,
   token: string,
   errors: SyncError[],
+  signal?: AbortSignal,
 ): Promise<{ pushed: number; touchedNoteIds: Set<string> }> {
   const outbox = [...getOutbox()]
   let pushed = 0
@@ -289,7 +305,7 @@ async function flushOutbox(
 
     try {
       await withStep(`PUSH: PUT blob ${op.blobId}`, () =>
-        putBlob(vaultId, token, op.blobId, op.bytesB64, op.sha256Hex, op.contentType),
+        putBlob(vaultId, token, op.blobId, op.bytesB64, op.sha256Hex, op.contentType, signal),
       )
       pushed += 1
       if (op.noteId) touchedNoteIds.add(op.noteId)
@@ -343,6 +359,7 @@ async function pullChanges(
   vmk: Uint8Array,
   deviceId: string,
   errors: SyncError[],
+  signal?: AbortSignal,
 ): Promise<{ pulled: number; conflicts: number; processedChanges: number }> {
   let pulled = 0
   let conflicts = 0
@@ -352,6 +369,7 @@ async function pullChanges(
   let cursor = getState().lastCursor ?? 0
 
   let sawIndex: string[] | null = null
+  let indexState: "none" | "valid" | "missing" | "corrupt" = "none"
 
   while (true) {
     let data: {
@@ -364,7 +382,7 @@ async function pullChanges(
         fetchJson<{
           nextCursor: number
           changes: Array<{ id: number; type: string; blobId?: string | null; createdAt: string }>
-        }>(`/v1/vaults/${vaultId}/changes?cursor=${cursor}&limit=100`, {}, { token }),
+        }>(`/v1/vaults/${vaultId}/changes?cursor=${cursor}&limit=100`, {}, { token, signal }),
       )
     } catch (err) {
       if (isNotFound(err)) {
@@ -391,7 +409,7 @@ async function pullChanges(
       if (change.blobId === INDEX_BLOB_ID) {
         try {
           const bytes = await withStep("PULL: GET index blob", () =>
-            fetchRaw(`/v1/vaults/${vaultId}/blobs/${INDEX_BLOB_ID}`, {}, { token }),
+            fetchRaw(`/v1/vaults/${vaultId}/blobs/${INDEX_BLOB_ID}`, {}, { token, signal }),
           )
 
           try {
@@ -401,9 +419,11 @@ async function pullChanges(
             // ✅ Only accept valid index shape
             if (payload?.type === "notes-index" && Array.isArray(payload.ids)) {
               sawIndex = payload.ids
+              indexState = "valid"
             } else {
               // ❗ Unknown/invalid shape -> treat as "unknown", DON'T treat as empty
               sawIndex = null
+              indexState = "corrupt"
               errors.push({
                 type: "CORRUPT_PAYLOAD",
                 message: "Index payload shape invalid; will rebuild index after pull",
@@ -421,6 +441,7 @@ async function pullChanges(
 
             // ✅ Treat as "unknown index", DON'T overwrite index here
             sawIndex = null
+            indexState = "corrupt"
 
             errors.push({
               type: "CORRUPT_PAYLOAD",
@@ -435,6 +456,7 @@ async function pullChanges(
           if (isNotFound(err)) {
             // ✅ true empty vault case
             sawIndex = []
+            indexState = "missing"
           } else {
             throw err
           }
@@ -448,7 +470,7 @@ async function pullChanges(
       if (!change.blobId.startsWith(NOTE_PREFIX) && !change.blobId.startsWith(DELETE_PREFIX)) continue
 
       const bytes = await withStep(`PULL: GET blob ${change.blobId}`, () =>
-        fetchRaw(`/v1/vaults/${vaultId}/blobs/${change.blobId}`, {}, { token }),
+        fetchRaw(`/v1/vaults/${vaultId}/blobs/${change.blobId}`, {}, { token, signal }),
       )
 
       let payload: any
@@ -501,11 +523,13 @@ async function pullChanges(
     if (changes.length < 100) break
   }
 
-  if (Array.isArray(sawIndex)) {
+  if (indexState === "valid" && Array.isArray(sawIndex)) {
     await reconcileIndex(sawIndex, vmk, rvk, deviceId, vaultId)
-    await repairMissingNotes(sawIndex, vaultId, token, rvk, vmk, deviceId, errors)
-  } else {
+    await repairMissingNotes(sawIndex, vaultId, token, rvk, vmk, deviceId, errors, signal)
+  } else if (indexState === "missing") {
     enqueueUpdateIndexData(listNoteIds(vaultId), vaultId, rvk, deviceId)
+  } else if (indexState === "corrupt") {
+    // Guardrail: never overwrite index when decrypt/validation failed.
   }
 
   return { pulled, conflicts, processedChanges }
@@ -713,6 +737,7 @@ async function repairMissingNotes(
   vmk: Uint8Array,
   deviceId: string,
   errors: SyncError[],
+  signal?: AbortSignal,
 ): Promise<void> {
   for (const id of remoteIds) {
     const tombstone = getTombstone(id, vaultId)
@@ -720,7 +745,7 @@ async function repairMissingNotes(
     const local = tryGetNote(id, vmk)
     if (local) continue
     try {
-      const bytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${NOTE_PREFIX}${id}`, {}, { token })
+      const bytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${NOTE_PREFIX}${id}`, {}, { token, signal })
       const payload = decryptBlobBytesToJson<any>(rvk, bytes)
       assertValidRemotePayload(payload)
       if (payload.type !== "note") continue
@@ -738,24 +763,15 @@ async function putBlob(
   bytesB64: string,
   sha256Hex: string,
   contentType: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const bytes = base64ToBytes(bytesB64)
-  const res = await fetch(
-    `${getApiBaseUrl()}/v1/vaults/${vaultId}/blobs/${blobId}?sha256=${sha256Hex}`,
-    {
-      method: "PUT",
-      headers: {
-        "content-type": contentType,
-        authorization: `Bearer ${token}`,
-      },
-      body: bytes,
-    },
+  await putBytes(
+    `/v1/vaults/${vaultId}/blobs/${blobId}?sha256=${sha256Hex}`,
+    bytes,
+    {},
+    { token, signal, headers: { "content-type": contentType } },
   )
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`[HTTP ${res.status}] PUT /v1/vaults/${vaultId}/blobs/${blobId} :: ${text || "<empty>"}`)
-  }
 }
 
 async function uploadIndex(
@@ -763,6 +779,7 @@ async function uploadIndex(
   token: string,
   rvk: Uint8Array,
   deviceId: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const payload = {
     v: 1,
@@ -780,6 +797,7 @@ async function uploadIndex(
     bytesToBase64(bytes),
     sha256Hex(bytes),
     "application/octet-stream",
+    signal,
   )
 }
 
@@ -820,6 +838,20 @@ function compareLamport(aLamport: number, aDevice: string, bLamport: number, bDe
 }
 
 function classifyError(err: unknown, step?: string): SyncError {
+  if (isApiError(err)) {
+    if (err.kind === "AUTH" || err.kind === "FORBIDDEN") {
+      return { type: "AUTH_ERROR", message: err.message, step }
+    }
+    if (err.kind === "NOT_FOUND") {
+      return { type: "VAULT_MISMATCH", message: "Remote vault deleted", step }
+    }
+    if (err.kind === "NETWORK" || err.kind === "TIMEOUT") {
+      return { type: "NETWORK_ERROR", message: err.message, step }
+    }
+    if (err.kind === "BAD_RESPONSE") {
+      return { type: "CORRUPT_PAYLOAD", message: err.message, step }
+    }
+  }
   if (err instanceof Error) {
     const msg = err.message || "Sync error"
     if (msg.includes("Session expired") || msg.includes("[HTTP 401]")) {
@@ -831,11 +863,14 @@ function classifyError(err: unknown, step?: string): SyncError {
     if (msg.includes("[HTTP 404]")) {
       return { type: "VAULT_MISMATCH", message: "Remote vault deleted", step }
     }
-    if (msg.includes("Cannot reach server")) {
+    if (msg.includes("Cannot reach server") || msg.includes("Request timed out")) {
       return { type: "NETWORK_ERROR", message: msg, step }
     }
     if (msg.includes("Invalid")) {
       return { type: "CORRUPT_PAYLOAD", message: msg, step }
+    }
+    if (msg.includes("cancelled")) {
+      return { type: "NETWORK_ERROR", message: msg, step }
     }
     return { type: "LOGIC_ERROR", message: msg, step }
   }

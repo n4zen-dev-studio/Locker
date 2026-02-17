@@ -108,8 +108,26 @@ export function runMigrations(db: Database.Database): void {
       UNIQUE(vaultId, userId)
     );
 
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId TEXT NOT NULL,
+      vaultId TEXT NULL,
+      type TEXT NOT NULL,
+      meta TEXT NULL,
+      createdAt TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS vault_rotation_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      vaultId TEXT NOT NULL,
+      requestedAt TEXT NOT NULL,
+      requestedByUserId TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
+    CREATE INDEX IF NOT EXISTS idx_audit_vault_id ON audit_events (vaultId, id);
+    CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_events (userId, id);
   `)
 
   try {

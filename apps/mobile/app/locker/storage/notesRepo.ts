@@ -7,6 +7,7 @@ import { getAccount } from "./accountRepo"
 import { getRemoteVaultId } from "./remoteVaultRepo"
 import { getRemoteVaultKey } from "./remoteKeyRepo"
 import { enqueueDeleteNoteData, enqueueUpdateIndexData, enqueueUpsertNoteData } from "../sync/queue"
+import { requestSync } from "../sync/syncCoordinator"
 
 const NOTES_LIST_KEY = "locker:notes:v1:list"
 const NOTE_KEY_PREFIX = "locker:notes:v1:note:"
@@ -38,6 +39,14 @@ type EncryptedNoteRecord = {
   vaultId?: string | null
   conflictParentNoteId?: string | null
   conflictOriginLamport?: number | null
+}
+
+export function listNoteMetas(): NoteMeta[] {
+  return load<NoteMeta[]>(NOTES_LIST_KEY) ?? []
+}
+
+export function getEncryptedNoteRecord(id: string): EncryptedNoteRecord | null {
+  return load<EncryptedNoteRecord>(NOTE_KEY_PREFIX + id) ?? null
 }
 
 export function listNotes(vmk: Uint8Array): Note[] {
@@ -184,6 +193,7 @@ export function saveNote(
         if (!rvk) return
         enqueueUpsertNoteData(note, remoteVaultId, rvk, deviceId)
         enqueueUpdateIndexData(listNoteIds(remoteVaultId), remoteVaultId, rvk, deviceId)
+        void requestSync("note_change", remoteVaultId)
       })
     }
   }
@@ -228,6 +238,7 @@ export function deleteNote(
         if (!rvk) return
         enqueueDeleteNoteData(id, createdAt, remoteVaultId, rvk, deviceId)
         enqueueUpdateIndexData(listNoteIds(remoteVaultId), remoteVaultId, rvk, deviceId)
+        void requestSync("note_change", remoteVaultId)
       })
     }
   }

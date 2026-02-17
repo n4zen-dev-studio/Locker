@@ -10,8 +10,9 @@ import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
 import { clearToken, getToken } from "@/locker/auth/tokenStore"
 import { AccountState, clearAccount, getAccount } from "@/locker/storage/accountRepo"
-import { clearRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { clearRemoteVaultId, getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
 import { getServerUrl, setServerUrl, clearServerUrl } from "@/locker/storage/serverConfigRepo"
+import { cancelVault } from "@/locker/sync/syncCoordinator"
 import { getApiBaseUrl, normalizeApiBaseUrl } from "@/locker/net/apiClient"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
@@ -57,6 +58,8 @@ export const VaultAccountScreen: FC<AppStackScreenProps<"VaultAccount">> = funct
         text: "Disconnect",
         style: "destructive",
         onPress: async () => {
+          const activeVault = getRemoteVaultId()
+          if (activeVault) cancelVault(activeVault)
           await clearToken()
           clearAccount()
           clearRemoteVaultId()
