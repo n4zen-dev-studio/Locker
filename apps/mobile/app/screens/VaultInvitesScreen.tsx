@@ -27,6 +27,7 @@ export const VaultInvitesScreen: FC<AppStackScreenProps<"VaultInvites">> = funct
   const [invites, setInvites] = useState<VaultInviteDTO[]>([])
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
+  const [needsRecovery, setNeedsRecovery] = useState(false)
 
   const loadInvites = useCallback(async () => {
     setError(null)
@@ -50,7 +51,19 @@ export const VaultInvitesScreen: FC<AppStackScreenProps<"VaultInvites">> = funct
       const vaultId = data.vaultId || invite.vaultId
       setRemoteVaultId(vaultId, invite.vaultName)
 
-      const rvk = await fetchAndInstallVaultKeyEnvelope(vaultId)
+      let rvk: Uint8Array | null = null
+      try {
+        rvk = await fetchAndInstallVaultKeyEnvelope(vaultId)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to install key"
+        if (message.includes("Missing private key")) {
+          setNeedsRecovery(true)
+          setStatus("Invite accepted. This device needs your account keys. Recover with passphrase.")
+          await loadInvites()
+          return
+        }
+        throw err
+      }
       if (!rvk) {
         setStatus("Invite accepted. Waiting for owner to send key envelope.")
         await loadInvites()
@@ -105,6 +118,13 @@ export const VaultInvitesScreen: FC<AppStackScreenProps<"VaultInvites">> = funct
 
       {error ? <Text style={themed($errorText)}>{error}</Text> : null}
       {status ? <Text style={themed($statusText)}>{status}</Text> : null}
+      {needsRecovery ? (
+        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultRecovery")}>
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            Recover Keys
+          </Text>
+        </Pressable>
+      ) : null}
 
       {invites.length === 0 ? (
         <Text style={themed($emptyText)}>No pending invites.</Text>

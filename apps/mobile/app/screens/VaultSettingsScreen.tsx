@@ -611,6 +611,20 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
 
       <View style={themed($card)}>
         <Text preset="bold" style={themed($sectionTitle)}>
+          Recovery
+        </Text>
+        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultRecovery")}>
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            Recovery & Keys
+          </Text>
+        </Pressable>
+        <Text style={themed($metaText)}>
+          Set a recovery passphrase to restore your account keys on new devices.
+        </Text>
+      </View>
+
+      <View style={themed($card)}>
+        <Text preset="bold" style={themed($sectionTitle)}>
           Diagnostics
         </Text>
         <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultDiagnostics")}>

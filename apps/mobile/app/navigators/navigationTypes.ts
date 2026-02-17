@@ -33,6 +33,7 @@ export type AppStackParamList = {
   VaultShare: undefined
   VaultInvites: undefined
   VaultDiagnostics: undefined
+  VaultRecovery: undefined
   VaultSearch: undefined
   ServerUrl: undefined
   Welcome: undefined

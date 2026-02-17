@@ -108,6 +108,15 @@ export function runMigrations(db: Database.Database): void {
       UNIQUE(vaultId, userId)
     );
 
+    CREATE TABLE IF NOT EXISTS user_key_backups (
+      userId TEXT PRIMARY KEY,
+      alg TEXT NOT NULL,
+      kdf TEXT NOT NULL,
+      wrappedPrivateKeyB64 TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS audit_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId TEXT NOT NULL,

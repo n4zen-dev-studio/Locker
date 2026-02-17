@@ -22,6 +22,10 @@ export function decryptPrivateKeyWithVMK(): Uint8Array {
   return decryptV1(vmk, wrapped)
 }
 
+export function hasUserPrivateKey(): boolean {
+  return !!load(PRIVATE_KEY_WRAP_STORAGE)
+}
+
 export function ensureUserKeypair(): { publicKeyB64: string; createdAt: string } {
   const vmk = vaultSession.getKey()
   if (!vmk) throw new Error("Vault locked")
@@ -49,6 +53,22 @@ export function ensureUserKeypair(): { publicKeyB64: string; createdAt: string }
   save(CREATED_AT_STORAGE, createdAt)
 
   return { publicKeyB64, createdAt }
+}
+
+export function storeUserKeypairFromPrivate(privateKey: Uint8Array, createdAt?: string): { publicKeyB64: string } {
+  const vmk = vaultSession.getKey()
+  if (!vmk) throw new Error("Vault locked")
+
+  const kp = nacl.box.keyPair.fromSecretKey(privateKey)
+  const publicKeyB64 = bytesToBase64(kp.publicKey)
+  const wrapped = encryptV1(vmk, privateKey)
+  const now = createdAt ?? new Date().toISOString()
+
+  save(PUBLIC_KEY_STORAGE, publicKeyB64)
+  save(PRIVATE_KEY_WRAP_STORAGE, wrapped)
+  save(CREATED_AT_STORAGE, now)
+
+  return { publicKeyB64 }
 }
 
 export function getUserKeyMetadata(): { publicKeyB64: string; createdAt: string } | null {
