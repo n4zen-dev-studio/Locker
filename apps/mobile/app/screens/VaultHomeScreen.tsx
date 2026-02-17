@@ -200,6 +200,9 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
       </View>
 
       <View style={themed($actionsRow)}>
+        <Pressable style={themed($searchButton)} onPress={() => navigation.navigate("VaultSearch")}>
+          <Text style={themed($searchText)}>Search notes…</Text>
+        </Pressable>
         <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultNote", {})}>
           <Text preset="bold" style={themed($primaryButtonText)}>
             New Secure Note
@@ -324,6 +327,19 @@ const $metaText: ThemedStyle<TextStyle> = ({ colors }) => ({
 const $actionsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
   marginBottom: spacing.lg,
+})
+
+const $searchButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  backgroundColor: "rgba(255, 255, 255, 0.08)",
+  borderRadius: 16,
+  paddingVertical: spacing.md,
+  paddingHorizontal: spacing.md,
+  borderWidth: 1,
+  borderColor: "rgba(255, 255, 255, 0.15)",
+})
+
+const $searchText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral400,
 })
 
 const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({

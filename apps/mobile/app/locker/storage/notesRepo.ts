@@ -8,6 +8,7 @@ import { getRemoteVaultId } from "./remoteVaultRepo"
 import { getRemoteVaultKey } from "./remoteKeyRepo"
 import { enqueueDeleteNoteData, enqueueUpdateIndexData, enqueueUpsertNoteData } from "../sync/queue"
 import { requestSync } from "../sync/syncCoordinator"
+import { deleteNoteFromIndex, indexNote } from "@/locker/search/searchRepo"
 
 const NOTES_LIST_KEY = "locker:notes:v1:list"
 const NOTE_KEY_PREFIX = "locker:notes:v1:note:"
@@ -185,6 +186,8 @@ export function saveNote(
     conflictOriginLamport,
   }
 
+  indexNote(note)
+
   if (!options?.suppressSync) {
     const deviceId = getAccount()?.device.id
     const remoteVaultId = note.vaultId ?? getRemoteVaultId()
@@ -214,6 +217,7 @@ export function saveNoteFromSync(note: Note, vmk: Uint8Array, vaultId?: string |
     vaultId: record.vaultId ?? null,
   })
   save(NOTES_LIST_KEY, updatedMetas)
+  indexNote(withVault)
 }
 
 export function deleteNote(
@@ -228,6 +232,7 @@ export function deleteNote(
     NOTES_LIST_KEY,
     metas.filter((meta) => meta.id !== id),
   )
+  deleteNoteFromIndex(id, record?.vaultId ?? null)
 
   if (!options?.suppressSync && vmk) {
     const deviceId = getAccount()?.device.id
