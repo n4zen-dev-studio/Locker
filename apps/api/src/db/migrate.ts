@@ -133,10 +133,32 @@ export function runMigrations(db: Database.Database): void {
       requestedByUserId TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS push_tokens (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      deviceId TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      token TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      UNIQUE(userId, deviceId, platform)
+    );
+
+    CREATE TABLE IF NOT EXISTS push_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider TEXT NOT NULL,
+      status TEXT NOT NULL,
+      payload TEXT NULL,
+      response TEXT NULL,
+      createdAt TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_vault_id ON audit_events (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_events (userId, id);
+    CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens (userId, deviceId);
+    CREATE INDEX IF NOT EXISTS idx_push_events_created ON push_events (createdAt, id);
   `)
 
   try {

@@ -6,6 +6,7 @@ import { deleteBlob, getBlob, putBlob } from "../blobStore/fsBlobStore"
 import { getApiEnv } from "@locker/config"
 import { rateLimit } from "../middleware/rateLimit"
 import { recordAuditEvent } from "../db/audit"
+import { sendVaultChangedPush } from "../push/pushService"
 
 export async function registerBlobRoutes(app: FastifyInstance) {
   const env = getApiEnv()
@@ -73,6 +74,9 @@ export async function registerBlobRoutes(app: FastifyInstance) {
           vaultId,
           type: "blob_put",
           meta: { blobId, sizeBytes: body.length, sha256: hash },
+        })
+        void sendVaultChangedPush(db, { vaultId }).catch((err) => {
+          request.log.error({ err }, "Failed to send push notifications")
         })
       } catch (e) {
         // If DB write fails, we must not leave a "blob_put" without DB state.
@@ -154,6 +158,9 @@ export async function registerBlobRoutes(app: FastifyInstance) {
 
       tx()
       recordAuditEvent(db, { userId: user.id, vaultId, type: "blob_del", meta: { blobId } })
+      void sendVaultChangedPush(db, { vaultId }).catch((err) => {
+        request.log.error({ err }, "Failed to send push notifications")
+      })
 
       reply.send({ ok: true })
     }

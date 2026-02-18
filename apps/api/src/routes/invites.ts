@@ -4,6 +4,7 @@ import crypto from "crypto"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
 import { recordAuditEvent } from "../db/audit"
+import { sendVaultChangedPush } from "../push/pushService"
 
 const inviteCreateSchema = z.object({
   inviteeEmail: z.string().email(),
@@ -165,6 +166,9 @@ export async function registerInviteRoutes(app: FastifyInstance) {
         vaultId: invite.vaultId,
         type: "invite_accept",
         meta: { inviteId },
+      })
+      void sendVaultChangedPush(db, { vaultId: invite.vaultId }).catch((err) => {
+        request.log.error({ err }, "Failed to send push notifications")
       })
 
       reply.send({ ok: true, vaultId: invite.vaultId })

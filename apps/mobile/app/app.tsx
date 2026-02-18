@@ -34,6 +34,10 @@ import { loadDateFnsLocale } from "./utils/formatDate"
 import * as storage from "./utils/storage"
 import { vaultSession } from "./locker/session"
 import { useAutoSync } from "./locker/sync/useAutoSync"
+import { useRemoteUpdateCheck } from "./locker/bg/useRemoteUpdateCheck"
+import { registerBackgroundTask } from "./locker/bg/backgroundFetch"
+import { registerPushToken } from "./locker/push/expoPushManager"
+import { setupPushListeners } from "./locker/push/pushListeners"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
@@ -72,6 +76,7 @@ export function App() {
   } = useNavigationPersistence(storage, NAVIGATION_PERSISTENCE_KEY)
 
   useAutoSync()
+  useRemoteUpdateCheck()
 
   const [areFontsLoaded, fontLoadError] = useFonts(customFontsToLoad)
   const [isI18nInitialized, setIsI18nInitialized] = useState(false)
@@ -80,6 +85,13 @@ export function App() {
     initI18n()
       .then(() => setIsI18nInitialized(true))
       .then(() => loadDateFnsLocale())
+  }, [])
+
+  useEffect(() => {
+    void registerBackgroundTask()
+    void registerPushToken()
+    const cleanup = setupPushListeners()
+    return () => cleanup()
   }, [])
 
   useEffect(() => {

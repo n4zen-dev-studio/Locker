@@ -54,6 +54,12 @@
         }
       }
     ],
+    [
+      "expo-notifications",
+      {
+        "icon": "./assets/notification-icon.png"
+      }
+    ],
     "expo-build-properties"
   ],
   "experiments": {
