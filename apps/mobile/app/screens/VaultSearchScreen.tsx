@@ -148,7 +148,12 @@ export const VaultSearchScreen: FC<AppStackScreenProps<"VaultSearch">> = functio
         renderItem={({ item }) => (
           <Pressable
             style={themed($resultCard)}
-            onPress={() => navigation.navigate("VaultNote", { noteId: item.id })}
+            onPress={() =>
+              navigation.navigate("VaultTabs", {
+                screen: "Vault",
+                params: { screen: "VaultNote", params: { noteId: item.id } },
+              })
+            }
           >
             {renderParts(item.titleParts, themed($highlight), themed($titleText))}
             {renderParts(item.snippetParts, themed($snippetHighlight), themed($snippetText))}

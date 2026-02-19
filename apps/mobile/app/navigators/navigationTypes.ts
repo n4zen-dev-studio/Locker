@@ -7,6 +7,30 @@ import {
 } from "@react-navigation/native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
+export type VaultStackParamList = {
+  VaultHome: undefined
+  VaultNote: { noteId?: string } | undefined
+}
+
+export type SyncStackParamList = {
+  SyncDashboard: undefined
+}
+
+export type CollabStackParamList = {
+  CollabDashboard: undefined
+}
+
+export type SecurityStackParamList = {
+  SecurityDashboard: undefined
+}
+
+export type VaultTabsParamList = {
+  Vault: NavigatorScreenParams<VaultStackParamList>
+  Sync: NavigatorScreenParams<SyncStackParamList>
+  Collab: NavigatorScreenParams<CollabStackParamList>
+  Security: NavigatorScreenParams<SecurityStackParamList>
+}
+
 // Demo Tab Navigator types
 export type DemoTabParamList = {
   DemoCommunity: undefined
@@ -21,9 +45,14 @@ export type AppStackParamList = {
   VaultLocked: undefined
   VaultPin: undefined
   VaultPasskeySetup: { mode?: "fresh" | "migrate" | "recovery" } | undefined
+  VaultTabs: NavigatorScreenParams<VaultTabsParamList>
+  Profile: undefined
+  VaultSwitcherModal: undefined
   VaultHome: undefined
-  VaultNote: { noteId?: string } | undefined
   VaultSwitcher: undefined
+  PairDeviceModal: undefined
+  ImportPairingModal: undefined
+  VaultFabVaultPicker: undefined
   VaultSettings: undefined
   VaultAccount: undefined
   VaultLinkDevice: undefined
@@ -46,6 +75,26 @@ export type AppStackParamList = {
 export type AppStackScreenProps<T extends keyof AppStackParamList> = NativeStackScreenProps<
   AppStackParamList,
   T
+>
+
+export type VaultStackScreenProps<T extends keyof VaultStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<VaultStackParamList, T>,
+  AppStackScreenProps<keyof AppStackParamList>
+>
+
+export type SyncStackScreenProps<T extends keyof SyncStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<SyncStackParamList, T>,
+  AppStackScreenProps<keyof AppStackParamList>
+>
+
+export type CollabStackScreenProps<T extends keyof CollabStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<CollabStackParamList, T>,
+  AppStackScreenProps<keyof AppStackParamList>
+>
+
+export type SecurityStackScreenProps<T extends keyof SecurityStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<SecurityStackParamList, T>,
+  AppStackScreenProps<keyof AppStackParamList>
 >
 
 export type DemoTabScreenProps<T extends keyof DemoTabParamList> = CompositeScreenProps<

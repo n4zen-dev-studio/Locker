@@ -203,12 +203,15 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
         <Pressable style={themed($searchButton)} onPress={() => navigation.navigate("VaultSearch")}>
           <Text style={themed($searchText)}>Search notes…</Text>
         </Pressable>
-        <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultNote", {})}>
+        <Pressable
+          style={themed($primaryButton)}
+          onPress={() => navigation.navigate("VaultTabs", { screen: "Vault", params: { screen: "VaultNote" } })}
+        >
           <Text preset="bold" style={themed($primaryButtonText)}>
             New Secure Note
           </Text>
         </Pressable>
-        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultSwitcher")}>
+        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultSwitcherModal")}>
           <Text preset="bold" style={themed($secondaryButtonText)}>
             Switch Vault
           </Text>
@@ -251,7 +254,12 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
             <Pressable
               key={note.id}
               style={({ pressed }) => [themed($noteCard), pressed && themed($notePressed)]}
-              onPress={() => navigation.navigate("VaultNote", { noteId: note.id })}
+              onPress={() =>
+                navigation.navigate("VaultTabs", {
+                  screen: "Vault",
+                  params: { screen: "VaultNote", params: { noteId: note.id } },
+                })
+              }
             >
               <Text preset="bold" style={themed($noteTitle)} numberOfLines={1}>
                 {note.title || "Untitled"}
@@ -270,7 +278,12 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
               <Pressable
                 key={note.id}
                 style={({ pressed }) => [themed($noteCard), pressed && themed($notePressed)]}
-                onPress={() => navigation.navigate("VaultNote", { noteId: note.id })}
+                onPress={() =>
+                  navigation.navigate("VaultTabs", {
+                    screen: "Vault",
+                    params: { screen: "VaultNote", params: { noteId: note.id } },
+                  })
+                }
               >
                 <Text preset="bold" style={themed($noteTitle)} numberOfLines={1}>
                   {note.title || "Untitled"}

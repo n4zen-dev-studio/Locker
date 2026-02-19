@@ -31,6 +31,8 @@ const palette = {
   angry100: "#F2D6CD",
   angry500: "#C03403",
 
+  success500: "#2FB777",
+
   overlay20: "rgba(25, 16, 21, 0.2)",
   overlay50: "rgba(25, 16, 21, 0.5)",
 } as const
@@ -82,4 +84,15 @@ export const colors = {
    * Error Background.
    */
   errorBackground: palette.angry100,
+  glass: "rgba(255, 255, 255, 0.7)",
+  glassHeavy: "rgba(255, 255, 255, 0.85)",
+  glassBorder: "rgba(0, 0, 0, 0.05)",
+  accentPink: palette.primary300,
+  accentBlue: palette.secondary300,
+  accentYellow: palette.accent300,
+  textStrong: palette.neutral800,
+  textMuted: palette.neutral600,
+  blobPink: "rgba(255, 110, 199, 0.22)",
+  blobBlue: "rgba(123, 211, 255, 0.18)",
+  blobNeutral: "rgba(0, 0, 0, 0.04)",
 } as const

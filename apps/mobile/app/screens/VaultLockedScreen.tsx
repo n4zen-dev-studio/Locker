@@ -58,7 +58,7 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = functio
     try {
       const vmk = await unlockWithPasskey()
       vaultSession.setKey(vmk)
-      navigation.replace("VaultHome")
+      navigation.replace("VaultTabs", { screen: "Vault" })
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to unlock"
       setError(message)

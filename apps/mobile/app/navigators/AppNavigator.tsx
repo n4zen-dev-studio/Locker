@@ -10,10 +10,9 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import Config from "@/config"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
 import { CalculatorScreen } from "@/screens/CalculatorScreen"
-import { VaultHomeScreen } from "@/screens/VaultHomeScreen"
+import { VaultTabsNavigator } from "@/navigators/VaultTabsNavigator"
 import { VaultLockedScreen } from "@/screens/VaultLockedScreen"
-import { VaultNoteScreen } from "@/screens/VaultNoteScreen"
-import { VaultSwitcherScreen } from "@/screens/VaultSwitcherScreen"
+import { VaultSwitcherModal } from "@/screens/VaultSwitcherModal"
 import { VaultSettingsScreen } from "@/screens/VaultSettingsScreen"
 import { VaultPasskeySetupScreen } from "@/screens/VaultPasskeySetupScreen"
 import { VaultPinScreen } from "@/screens/VaultPinScreen"
@@ -28,6 +27,10 @@ import { VaultInvitesScreen } from "@/screens/VaultInvitesScreen"
 import { VaultDiagnosticsScreen } from "@/screens/VaultDiagnosticsScreen"
 import { VaultSearchScreen } from "@/screens/VaultSearchScreen"
 import { VaultRecoveryScreen } from "@/screens/VaultRecoveryScreen"
+import { PairDeviceModal } from "@/screens/PairDeviceModal"
+import { ImportPairingModal } from "@/screens/ImportPairingModal"
+import { VaultFabVaultPickerModal } from "@/screens/VaultFabVaultPickerModal"
+import { ProfileScreen } from "@/screens/ProfileScreen"
 import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
@@ -62,9 +65,16 @@ const AppStack = () => {
       <Stack.Screen name="VaultLocked" component={VaultLockedScreen} />
       <Stack.Screen name="VaultPin" component={VaultPinScreen} />
       <Stack.Screen name="VaultPasskeySetup" component={VaultPasskeySetupScreen} />
-      <Stack.Screen name="VaultHome" component={VaultHomeScreen} />
-      <Stack.Screen name="VaultNote" component={VaultNoteScreen} />
-      <Stack.Screen name="VaultSwitcher" component={VaultSwitcherScreen} />
+      <Stack.Screen name="VaultTabs" component={VaultTabsNavigator} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="VaultSwitcherModal" component={VaultSwitcherModal} options={{ presentation: "modal" }} />
+      <Stack.Screen name="PairDeviceModal" component={PairDeviceModal} options={{ presentation: "modal" }} />
+      <Stack.Screen name="ImportPairingModal" component={ImportPairingModal} options={{ presentation: "modal" }} />
+      <Stack.Screen
+        name="VaultFabVaultPicker"
+        component={VaultFabVaultPickerModal}
+        options={{ presentation: "transparentModal", contentStyle: { backgroundColor: "transparent" } }}
+      />
       <Stack.Screen name="VaultSettings" component={VaultSettingsScreen} />
       <Stack.Screen name="VaultAccount" component={VaultAccountScreen} />
       <Stack.Screen name="VaultLinkDevice" component={VaultLinkDeviceScreen} />

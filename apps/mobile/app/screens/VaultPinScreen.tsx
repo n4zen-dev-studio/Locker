@@ -27,7 +27,7 @@ export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function Vaul
   useFocusEffect(
     useCallback(() => {
       if (vaultSession.isUnlocked()) {
-        navigation.replace("VaultHome")
+        navigation.replace("VaultTabs", { screen: "Vault" })
       }
     }, [navigation]),
   )
@@ -49,7 +49,7 @@ export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function Vaul
         {
           text: "Later",
           style: "cancel",
-          onPress: () => navigation.replace("VaultHome"),
+          onPress: () => navigation.replace("VaultTabs", { screen: "Vault" }),
         },
       ])
     } else {

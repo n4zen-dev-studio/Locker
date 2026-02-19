@@ -400,7 +400,10 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
             </Text>
           </Pressable>
 
-          <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultNote", {})}>
+          <Pressable
+            style={themed($primaryButton)}
+            onPress={() => navigation.navigate("VaultTabs", { screen: "Vault", params: { screen: "VaultNote" } })}
+          >
             <Text preset="bold" style={themed($primaryButtonText)}>
               New Secure Note
             </Text>

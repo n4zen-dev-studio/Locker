@@ -30,7 +30,7 @@ export const VaultPasskeySetupScreen: FC<AppStackScreenProps<"VaultPasskeySetup"
   useFocusEffect(
     useCallback(() => {
       if (vaultSession.isUnlocked() && meta?.v === 2) {
-        navigation.replace("VaultHome")
+        navigation.replace("VaultTabs", { screen: "Vault" })
       }
     }, [navigation, meta]),
   )
@@ -52,7 +52,7 @@ export const VaultPasskeySetupScreen: FC<AppStackScreenProps<"VaultPasskeySetup"
         vaultSession.setKey(vmk)
       }
       await enablePasskey(vmk)
-      navigation.replace("VaultHome")
+      navigation.replace("VaultTabs", { screen: "Vault" })
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to enable passkey"
       setError(message)
