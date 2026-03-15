@@ -12,6 +12,7 @@ import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
 import { CalculatorScreen } from "@/screens/CalculatorScreen"
 import { VaultTabsNavigator } from "@/navigators/VaultTabsNavigator"
 import { VaultLockedScreen } from "@/screens/VaultLockedScreen"
+import { VaultOnboardingScreen } from "@/screens/VaultOnboardingScreen"
 import { VaultSwitcherModal } from "@/screens/VaultSwitcherModal"
 import { VaultSettingsScreen } from "@/screens/VaultSettingsScreen"
 import { VaultPasskeySetupScreen } from "@/screens/VaultPasskeySetupScreen"
@@ -65,6 +66,7 @@ const AppStack = () => {
       <Stack.Screen name="VaultLocked" component={VaultLockedScreen} />
       <Stack.Screen name="VaultPin" component={VaultPinScreen} />
       <Stack.Screen name="VaultPasskeySetup" component={VaultPasskeySetupScreen} />
+      <Stack.Screen name="VaultOnboarding" component={VaultOnboardingScreen} />
       <Stack.Screen name="VaultTabs" component={VaultTabsNavigator} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="VaultSwitcherModal" component={VaultSwitcherModal} options={{ presentation: "modal" }} />

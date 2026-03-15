@@ -74,7 +74,7 @@ export const VaultFabVaultPickerModal: FC<AppStackScreenProps<"VaultFabVaultPick
   }
 
   const handleCreateVault = () => {
-    navigation.navigate("VaultTabs", { screen: "Sync" })
+    navigation.navigate("VaultTabs", { screen: "Settings" })
     navigation.goBack()
   }
 

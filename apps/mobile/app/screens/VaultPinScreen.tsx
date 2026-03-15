@@ -9,6 +9,7 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
 import { getMeta, unlockLegacyVault } from "@/locker/storage/vaultMetaRepo"
+import { getPostUnlockRoute } from "@/navigators/postUnlockRoute"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
 const MAX_PIN_LENGTH = 6
@@ -27,7 +28,12 @@ export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function Vaul
   useFocusEffect(
     useCallback(() => {
       if (vaultSession.isUnlocked()) {
-        navigation.replace("VaultTabs", { screen: "Vault" })
+        const next = getPostUnlockRoute()
+        if (next.name === "VaultOnboarding") {
+          navigation.replace("VaultOnboarding")
+          return
+        }
+        navigation.replace(next.name, next.params)
       }
     }, [navigation]),
   )
@@ -49,7 +55,14 @@ export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function Vaul
         {
           text: "Later",
           style: "cancel",
-          onPress: () => navigation.replace("VaultTabs", { screen: "Vault" }),
+          onPress: () => {
+            const next = getPostUnlockRoute()
+            if (next.name === "VaultOnboarding") {
+              navigation.replace("VaultOnboarding")
+              return
+            }
+            navigation.replace(next.name, next.params)
+          },
         },
       ])
     } else {

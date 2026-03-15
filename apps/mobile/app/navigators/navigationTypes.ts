@@ -24,11 +24,14 @@ export type SecurityStackParamList = {
   SecurityDashboard: undefined
 }
 
+export type SettingsStackParamList = {
+  SettingsHome: undefined
+}
+
 export type VaultTabsParamList = {
-  Vault: NavigatorScreenParams<VaultStackParamList>
-  Sync: NavigatorScreenParams<SyncStackParamList>
-  Collab: NavigatorScreenParams<CollabStackParamList>
-  Security: NavigatorScreenParams<SecurityStackParamList>
+  Vault: NavigatorScreenParams<VaultStackParamList> | undefined
+  Security: NavigatorScreenParams<SecurityStackParamList> | undefined
+  Settings: NavigatorScreenParams<SettingsStackParamList> | undefined
 }
 
 // Demo Tab Navigator types
@@ -45,6 +48,7 @@ export type AppStackParamList = {
   VaultLocked: undefined
   VaultPin: undefined
   VaultPasskeySetup: { mode?: "fresh" | "migrate" | "recovery" } | undefined
+  VaultOnboarding: undefined
   VaultTabs: NavigatorScreenParams<VaultTabsParamList>
   Profile: undefined
   VaultSwitcherModal: undefined
@@ -94,6 +98,11 @@ export type CollabStackScreenProps<T extends keyof CollabStackParamList> = Compo
 
 export type SecurityStackScreenProps<T extends keyof SecurityStackParamList> = CompositeScreenProps<
   NativeStackScreenProps<SecurityStackParamList, T>,
+  AppStackScreenProps<keyof AppStackParamList>
+>
+
+export type SettingsStackScreenProps<T extends keyof SettingsStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<SettingsStackParamList, T>,
   AppStackScreenProps<keyof AppStackParamList>
 >
 

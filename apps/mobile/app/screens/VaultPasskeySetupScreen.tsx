@@ -12,6 +12,7 @@ import { vaultSession } from "@/locker/session"
 import { randomBytes } from "@/locker/crypto/random"
 import { enablePasskey, isPasskeyEnabled } from "@/locker/auth/passkey"
 import { getMeta } from "@/locker/storage/vaultMetaRepo"
+import { getPostUnlockRoute } from "@/navigators/postUnlockRoute"
 
 export const VaultPasskeySetupScreen: FC<AppStackScreenProps<"VaultPasskeySetup">> = function VaultPasskeySetupScreen(
   props,
@@ -30,7 +31,12 @@ export const VaultPasskeySetupScreen: FC<AppStackScreenProps<"VaultPasskeySetup"
   useFocusEffect(
     useCallback(() => {
       if (vaultSession.isUnlocked() && meta?.v === 2) {
-        navigation.replace("VaultTabs", { screen: "Vault" })
+        const next = getPostUnlockRoute()
+        if (next.name === "VaultOnboarding") {
+          navigation.replace("VaultOnboarding")
+          return
+        }
+        navigation.replace(next.name, next.params)
       }
     }, [navigation, meta]),
   )
@@ -52,7 +58,12 @@ export const VaultPasskeySetupScreen: FC<AppStackScreenProps<"VaultPasskeySetup"
         vaultSession.setKey(vmk)
       }
       await enablePasskey(vmk)
-      navigation.replace("VaultTabs", { screen: "Vault" })
+      const next = getPostUnlockRoute()
+      if (next.name === "VaultOnboarding") {
+        navigation.replace("VaultOnboarding")
+      } else {
+        navigation.replace(next.name, next.params)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to enable passkey"
       setError(message)
