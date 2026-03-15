@@ -3,6 +3,13 @@ import { Pressable, TextStyle, View, ViewStyle } from "react-native"
 
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
+import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
+import { vaultSession } from "@/locker/session"
+import {
+  matchesDecoyVaultEntryCode,
+  matchesRealVaultEntryCode,
+} from "@/locker/storage/stealthEntryRepo"
+import { getPostUnlockRoute } from "@/navigators/postUnlockRoute"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
@@ -193,6 +200,33 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> = function 
   const handleEquals = () => {
     if (longPressTriggered.current) {
       longPressTriggered.current = false
+      return
+    }
+
+    if (matchesRealVaultEntryCode(display)) {
+      if (vaultSession.isUnlocked()) {
+        const next = getPostUnlockRoute()
+        if (next.name === "VaultOnboarding") {
+          navigation.navigate("VaultOnboarding")
+        } else {
+          navigation.navigate("VaultTabs", next.params)
+        }
+      } else {
+        navigation.navigate("VaultLocked")
+      }
+      return
+    }
+
+    if (matchesDecoyVaultEntryCode(display)) {
+      recordSecurityEvent({
+        type: "decoy_vault_open",
+        message: "Decoy vault opened from calculator entry code.",
+        severity: "info",
+      })
+      navigation.navigate("VaultTabs", {
+        screen: "Security",
+        params: { screen: "DecoyVault" },
+      })
       return
     }
 

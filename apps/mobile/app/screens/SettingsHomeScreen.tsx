@@ -73,6 +73,17 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
 
             <GlassCard>
               <Text preset="bold" style={themed($sectionTitle)}>
+                Calculator Shortcuts
+              </Text>
+              <SettingsLink
+                label="Calculator Entry Codes"
+                description='Set the exact calculator shortcut codes for the real vault and the decoy vault. These do not replace passkey protection.'
+                onPress={() => navigation.navigate("CalculatorEntryCodes")}
+              />
+            </GlassCard>
+
+            <GlassCard>
+              <Text preset="bold" style={themed($sectionTitle)}>
                 Vault Tools
               </Text>
               <SettingsLink
