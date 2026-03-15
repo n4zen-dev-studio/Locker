@@ -2,7 +2,7 @@ import { FC, useCallback, useEffect, useMemo, useState } from "react"
 import { Alert, AppState, Image, ImageStyle, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 import * as DocumentPicker from "expo-document-picker"
-import * as FileSystem from "expo-file-system"
+import * as FileSystem from "expo-file-system/legacy"
 import * as Sharing from "expo-sharing"
 
 import { Screen } from "@/components/Screen"

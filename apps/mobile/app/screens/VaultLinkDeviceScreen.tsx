@@ -105,7 +105,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
       const me = await fetchJson<{ user: UserDTO }>("/v1/me", {}, { baseUrl: apiBase, token: data.token })
       setAccount({ ...account, user: me.user })
       setStatus("Linked successfully")
-      navigation.replace("VaultAccount")
+      navigation.replace("RemoteVault")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Link failed"
       setError(message)

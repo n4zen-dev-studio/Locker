@@ -76,11 +76,6 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
                 Vault Tools
               </Text>
               <SettingsLink
-                label="Recovery"
-                description="Review recovery backup health and key continuity actions."
-                onPress={() => navigation.navigate("VaultRecovery")}
-              />
-              <SettingsLink
                 label="Export & Diagnostics"
                 description="Share demo-safe diagnostics and export an encrypted vault backup."
                 onPress={() => navigation.navigate("VaultDiagnostics")}
