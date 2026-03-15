@@ -11,8 +11,10 @@ type IndexedNote = {
   title: string
   titleTokens: string[]
   bodyTokens: string[]
+  classification: string
   updatedAt: string
   createdAt: string
+  deleted: boolean
   conflict: boolean
 }
 
@@ -99,8 +101,10 @@ function buildIndexedNote(note: Note): IndexedNote {
     title: note.title,
     titleTokens: tokenize(note.title),
     bodyTokens: tokenize(note.body),
+    classification: note.classification,
     updatedAt: note.updatedAt,
     createdAt: note.createdAt,
+    deleted: !!note.deletedAt,
     conflict: !!note.conflictParentNoteId,
   }
 }
@@ -129,6 +133,11 @@ export function indexNote(note: Note): void {
   const index = loadIndex(vaultId) ?? buildEmpty()
   const existing = index.notes[note.id]
   if (existing) removeFromInverted(index.inverted, existing)
+  if (note.deletedAt) {
+    delete index.notes[note.id]
+    persistIndex(vaultId, index)
+    return
+  }
   const record = buildIndexedNote(note)
   index.notes[note.id] = record
   addToInverted(index.inverted, record)
@@ -219,8 +228,9 @@ export function search(query: string, options: SearchOptions): SearchResult[] {
     const note = effectiveIndex.notes[id]
     if (!note) continue
     if ((note.vaultId ?? null) !== (options.vaultId ?? null)) continue
-    if (!matchesFilters(note, options.filters)) continue
-    const score = tokens.reduce((acc, t) => {
+  if (!matchesFilters(note, options.filters)) continue
+  if (note.deleted) continue
+  const score = tokens.reduce((acc, t) => {
       const inTitle = note.titleTokens.includes(t) ? 2 : 0
       const inBody = note.bodyTokens.includes(t) ? 1 : 0
       return acc + inTitle + inBody
