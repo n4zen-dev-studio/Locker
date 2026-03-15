@@ -38,6 +38,8 @@ import {
   VAULT_CLASSIFICATIONS,
   VaultClassification,
 } from "@/locker/vault/types"
+import { ensureElevatedSession } from "@/locker/security/stepUp"
+import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
 
 type VaultMemberRecord = {
   userId: string
@@ -161,8 +163,22 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const handlePermanentDelete = () => {
     if (!noteId) return
     const key = vaultSession.getKey()
-    deleteNote(noteId, key ?? undefined)
-    navigation.goBack()
+    void (async () => {
+      try {
+        await ensureElevatedSession("permanent delete")
+        deleteNote(noteId, key ?? undefined)
+        recordSecurityEvent({
+          type: "secure_delete",
+          message: "Permanent delete completed for a vault note.",
+          severity: "warning",
+          meta: { noteId },
+        })
+        navigation.goBack()
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Step-up required"
+        setError(message)
+      }
+    })()
   }
 
   const loadRole = useCallback(async () => {

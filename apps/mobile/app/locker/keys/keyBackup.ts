@@ -21,16 +21,26 @@ type BackupResponse = {
   updatedAt: string
 }
 
-export async function hasKeyBackup(): Promise<boolean> {
+export type KeyBackupStatus = {
+  configured: boolean
+  updatedAt: string | null
+}
+
+export async function getKeyBackupStatus(): Promise<KeyBackupStatus> {
   const token = await getToken()
-  if (!token) return false
+  if (!token) return { configured: false, updatedAt: null }
   try {
-    await fetchJson<BackupResponse>("/v1/me/key-backup", {}, { token })
-    return true
+    const data = await fetchJson<BackupResponse>("/v1/me/key-backup", {}, { token })
+    return { configured: true, updatedAt: data.updatedAt ?? null }
   } catch (err) {
-    if (isNotFound(err)) return false
+    if (isNotFound(err)) return { configured: false, updatedAt: null }
     throw err
   }
+}
+
+export async function hasKeyBackup(): Promise<boolean> {
+  const status = await getKeyBackupStatus()
+  return status.configured
 }
 
 export async function createOrUpdateKeyBackup(recoveryPassphrase: string): Promise<void> {

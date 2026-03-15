@@ -22,6 +22,7 @@ export type CollabStackParamList = {
 
 export type SecurityStackParamList = {
   SecurityDashboard: undefined
+  DecoyVault: undefined
 }
 
 export type SettingsStackParamList = {

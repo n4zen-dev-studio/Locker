@@ -100,6 +100,13 @@ export const VaultDiagnosticsScreen: FC<AppStackScreenProps<"VaultDiagnostics">>
           <Text style={themed($metaText)}>Notes: {snapshot?.counts.notes ?? 0}</Text>
           <Text style={themed($metaText)}>Tombstones: {snapshot?.counts.tombstones ?? 0}</Text>
           <Text style={themed($metaText)}>Index Size: {snapshot?.counts.indexSize ?? 0}</Text>
+          <Text style={themed($metaText)}>Trust: {snapshot?.security.trustState ?? "n/a"}</Text>
+          <Text style={themed($metaText)}>
+            Auto-lock: {snapshot?.security.lockOnBackground ? "background" : `${snapshot?.security.inactivityLockSeconds ?? 0}s inactivity`}
+          </Text>
+          <Text style={themed($metaText)}>
+            Hide previews: {snapshot?.security.hideSensitivePreviews ? "yes" : "no"}
+          </Text>
         </View>
 
         <Pressable style={themed($secondaryButton)} onPress={refresh}>

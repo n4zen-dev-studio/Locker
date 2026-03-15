@@ -11,6 +11,7 @@ import { isPasskeyEnabled, unlockWithPasskey } from "@/locker/auth/passkey"
 import { getMeta } from "@/locker/storage/vaultMetaRepo"
 import { vaultSession } from "@/locker/session"
 import { getPostUnlockRoute } from "@/navigators/postUnlockRoute"
+import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
 
 export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = function VaultLockedScreen(
   props,
@@ -59,6 +60,11 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = functio
     try {
       const vmk = await unlockWithPasskey()
       vaultSession.setKey(vmk)
+      recordSecurityEvent({
+        type: "unlock_success",
+        message: "Vault unlocked successfully.",
+        severity: "info",
+      })
       const next = getPostUnlockRoute()
       if (next.name === "VaultOnboarding") {
         navigation.replace("VaultOnboarding")
@@ -67,6 +73,12 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = functio
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to unlock"
+      recordSecurityEvent({
+        type: "unlock_failure",
+        message: "Vault unlock failed.",
+        severity: "warning",
+        meta: { message },
+      })
       setError(message)
     }
   }

@@ -38,6 +38,8 @@ import { useRemoteUpdateCheck } from "./locker/bg/useRemoteUpdateCheck"
 import { registerBackgroundTask } from "./locker/bg/backgroundFetch"
 import { registerPushToken } from "./locker/push/expoPushManager"
 import { setupPushListeners } from "./locker/push/pushListeners"
+import { getPrivacyPrefs } from "./locker/security/privacyPrefsRepo"
+import { recordSecurityEvent } from "./locker/security/auditLogRepo"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
@@ -96,11 +98,31 @@ export function App() {
 
   useEffect(() => {
     const handleStateChange = (nextState: AppStateStatus) => {
+      const prefs = getPrivacyPrefs()
       if (nextState === "background" || nextState === "inactive") {
         if (backgroundTimer.current) clearTimeout(backgroundTimer.current)
-        backgroundTimer.current = setTimeout(() => {
+        if (prefs.lockOnBackground) {
+          if (vaultSession.isUnlocked()) {
+            recordSecurityEvent({
+              type: "auto_lock",
+              message: "Vault locked when app moved to background.",
+              severity: "info",
+            })
+          }
           vaultSession.clear()
-        }, 30_000)
+          return
+        }
+        backgroundTimer.current = setTimeout(() => {
+          if (vaultSession.isUnlocked()) {
+            recordSecurityEvent({
+              type: "auto_lock",
+              message: "Vault locked after inactivity timeout.",
+              severity: "info",
+              meta: { inactivityLockSeconds: prefs.inactivityLockSeconds },
+            })
+          }
+          vaultSession.clear()
+        }, prefs.inactivityLockSeconds * 1000)
       } else {
         if (backgroundTimer.current) clearTimeout(backgroundTimer.current)
         backgroundTimer.current = null
