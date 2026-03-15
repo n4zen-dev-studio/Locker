@@ -16,9 +16,40 @@ export const customFontsToLoad = {
   spaceGroteskMedium,
   spaceGroteskSemiBold,
   spaceGroteskBold,
+  "GeneralSans-Light": require("@assets/fonts/GeneralSans-Light.otf"),
+  "GeneralSans-LightItalic": require("@assets/fonts/GeneralSans-LightItalic.otf"),
+  "GeneralSans-Regular": require("@assets/fonts/GeneralSans-Regular.otf"),
+  "GeneralSans-Italic": require("@assets/fonts/GeneralSans-Italic.otf"),
+  "GeneralSans-Medium": require("@assets/fonts/GeneralSans-Medium.otf"),
+  "GeneralSans-MediumItalic": require("@assets/fonts/GeneralSans-MediumItalic.otf"),
+  "GeneralSans-Semibold": require("@assets/fonts/GeneralSans-Semibold.otf"),
+  "GeneralSans-SemiboldItalic": require("@assets/fonts/GeneralSans-SemiboldItalic.otf"),
+  "GeneralSans-Bold": require("@assets/fonts/GeneralSans-Bold.otf"),
+  "GeneralSans-BoldItalic": require("@assets/fonts/GeneralSans-BoldItalic.otf"),
+  "GeneralSans-Extralight": require("@assets/fonts/GeneralSans-Extralight.otf"),
+  "GeneralSans-ExtralightItalic": require("@assets/fonts/GeneralSans-ExtralightItalic.otf"),
 }
 
 const fonts = {
+  generalSans: {
+    extraLight: "GeneralSans-Extralight",
+    extraLightItalic: "GeneralSans-ExtralightItalic",
+
+    light: "GeneralSans-Light",
+    lightItalic: "GeneralSans-LightItalic",
+
+    normal: "GeneralSans-Regular",
+    italic: "GeneralSans-Italic",
+
+    medium: "GeneralSans-Medium",
+    mediumItalic: "GeneralSans-MediumItalic",
+
+    semiBold: "GeneralSans-Semibold",
+    semiBoldItalic: "GeneralSans-SemiboldItalic",
+
+    bold: "GeneralSans-Bold",
+    boldItalic: "GeneralSans-BoldItalic",
+  },
   spaceGrotesk: {
     // Cross-platform Google font.
     light: "spaceGroteskLight",
@@ -59,11 +90,11 @@ export const typography = {
   /**
    * The primary font. Used in most places.
    */
-  primary: fonts.spaceGrotesk,
+  primary: fonts.generalSans,
   /**
    * An alternate font used for perhaps titles and stuff.
    */
-  secondary: Platform.select({ ios: fonts.helveticaNeue, android: fonts.sansSerif }),
+  secondary: Platform.select({ ios: fonts.helveticaNeue, android: fonts.generalSans }),
   /**
    * Lets get fancy with a monospace font!
    */
