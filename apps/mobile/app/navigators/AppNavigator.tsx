@@ -28,6 +28,7 @@ import { VaultInvitesScreen } from "@/screens/VaultInvitesScreen"
 import { VaultDiagnosticsScreen } from "@/screens/VaultDiagnosticsScreen"
 import { VaultSearchScreen } from "@/screens/VaultSearchScreen"
 import { VaultRecoveryScreen } from "@/screens/VaultRecoveryScreen"
+import { ThreatModelScreen } from "@/screens/ThreatModelScreen"
 import { PairDeviceModal } from "@/screens/PairDeviceModal"
 import { ImportPairingModal } from "@/screens/ImportPairingModal"
 import { VaultFabVaultPickerModal } from "@/screens/VaultFabVaultPickerModal"
@@ -87,6 +88,7 @@ const AppStack = () => {
       <Stack.Screen name="VaultInvites" component={VaultInvitesScreen} />
       <Stack.Screen name="VaultDiagnostics" component={VaultDiagnosticsScreen} />
       <Stack.Screen name="VaultRecovery" component={VaultRecoveryScreen} />
+      <Stack.Screen name="ThreatModel" component={ThreatModelScreen} />
       <Stack.Screen name="VaultSearch" component={VaultSearchScreen} />
       <Stack.Screen name="ServerUrl" component={ServerUrlScreen} />
       {/** 🔥 Your screens go here */}

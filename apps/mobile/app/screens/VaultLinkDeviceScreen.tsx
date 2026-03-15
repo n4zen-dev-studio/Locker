@@ -119,7 +119,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
           Link Device
         </Text>
         <Text preset="subheading" style={themed($subtitle)}>
-          Paste the QR payload from admin
+          Paste the trusted-device payload or code
         </Text>
       </View>
 

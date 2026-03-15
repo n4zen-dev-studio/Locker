@@ -9,3 +9,7 @@ export function hasCompletedPrivacyOnboarding(): boolean {
 export function completePrivacyOnboarding(): void {
   save(PRIVACY_ONBOARDING_KEY, true)
 }
+
+export function resetPrivacyOnboarding(): void {
+  save(PRIVACY_ONBOARDING_KEY, false)
+}
