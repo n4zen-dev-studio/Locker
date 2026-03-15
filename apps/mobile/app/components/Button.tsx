@@ -4,6 +4,7 @@ import {
   PressableProps,
   PressableStateCallbackType,
   StyleProp,
+  StyleSheet,
   TextStyle,
   ViewStyle,
 } from "react-native"
@@ -14,7 +15,11 @@ import type { ThemedStyle, ThemedStyleArray } from "@/theme/types"
 
 import { Text, TextProps } from "./Text"
 
-type Presets = "default" | "filled" | "reversed"
+
+import { LinearGradient } from "expo-linear-gradient"
+import { colors } from "@/theme/colors"
+
+type Presets = "default" | "filled" | "reversed" | "filledPink" | "glass"
 
 export interface ButtonAccessoryProps {
   style: StyleProp<any>
@@ -117,7 +122,7 @@ export function Button(props: ButtonProps) {
     ...rest
   } = props
 
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
 
   const preset: Presets = props.preset ?? "default"
   /**
@@ -157,6 +162,17 @@ export function Button(props: ButtonProps) {
     >
       {(state) => (
         <>
+        {preset === "filledPink" && (
+          <LinearGradient
+            colors={[theme.colors.palette.primary200, '#df5be8', '#89319a']} // pink -> peach (tweak if you want it warmer/cooler)
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={[
+              StyleSheet.absoluteFillObject,
+              { borderRadius: 25, opacity: state.pressed ? 0.8 : 1 },
+            ]}
+          />
+        )}
           {!!LeftAccessory && (
             <LeftAccessory style={$leftAccessoryStyle} pressableState={state} disabled={disabled} />
           )}
@@ -179,8 +195,8 @@ export function Button(props: ButtonProps) {
 }
 
 const $baseViewStyle: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  minHeight: 56,
-  borderRadius: 4,
+  minHeight: 50,
+  borderRadius: 25,
   justifyContent: "center",
   alignItems: "center",
   paddingVertical: spacing.sm,
@@ -227,22 +243,63 @@ const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
     $baseViewStyle,
     ({ colors }) => ({ backgroundColor: colors.palette.neutral800 }),
   ],
+  filledPink: [
+    $styles.row,
+    $baseViewStyle,
+    () => ({
+      backgroundColor: "transparent", 
+      borderWidth: 0,
+    }),
+  ],
+  glass: [
+    $styles.row,
+    $baseViewStyle,
+    ({ colors, spacing }) => ({
+      backgroundColor: colors.glass,
+      borderRadius: 18,
+      paddingVertical: spacing.sm,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+      marginTop: spacing.sm,
+    }),
+  ],
 }
+
 
 const $textPresets: Record<Presets, ThemedStyleArray<TextStyle>> = {
   default: [$baseTextStyle],
   filled: [$baseTextStyle],
   reversed: [$baseTextStyle, ({ colors }) => ({ color: colors.palette.neutral100 })],
+  filledPink: [$baseTextStyle, ({ colors }) => ({ color: colors.background, })],
+  glass: [
+    $baseTextStyle,
+    ({ colors }) => ({
+      color: colors.textStrong,
+    }),
+  ],
+
 }
 
 const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
   default: ({ colors }) => ({ backgroundColor: colors.palette.neutral200 }),
   filled: ({ colors }) => ({ backgroundColor: colors.palette.neutral400 }),
   reversed: ({ colors }) => ({ backgroundColor: colors.palette.neutral700 }),
+  filledPink: () => ({ backgroundColor: "transparent" }),
+  glass: ({ colors }) => ({
+    backgroundColor: colors.glass,
+    opacity: 0.9,
+  }),
+
 }
 
 const $pressedTextPresets: Record<Presets, ThemedStyle<TextStyle>> = {
   default: () => ({ opacity: 0.9 }),
   filled: () => ({ opacity: 0.9 }),
   reversed: () => ({ opacity: 0.9 }),
+  filledPink: () => ({ opacity: 0.8 }),
+  glass: () => ({
+    opacity: 0.9,
+  }),
+
 }

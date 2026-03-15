@@ -31,6 +31,7 @@ import type {
 export type ThemeContextType = {
   navigationTheme: NavTheme
   setThemeContextOverride: (newTheme: ThemeContextModeT) => void
+  toggleTheme: () => void
   theme: Theme
   themeContext: ImmutableThemeContextModeT
   themed: ThemedFnT
@@ -42,30 +43,16 @@ export interface ThemeProviderProps {
   initialContext?: ThemeContextModeT
 }
 
-/**
- * The ThemeProvider is the heart and soul of the design token system. It provides a context wrapper
- * for your entire app to consume the design tokens as well as global functionality like the app's theme.
- *
- * To get started, you want to wrap your entire app's JSX hierarchy in `ThemeProvider`
- * and then use the `useAppTheme()` hook to access the theme context.
- *
- * Documentation: https://docs.infinite.red/ignite-cli/boilerplate/app/theme/Theming/
- */
 export const ThemeProvider: FC<PropsWithChildren<ThemeProviderProps>> = ({
   children,
   initialContext,
 }) => {
   // The operating system theme:
   const systemColorScheme = useColorScheme()
+
   // Our saved theme context: can be "light", "dark", or undefined (system theme)
   const [themeScheme, setThemeScheme] = useMMKVString("ignite.themeScheme", storage)
 
-  /**
-   * This function is used to set the theme context and is exported from the useAppTheme() hook.
-   *  - setThemeContextOverride("dark") sets the app theme to dark no matter what the system theme is.
-   *  - setThemeContextOverride("light") sets the app theme to light no matter what the system theme is.
-   *  - setThemeContextOverride(undefined) the app will follow the operating system theme.
-   */
   const setThemeContextOverride = useCallback(
     (newTheme: ThemeContextModeT) => {
       setThemeScheme(newTheme)
@@ -74,14 +61,20 @@ export const ThemeProvider: FC<PropsWithChildren<ThemeProviderProps>> = ({
   )
 
   /**
-   * initialContext is the theme context passed in from the app.tsx file and always takes precedence.
-   * themeScheme is the value from MMKV. If undefined, we fall back to the system theme
-   * systemColorScheme is the value from the device. If undefined, we fall back to "light"
+   * initialContext always takes precedence.
+   * If themeScheme is undefined => follow system theme.
+   * If systemColorScheme is undefined => fallback to "light".
    */
   const themeContext: ImmutableThemeContextModeT = useMemo(() => {
-    const t = initialContext || themeScheme || (!!systemColorScheme ? systemColorScheme : "light")
+    const t = initialContext || themeScheme || (systemColorScheme ? systemColorScheme : "light")
     return t === "dark" ? "dark" : "light"
   }, [initialContext, themeScheme, systemColorScheme])
+
+  // ✅ NEW: toggle helper (toggles between explicit light/dark)
+  const toggleTheme = useCallback(() => {
+    const next: ThemeContextModeT = themeContext === "dark" ? "light" : "dark"
+    setThemeScheme(next)
+  }, [themeContext, setThemeScheme])
 
   const navigationTheme: NavTheme = useMemo(() => {
     switch (themeContext) {
@@ -115,27 +108,23 @@ export const ThemeProvider: FC<PropsWithChildren<ThemeProviderProps>> = ({
           return f
         }
       })
-      // Flatten the array of styles into a single object
       return Object.assign({}, ...stylesArray) as T
     },
     [theme],
   )
 
-  const value = {
+  const value: ThemeContextType = {
     navigationTheme,
     theme,
     themeContext,
     setThemeContextOverride,
+    toggleTheme, // ✅ add to context value
     themed,
   }
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 
-/**
- * This is the primary hook that you will use to access the theme context in your components.
- * Documentation: https://docs.infinite.red/ignite-cli/boilerplate/app/theme/useAppTheme.tsx/
- */
 export const useAppTheme = () => {
   const context = useContext(ThemeContext)
   if (!context) {

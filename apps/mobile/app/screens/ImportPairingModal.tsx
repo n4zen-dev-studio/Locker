@@ -89,7 +89,7 @@ export const ImportPairingModal: FC<AppStackScreenProps<"ImportPairingModal">> =
         const token = await getToken()
         if (!token) {
           setIsLinked(false)
-          setError("Device not linked. Tap \\"Link device\\" below, then retry import.")
+          setError("Device not linked. Tap \ \"Link device\ \" below, then retry import.")
           return
         }
 

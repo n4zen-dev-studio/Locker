@@ -1,5 +1,5 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react"
-import { Alert, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
+import { Alert, Button, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
 import { Screen } from "@/components/Screen"
@@ -30,6 +30,7 @@ import { listNoteIds } from "@/locker/storage/notesRepo"
 import type { DeviceDTO, VaultDTO } from "@locker/types"
 import { putAndVerifySyncKeyCheck } from "@/locker/sync/syncKeyCheck"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
+import { Button as CustomButton } from "@/components/Button"
 
 const BLOB_ID = "vault-meta-v1"
 
@@ -441,6 +442,9 @@ export const SyncDashboardScreen: FC<SyncStackScreenProps<"SyncDashboard">> = fu
               <GlassPillButton label="Select / Switch" onPress={handleOpenVaultSwitcher} />
               <GlassPillButton label="Create Vault" onPress={handleCreateVault} />
               <GlassPillButton label="Delete Vault" onPress={handleDeleteRemote} />
+              <GlassPillButton label="Connect to Remote Vault" onPress={() => navigation.navigate("RemoteVault")} />
+              <GlassPillButton label="VaultAccount" onPress={() => navigation.navigate("VaultAccount")} />
+
             </View>
             {!hasRemote ? (
               <Text style={themed($metaText)}>
@@ -468,14 +472,8 @@ export const SyncDashboardScreen: FC<SyncStackScreenProps<"SyncDashboard">> = fu
               </Text>
             ) : null}
             {syncStatus.lastError ? <Text style={themed($errorText)}>{syncStatus.lastError}</Text> : null}
-            <Pressable
-              style={[themed($primaryButton), syncDisabledReason ? themed($buttonDisabled) : null]}
-              onPress={handleSyncNow}
-            >
-              <Text preset="bold" style={themed($primaryButtonText)}>
-                Sync Now
-              </Text>
-            </Pressable>
+            <CustomButton preset="filledPink" text="Sync Now" onPress={handleSyncNow} disabled={Boolean(syncDisabledReason)} />
+
             {syncDisabledReason ? <Text style={themed($metaText)}>{syncDisabledReason}</Text> : null}
           </GlassCard>
 
@@ -483,15 +481,8 @@ export const SyncDashboardScreen: FC<SyncStackScreenProps<"SyncDashboard">> = fu
             <Text preset="bold" style={themed($sectionTitle)}>
               Sync Key
             </Text>
-            <Pressable
-              disabled={!canCreateSyncKey}
-              style={[themed($secondaryButton), !canCreateSyncKey ? themed($buttonDisabled) : null]}
-              onPress={handleCreateSyncKey}
-            >
-              <Text preset="bold" style={themed($secondaryButtonText)}>
-                Create Sync Key
-              </Text>
-            </Pressable>
+            <CustomButton preset="glass" text="Create Sync Key" disabled={Boolean(!canCreateSyncKey)} onPress={handleCreateSyncKey} />
+
             <Text style={themed($metaText)}>
               {rvkPresent ? "Sync key ready for this vault." : "Sync key not initialized yet."}
             </Text>
@@ -527,22 +518,10 @@ export const SyncDashboardScreen: FC<SyncStackScreenProps<"SyncDashboard">> = fu
             <Text preset="bold" style={themed($sectionTitle)}>
               Remote Meta
             </Text>
-            <Pressable
-              style={[themed($secondaryButton), metaDisabledReason ? themed($buttonDisabled) : null]}
-              onPress={handleUploadMeta}
-            >
-              <Text preset="bold" style={themed($secondaryButtonText)}>
-                Upload Meta
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[themed($secondaryButton), metaDisabledReason ? themed($buttonDisabled) : null]}
-              onPress={handleDownloadMeta}
-            >
-              <Text preset="bold" style={themed($secondaryButtonText)}>
-                Download Meta
-              </Text>
-            </Pressable>
+
+            <CustomButton preset="glass" text="Upload Meta" disabled={Boolean(metaDisabledReason)} onPress={handleUploadMeta} />
+            <CustomButton preset="glass" text="Download Meta" disabled={Boolean(metaDisabledReason)} onPress={handleDownloadMeta} />
+
             {metaDisabledReason ? <Text style={themed($metaText)}>{metaDisabledReason}</Text> : null}
             {downloadedMeta ? (
               <View style={themed($metaCard)}>
@@ -556,26 +535,12 @@ export const SyncDashboardScreen: FC<SyncStackScreenProps<"SyncDashboard">> = fu
               <Text preset="bold" style={themed($sectionTitle)}>
                 Dev Tools
               </Text>
-              <Pressable style={themed($secondaryButton)} onPress={toggleOffline}>
-                <Text preset="bold" style={themed($secondaryButtonText)}>
-                  {offline ? "Go Online" : "Toggle Offline"}
-                </Text>
-              </Pressable>
-              <Pressable style={themed($secondaryButton)} onPress={handleReencryptRemote}>
-                <Text preset="bold" style={themed($secondaryButtonText)}>
-                  Re-encrypt Remote
-                </Text>
-              </Pressable>
-              <Pressable style={themed($secondaryButton)} onPress={handleClearSyncState}>
-                <Text preset="bold" style={themed($secondaryButtonText)}>
-                  Clear Sync State
-                </Text>
-              </Pressable>
-              <Pressable style={themed($secondaryButton)} onPress={handleForceRebuild}>
-                <Text preset="bold" style={themed($secondaryButtonText)}>
-                  Force Rebuild
-                </Text>
-              </Pressable>
+
+              <CustomButton preset="glass" text={offline ? "Go Online" : "Toggle Offline"}  onPress={toggleOffline} />
+              <CustomButton preset="glass" text={"Re-encrypt Remote"}  onPress={handleReencryptRemote} />
+              <CustomButton preset="glass" text={"Clear Sync State"}  onPress={handleClearSyncState} />
+              <CustomButton preset="glass" text={"Force Rebuild"}  onPress={handleForceRebuild} />
+
               <Text style={themed($metaText)}>Last cursor: {getState().lastCursor}</Text>
               <Text style={themed($metaText)}>Queue size: {getState().outbox.length}</Text>
             </GlassCard>
@@ -649,17 +614,6 @@ const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginTop: spacing.sm,
 })
 
-const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.accentPink,
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  marginTop: spacing.sm,
-})
-
-const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
 
 const $secondaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: colors.glass,

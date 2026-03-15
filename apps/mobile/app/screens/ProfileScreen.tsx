@@ -23,10 +23,11 @@ import { setNetworkOnline } from "@/locker/sync/syncEngine"
 import { clearNoteRemoteMeta, clearTombstonesForVault, setLastCursor, setOutbox } from "@/locker/sync/syncStateRepo"
 import { listNoteIds } from "@/locker/storage/notesRepo"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
+import { Button } from "@/components/Button"
 
 export const ProfileScreen: FC<AppStackScreenProps<"Profile">> = function ProfileScreen(props) {
   const { navigation } = props
-  const { themed } = useAppTheme()
+  const { themed, toggleTheme } = useAppTheme()
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
   const [account, setAccount] = useState<AccountState | null>(null)
@@ -177,6 +178,9 @@ export const ProfileScreen: FC<AppStackScreenProps<"Profile">> = function Profil
             </Text>
           </GlassHeader>
         </View>
+         <View>
+        <Button tx="welcomeScreen:SwitchTheme" onPress={toggleTheme} />
+      </View>
 
         <View style={themed($content)}>
           <GlassCard>
