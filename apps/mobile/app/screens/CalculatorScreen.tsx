@@ -1,5 +1,6 @@
-import { FC, ReactNode, useMemo, useRef, useState } from "react";
+import { FC, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -12,8 +13,21 @@ import {
   ViewStyle,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInUp,
+  LinearTransition,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from "react-native-reanimated";
 
+import { AnimatedScreenBackground } from "@/components/AnimatedScreenBackground";
+import { CalculatorDisplayCard } from "@/components/CalculatorDisplayCard";
 import { CalculatorKey } from "@/components/CalculatorKey";
+import { CalculatorKeypadPanel } from "@/components/CalculatorKeypadPanel";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { recordSecurityEvent } from "@/locker/security/auditLogRepo";
@@ -32,8 +46,6 @@ import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 import { evaluateExpression } from "@/utils/calc/evaluate";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
-import AuroraButton from "@/components/AuroraButton";
-import { BlobGlassButton } from "@/components/BlobGlassButton";
 
 const binaryOperatorSymbols = ["+", "−", "×", "÷", "^"] as const;
 const postfixSymbols = ["%", "²"] as const;
@@ -127,26 +139,13 @@ const CalculatorChromeButton: FC<CalculatorChromeButtonProps> = ({
       ]}
     >
       <LinearGradient
-        colors={theme.colors.calculator.keyGradients.utility}
-        start={{ x: 0.08, y: 0.06 }}
-        end={{ x: 0.92, y: 1 }}
+        colors={theme.colors.calculator.surfaceInsetGradient}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.88, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
-      <View pointerEvents="none" style={themed($chromeShellBloom)} />
-      <View pointerEvents="none" style={themed($chromeButtonFace)}>
-        <LinearGradient
-          colors={theme.colors.calculator.keyFaceGradients.utility}
-          start={{ x: 0.1, y: 0.04 }}
-          end={{ x: 0.88, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-      </View>
-      <LinearGradient
-        colors={theme.colors.calculator.keyHighlightGradient}
-        start={{ x: 0.25, y: 0 }}
-        end={{ x: 0.75, y: 1 }}
-        style={[StyleSheet.absoluteFillObject, themed($chromeHighlight)]}
-      />
+      <View pointerEvents="none" style={themed($chromeGlow)} />
+      <View pointerEvents="none" style={themed($chromeOutline)} />
       <Text style={[themed($chromeButtonText), textStyle]}>{label}</Text>
     </Pressable>
   );
@@ -155,37 +154,27 @@ const CalculatorChromeButton: FC<CalculatorChromeButtonProps> = ({
 type CalculatorPanelProps = {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
-  inset?: boolean;
 };
 
-const CalculatorPanel: FC<CalculatorPanelProps> = ({
-  children,
-  style,
-  inset,
-}) => {
+const CalculatorPanel: FC<CalculatorPanelProps> = ({ children, style }) => {
   const { themed, theme } = useAppTheme();
 
   return (
-    <View style={[themed($panelBase), inset && themed($panelInset), style]}>
+    <View style={[themed($panelBase), style]}>
       <LinearGradient
-        colors={
-          inset
-            ? theme.colors.calculator.surfaceInsetGradient
-            : theme.colors.calculator.surfaceGradient
-        }
-        start={{ x: 0.08, y: 0.04 }}
+        colors={theme.colors.calculator.surfaceGradient}
+        start={{ x: 0.08, y: 0.02 }}
         end={{ x: 0.92, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
       <LinearGradient
         colors={theme.colors.calculator.shellGradient}
-        start={{ x: 0.2, y: 0 }}
-        end={{ x: 0.8, y: 1 }}
+        start={{ x: 0.16, y: 0 }}
+        end={{ x: 0.84, y: 1 }}
         style={[StyleSheet.absoluteFillObject, themed($panelGloss)]}
       />
-      <View pointerEvents="none" style={themed($panelBloom)} />
-      <View pointerEvents="none" style={themed($panelInnerWash)} />
-      <View pointerEvents="none" style={themed($panelOutline)} />
+      <View pointerEvents="none" style={themed($panelEdge)} />
+      <View pointerEvents="none" style={themed($panelLine)} />
       {children}
     </View>
   );
@@ -206,6 +195,7 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
     const [historyExpanded, setHistoryExpanded] = useState(false);
     const [advancedExpanded, setAdvancedExpanded] = useState(false);
     const [menuVisible, setMenuVisible] = useState(false);
+    const [reducedMotion, setReducedMotion] = useState(false);
     const longPressTriggered = useRef(false);
 
     const expressionText = useMemo(
@@ -217,6 +207,69 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
     );
 
     const resultText = useMemo(() => display, [display]);
+
+    const shellReveal = useSharedValue(0);
+    const headerReveal = useSharedValue(0);
+    const displayReveal = useSharedValue(0);
+    const keypadReveal = useSharedValue(0);
+
+    useEffect(() => {
+      AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
+      const subscription = AccessibilityInfo.addEventListener(
+        "reduceMotionChanged",
+        setReducedMotion,
+      );
+
+      return () => subscription.remove();
+    }, []);
+
+    useEffect(() => {
+      const duration = reducedMotion ? 0 : 620;
+      const easing = Easing.bezier(0.22, 1, 0.36, 1);
+
+      shellReveal.value = withTiming(1, { duration, easing });
+      headerReveal.value = withDelay(
+        reducedMotion ? 0 : 90,
+        withTiming(1, { duration: reducedMotion ? 0 : 480, easing }),
+      );
+      displayReveal.value = withDelay(
+        reducedMotion ? 0 : 140,
+        withTiming(1, { duration: reducedMotion ? 0 : 560, easing }),
+      );
+      keypadReveal.value = withDelay(
+        reducedMotion ? 0 : 200,
+        withTiming(1, { duration: reducedMotion ? 0 : 620, easing }),
+      );
+    }, [
+      displayReveal,
+      headerReveal,
+      keypadReveal,
+      reducedMotion,
+      shellReveal,
+    ]);
+
+    const shellRevealStyle = useAnimatedStyle(() => ({
+      opacity: shellReveal.value,
+      transform: [
+        { translateY: 18 - shellReveal.value * 18 },
+        { scale: 0.985 + shellReveal.value * 0.015 },
+      ],
+    }));
+
+    const headerRevealStyle = useAnimatedStyle(() => ({
+      opacity: headerReveal.value,
+      transform: [{ translateY: 12 - headerReveal.value * 12 }],
+    }));
+
+    const displayRevealStyle = useAnimatedStyle(() => ({
+      opacity: displayReveal.value,
+      transform: [{ translateY: 18 - displayReveal.value * 18 }],
+    }));
+
+    const keypadRevealStyle = useAnimatedStyle(() => ({
+      opacity: keypadReveal.value,
+      transform: [{ translateY: 22 - keypadReveal.value * 22 }],
+    }));
 
     const animateLayout = () => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -608,27 +661,10 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
         safeAreaEdges={["top", "bottom"]}
         contentContainerStyle={themed([$screen, $bottomInsets])}
       >
-        
-        <LinearGradient
-          colors={theme.colors.calculator.backgroundGradient}
-          start={{ x: 0.15, y: 0 }}
-          end={{ x: 0.92, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <LinearGradient
-          colors={theme.colors.calculator.backgroundFieldGradient}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 0.8, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View pointerEvents="none" style={themed($ambientWhiteHaze)} />
-        <View pointerEvents="none" style={themed($ambientPinkOrb)} />
-        <View pointerEvents="none" style={themed($ambientBlueOrb)} />
-        <View pointerEvents="none" style={themed($ambientPurpleOrb)} />
-        <View pointerEvents="none" style={themed($ambientBlushOrb)} />
+        <AnimatedScreenBackground reducedMotion={reducedMotion} />
 
-        <View style={themed($shellFrame)}>
-          <View style={themed($topBar)}>
+        <Animated.View style={[themed($shellFrame), shellRevealStyle]}>
+          <Animated.View style={[themed($topBar), headerRevealStyle]}>
             <CalculatorChromeButton
               label={historyExpanded ? "History ▾" : "History ▴"}
               onPress={toggleHistory}
@@ -641,246 +677,260 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
               style={themed($menuTrigger)}
               textStyle={themed($menuTriggerText)}
             />
-          </View>
+          </Animated.View>
 
           <View style={themed($upperSection)}>
             {historyExpanded ? (
-              <CalculatorPanel style={themed($historyPanel)}>
-                <Text
-                  preset="subheading"
-                  size="xs"
-                  style={themed($historyTitle)}
-                >
-                  History
-                </Text>
-                {history.length === 0 ? (
-                  <View style={themed($historyEmptyState)}>
-                    <Text size="xs" style={themed($historyEmptyText)}>
-                      No recent calculations yet.
-                    </Text>
-                  </View>
-                ) : (
-                  <ScrollView
-                    style={themed($historyScroll)}
-                    contentContainerStyle={themed($historyScrollContent)}
-                    showsVerticalScrollIndicator={false}
-                  >
-                    {history.map((entry) => (
-                      <Pressable
-                        key={entry.id}
-                        onPress={() => handleRestoreHistoryItem(entry)}
-                        style={({ pressed }) => [
-                          themed($historyItem),
-                          pressed && themed($historyItemPressed),
-                        ]}
-                      >
-                        <Text
-                          size="xs"
-                          style={themed($historyExpression)}
-                          numberOfLines={1}
+              <Animated.View
+                entering={
+                  reducedMotion
+                    ? undefined
+                    : FadeInUp.duration(320).easing(
+                        Easing.bezier(0.22, 1, 0.36, 1),
+                      )
+                }
+                layout={LinearTransition}
+              >
+                <CalculatorPanel style={themed($historyPanel)}>
+                  <Text preset="subheading" size="xs" style={themed($historyTitle)}>
+                    History
+                  </Text>
+                  {history.length === 0 ? (
+                    <View style={themed($historyEmptyState)}>
+                      <Text size="xs" style={themed($historyEmptyText)}>
+                        No recent calculations yet.
+                      </Text>
+                    </View>
+                  ) : (
+                    <ScrollView
+                      style={themed($historyScroll)}
+                      contentContainerStyle={themed($historyScrollContent)}
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {history.map((entry) => (
+                        <Pressable
+                          key={entry.id}
+                          onPress={() => handleRestoreHistoryItem(entry)}
+                          style={({ pressed }) => [
+                            themed($historyItem),
+                            pressed && themed($historyItemPressed),
+                          ]}
                         >
-                          {entry.expression}
-                        </Text>
-                        <Text
-                          preset="subheading"
-                          style={themed($historyResult)}
-                          numberOfLines={1}
-                        >
-                          {entry.result}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                )}
-              </CalculatorPanel>
+                          <Text
+                            size="xs"
+                            style={themed($historyExpression)}
+                            numberOfLines={1}
+                          >
+                            {entry.expression}
+                          </Text>
+                          <Text
+                            preset="subheading"
+                            style={themed($historyResult)}
+                            numberOfLines={1}
+                          >
+                            {entry.result}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  )}
+                </CalculatorPanel>
+              </Animated.View>
             ) : null}
 
-            <CalculatorPanel style={themed($displayPanel)}>
-              <View style={themed($displayGlow)} pointerEvents="none" />
-              <Text
-                size="xs"
-                style={themed($expressionLabel)}
-                numberOfLines={1}
-              >
-                {expressionText}
-              </Text>
-              {lastAction === "equals" && completedExpression ? (
-                <Text
-                  size="sm"
-                  style={themed($expressionPreview)}
-                  numberOfLines={1}
-                >
-                  {completedExpression}
-                </Text>
-              ) : null}
-              <Text
-                preset="heading"
-                style={themed($displayText)}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.45}
-              >
-                {resultText}
-              </Text>
-            </CalculatorPanel>
-          </View>
-{/* <AuroraButton 
-          title="Get Started" 
-          onPress={() => {}} 
-        />
-
-        <BlobGlassButton
-          title="Get Started"
-          width={340}
-          height={120}
-          onPress={() => {
-            console.log("Pressed")
-          }}
-        /> */}
-          <CalculatorPanel style={themed($keypadPanel)} inset>
-            <Pressable
-              onPress={toggleAdvanced}
-              style={({ pressed }) => [
-                themed($advancedToggle),
-                pressed && themed($chromePressed),
-              ]}
-            >
-              <LinearGradient
-                colors={theme.colors.calculator.surfaceInsetGradient}
-                start={{ x: 0.1, y: 0 }}
-                end={{ x: 0.9, y: 1 }}
-                style={StyleSheet.absoluteFillObject}
+            <Animated.View style={displayRevealStyle}>
+              <CalculatorDisplayCard
+                expressionLabel={expressionText}
+                completedExpression={
+                  lastAction === "equals" ? completedExpression : null
+                }
+                resultText={resultText}
               />
-              <Text size="xs" style={themed($advancedToggleText)}>
-                {advancedExpanded
-                  ? "Advanced functions ▾"
-                  : "Advanced functions ▴"}
-              </Text>
-            </Pressable>
+            </Animated.View>
+          </View>
 
-            {advancedExpanded ? (
-              <View style={themed($advancedSection)}>
-                {advancedRows.map((row, rowIndex) => (
-                  <View
-                    key={`advanced-row-${rowIndex}`}
+          <Animated.View style={keypadRevealStyle}>
+            <CalculatorKeypadPanel style={themed($keypadPanel)}>
+              <Pressable
+                onPress={toggleAdvanced}
+                style={({ pressed }) => [
+                  themed($advancedToggle),
+                  pressed && themed($chromePressed),
+                ]}
+              >
+                <LinearGradient
+                  colors={theme.colors.calculator.surfaceGradient}
+                  start={{ x: 0.06, y: 0 }}
+                  end={{ x: 0.9, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+                <View pointerEvents="none" style={themed($advancedToggleGlow)} />
+                <Text size="xs" style={themed($advancedToggleText)}>
+                  {advancedExpanded
+                    ? "Advanced functions ▾"
+                    : "Advanced functions ▴"}
+                </Text>
+              </Pressable>
+
+              {advancedExpanded ? (
+                <Animated.View
+                  entering={
+                    reducedMotion
+                      ? undefined
+                      : FadeIn.duration(240).easing(
+                          Easing.bezier(0.22, 1, 0.36, 1),
+                        )
+                  }
+                  layout={LinearTransition}
+                  style={themed($advancedSection)}
+                >
+                  {advancedRows.map((row, rowIndex) => (
+                    <Animated.View
+                      key={`advanced-row-${rowIndex}`}
+                      entering={
+                        reducedMotion
+                          ? undefined
+                          : FadeInUp.delay(120 + rowIndex * 55)
+                              .duration(360)
+                              .easing(Easing.bezier(0.22, 1, 0.36, 1))
+                      }
+                      style={themed($buttonRow)}
+                    >
+                      {row.map((button) => (
+                        <CalculatorKey
+                          key={button.label}
+                          label={button.label}
+                          variant="utility"
+                          onPress={() => {
+                            switch (button.label) {
+                              case "+/-":
+                                handleToggleSign();
+                                break;
+                              case "√":
+                                handleSquareRoot();
+                                break;
+                              case "x²":
+                                handleSquare();
+                                break;
+                              case "mod":
+                                handleModulo();
+                                break;
+                              case "xʸ":
+                                handlePower();
+                                break;
+                            }
+                          }}
+                        />
+                      ))}
+                    </Animated.View>
+                  ))}
+                </Animated.View>
+              ) : null}
+
+              <View style={themed($buttonGrid)}>
+                {coreRows.map((row, rowIndex) => (
+                  <Animated.View
+                    key={`row-${rowIndex}`}
+                    entering={
+                      reducedMotion
+                        ? undefined
+                        : FadeInUp.delay(180 + rowIndex * 55)
+                            .duration(420)
+                            .easing(Easing.bezier(0.22, 1, 0.36, 1))
+                    }
                     style={themed($buttonRow)}
                   >
-                    {row.map((button) => (
-                      <CalculatorKey
-                        key={button.label}
-                        label={button.label}
-                        variant="utility"
-                        onPress={() => {
-                          switch (button.label) {
-                            case "+/-":
-                              handleToggleSign();
-                              break;
-                            case "√":
-                              handleSquareRoot();
-                              break;
-                            case "x²":
-                              handleSquare();
-                              break;
-                            case "mod":
-                              handleModulo();
-                              break;
-                            case "xʸ":
-                              handlePower();
-                              break;
-                          }
-                        }}
-                      />
-                    ))}
-                  </View>
+                    {row.map((button) => {
+                      const isEquals = button.label === "=";
+                      const onPress = () => {
+                        switch (button.label) {
+                          case "()":
+                            handleParentheses();
+                            break;
+                          case "AC":
+                            handleClear();
+                            break;
+                          case "⌫":
+                            handleBackspace();
+                            break;
+                          case "+/-":
+                            handleToggleSign();
+                            break;
+                          case "=":
+                            handleEquals();
+                            break;
+                          case ".":
+                            handleDecimal();
+                            break;
+                          case "%":
+                            handlePercent();
+                            break;
+                          default:
+                            if (isOperatorButton(button.label)) {
+                              handleOperator(button.label);
+                            } else {
+                              handleDigit(button.label);
+                            }
+                        }
+                      };
+
+                      return (
+                        <CalculatorKey
+                          key={button.label}
+                          label={button.label}
+                          variant={getKeyVariant(button.type)}
+                          onPress={onPress}
+                          onLongPress={isEquals ? handleEqualsLongPress : undefined}
+                          delayLongPress={900}
+                          style={button.flex ? { flex: button.flex } : undefined}
+                        />
+                      );
+                    })}
+                  </Animated.View>
                 ))}
               </View>
-            ) : null}
-
-            <View style={themed($buttonGrid)}>
-              {coreRows.map((row, rowIndex) => (
-                <View key={`row-${rowIndex}`} style={themed($buttonRow)}>
-                  {row.map((button) => {
-                    const isEquals = button.label === "=";
-                    const onPress = () => {
-                      switch (button.label) {
-                        case "()":
-                          handleParentheses();
-                          break;
-                        case "AC":
-                          handleClear();
-                          break;
-                        case "⌫":
-                          handleBackspace();
-                          break;
-                        case "+/-":
-                          handleToggleSign();
-                          break;
-                        case "=":
-                          handleEquals();
-                          break;
-                        case ".":
-                          handleDecimal();
-                          break;
-                        case "%":
-                          handlePercent();
-                          break;
-                        default:
-                          if (isOperatorButton(button.label)) {
-                            handleOperator(button.label);
-                          } else {
-                            handleDigit(button.label);
-                          }
-                      }
-                    };
-
-                    return (
-                      <CalculatorKey
-                        key={button.label}
-                        label={button.label}
-                        variant={getKeyVariant(button.type)}
-                        onPress={onPress}
-                        onLongPress={
-                          isEquals ? handleEqualsLongPress : undefined
-                        }
-                        delayLongPress={900}
-                        style={button.flex ? { flex: button.flex } : undefined}
-                      />
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
-          </CalculatorPanel>
-        </View>
+            </CalculatorKeypadPanel>
+          </Animated.View>
+        </Animated.View>
 
         {menuVisible ? (
           <Pressable
             style={themed($menuBackdrop)}
             onPress={() => setMenuVisible(false)}
           >
-            <CalculatorPanel style={themed($menuCard)}>
-              <Pressable
-                onPress={handleClearHistory}
-                style={({ pressed }) => [
-                  themed($menuItem),
-                  pressed && themed($historyItemPressed),
-                ]}
-              >
-                <Text style={themed($menuItemText)}>Clear history</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  toggleTheme();
-                  setMenuVisible(false);
-                }}
-                style={({ pressed }) => [
-                  themed($menuItem),
-                  pressed && themed($historyItemPressed),
-                ]}
-              >
-                <Text style={themed($menuItemText)}>Change Theme</Text>
-              </Pressable>
-            </CalculatorPanel>
+            <Animated.View
+              entering={
+                reducedMotion
+                  ? undefined
+                  : FadeInUp.duration(220).easing(
+                      Easing.bezier(0.22, 1, 0.36, 1),
+                    )
+              }
+            >
+              <CalculatorPanel style={themed($menuCard)}>
+                <Pressable
+                  onPress={handleClearHistory}
+                  style={({ pressed }) => [
+                    themed($menuItem),
+                    pressed && themed($historyItemPressed),
+                  ]}
+                >
+                  <Text style={themed($menuItemText)}>Clear history</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    toggleTheme();
+                    setMenuVisible(false);
+                  }}
+                  style={({ pressed }) => [
+                    themed($menuItem),
+                    pressed && themed($historyItemPressed),
+                  ]}
+                >
+                  <Text style={themed($menuItemText)}>Change Theme</Text>
+                </Pressable>
+              </CalculatorPanel>
+            </Animated.View>
           </Pressable>
         ) : null}
       </Screen>
@@ -997,82 +1047,22 @@ function stripTrailingBinaryOperator(value: string) {
   return value.slice(0, -1);
 }
 
-const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flex: 1,
   paddingHorizontal: spacing.lg,
-  paddingTop: spacing.md,
+  paddingTop: spacing.sm,
+  backgroundColor: colors.calculator.backgroundBase,
   position: "relative",
   overflow: "hidden",
 });
 
-const $shellFrame: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  ...createMoldedSurface({
-    backgroundColor: colors.transparent,
-    radius: 42,
-  }),
+const $shellFrame: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
   width: "100%",
   maxWidth: 460,
   alignSelf: "center",
-  gap: spacing.md,
-  paddingTop: spacing.sm,
-  paddingHorizontal: spacing.sm,
-  paddingBottom: spacing.sm,
-});
-
-const $ambientWhiteHaze: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  top: -30,
-  left: -20,
-  right: -20,
-  height: 340,
-  borderRadius: 999,
-  backgroundColor: colors.calculator.ambientWhite,
-  opacity: 0.5,
-});
-
-const $ambientPinkOrb: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  borderRadius: 999,
-  width: 380,
-  height: 380,
-  top: -60,
-  right: -110,
-  backgroundColor: colors.calculator.ambientPink,
-  opacity: 0.82,
-});
-
-const $ambientBlueOrb: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  borderRadius: 999,
-  width: 300,
-  height: 300,
-  bottom: 180,
-  left: -120,
-  backgroundColor: colors.calculator.ambientBlue,
-  opacity: 0.7,
-});
-
-const $ambientPurpleOrb: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  borderRadius: 999,
-  width: 260,
-  height: 260,
-  bottom: 0,
-  right: -70,
-  backgroundColor: colors.calculator.ambientPurple,
-  opacity: 0.7,
-});
-
-const $ambientBlushOrb: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  borderRadius: 999,
-  width: 360,
-  height: 360,
-  top: 220,
-  right: -10,
-  backgroundColor: colors.calculator.surfaceGlow,
-  opacity: 0.62,
+  gap: spacing.lg,
+  paddingBottom: spacing.xs,
 });
 
 const $topBar: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -1084,52 +1074,43 @@ const $topBar: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $chromeButtonWrap: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   ...createMoldedSurface({
-    backgroundColor: colors.calculator.keyFallback,
-    radius: 26,
+    backgroundColor: colors.calculator.surfaceElevated,
+    radius: 24,
   }),
-  minHeight: 54,
+  minHeight: 52,
   justifyContent: "center",
   paddingHorizontal: spacing.md,
+  borderWidth: 1,
+  borderColor: colors.calculator.borderSubtle,
   ...createSoftShadow({
-    color: colors.calculator.keyShadow,
-    opacity: 0.1,
-    radius: 12,
-    offsetY: 6,
-    elevation: 3,
+    color: colors.calculator.shadowLg,
+    opacity: 0.24,
+    radius: 14,
+    offsetY: 8,
+    elevation: 5,
   }),
 });
 
-const $chromeShellBloom: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $chromeGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  top: -4,
-  left: 8,
-  right: 8,
-  height: 24,
-  borderRadius: 20,
-  backgroundColor: colors.calculator.keyBaseGlow,
-  opacity: 0.9,
+  left: 14,
+  right: 14,
+  bottom: -14,
+  height: 42,
+  borderRadius: 999,
+  backgroundColor: colors.calculator.accentGlow,
+  opacity: 0.12,
 });
 
-const $chromeButtonFace: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $chromeOutline: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
-  top: 6,
-  right: 6,
-  bottom: 7,
-  left: 6,
-  borderRadius: 20,
-  overflow: "hidden",
-  backgroundColor: colors.calculator.surfaceBloom,
-});
-
-const $chromeHighlight: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  borderRadius: 26,
-  opacity: 0.62,
-  borderTopWidth: 1,
-  borderTopColor: colors.calculator.surfaceHighlight,
+  borderRadius: 24,
+  borderWidth: 1,
+  borderColor: colors.calculator.borderSubtle,
 });
 
 const $chromePressed: ThemedStyle<ViewStyle> = () => ({
-  transform: [{ scale: 0.982 }, { translateY: 1.5 }],
+  transform: [{ scale: 0.984 }, { translateY: 1.5 }],
   opacity: 0.96,
 });
 
@@ -1138,13 +1119,13 @@ const $historyTrigger: ThemedStyle<ViewStyle> = () => ({
 });
 
 const $menuTrigger: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  minWidth: 52,
+  minWidth: 56,
   paddingHorizontal: spacing.md,
   alignItems: "center",
 });
 
 const $chromeButtonText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.utilityText,
+  color: colors.calculator.textSecondary,
   fontFamily: typography.primary.medium,
   fontSize: 15,
   lineHeight: 18,
@@ -1156,91 +1137,71 @@ const $chromeButtonLabelLeft: ThemedStyle<TextStyle> = () => ({
   textAlign: "left",
 });
 
-const $menuTriggerText: ThemedStyle<TextStyle> = () => ({
+const $menuTriggerText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.calculator.accentPinkSoft,
   fontSize: 28,
   lineHeight: 30,
 });
 
 const $upperSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
-  justifyContent: "flex-start",
+  justifyContent: "flex-end",
   gap: spacing.md,
 });
 
 const $panelBase: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...createMoldedSurface({
-    backgroundColor: colors.calculator.keyFallback,
-    radius: 38,
+    backgroundColor: colors.calculator.surface,
+    radius: 28,
   }),
-  position: "relative",
+  borderWidth: 1,
+  borderColor: colors.calculator.borderSubtle,
   ...createSoftShadow({
-    color: colors.calculator.surfaceRoseShadow,
-    opacity: 0.18,
-    radius: 26,
-    offsetY: 16,
-    elevation: 6,
-  }),
-});
-
-const $panelInset: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  ...createSoftShadow({
-    color: colors.calculator.keyShadowPressed,
-    opacity: 0.08,
-    radius: 14,
-    offsetY: 8,
-    elevation: 3,
+    color: colors.calculator.shadowLg,
+    opacity: 0.34,
+    radius: 24,
+    offsetY: 14,
+    elevation: 8,
   }),
 });
 
 const $panelGloss: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.74,
+  opacity: 0.64,
 });
 
-const $panelBloom: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  top: -18,
-  left: 16,
-  right: 16,
-  height: 58,
-  borderRadius: 32,
-  backgroundColor: colors.calculator.surfaceBloom,
-  opacity: 0.78,
-});
-
-const $panelInnerWash: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $panelEdge: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
-  top: 10,
-  right: 10,
-  bottom: 10,
-  left: 10,
-  borderRadius: 30,
-  backgroundColor: colors.calculator.surfaceGlow,
-  opacity: 0.18,
-});
-
-const $panelOutline: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  ...StyleSheet.absoluteFillObject,
-  borderRadius: 38,
+  borderRadius: 28,
   borderTopWidth: 1,
-  borderTopColor: colors.calculator.surfaceHighlight,
   borderLeftWidth: 1,
-  borderLeftColor: colors.calculator.surfaceHighlight,
   borderRightWidth: 1,
-  borderRightColor: colors.calculator.surfaceEdge,
   borderBottomWidth: 1,
-  borderBottomColor: colors.calculator.surfaceEdge,
-  opacity: 0.32,
+  borderTopColor: colors.calculator.surfaceHighlight,
+  borderLeftColor: colors.calculator.surfaceHighlight,
+  borderRightColor: colors.calculator.borderStrong,
+  borderBottomColor: colors.calculator.borderStrong,
+  opacity: 0.14,
+});
+
+const $panelLine: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  top: 0,
+  left: 18,
+  right: 18,
+  height: 1,
+  backgroundColor: colors.calculator.accentPinkSoft,
+  opacity: 0.42,
 });
 
 const $historyPanel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.lg,
   paddingTop: spacing.md,
   paddingBottom: spacing.sm,
-  maxHeight: 240,
+  maxHeight: 220,
 });
 
 const $historyTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.calculator.labelText,
+  color: colors.calculator.textSecondary,
   marginBottom: 8,
 });
 
@@ -1252,27 +1213,29 @@ const $historyScrollContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 });
 
-const $historyItem: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
+const $historyItem: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   ...createMoldedSurface({
-    backgroundColor: colors.glassHeavy,
-    radius: 24,
+    backgroundColor: colors.calculator.surfaceElevated,
+    radius: 22,
   }),
   paddingHorizontal: spacing.md,
   paddingVertical: spacing.sm,
+  borderWidth: 1,
+  borderColor: colors.calculator.borderSubtle,
 });
 
 const $historyItemPressed: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.82,
+  opacity: 0.86,
   transform: [{ scale: 0.99 }],
 });
 
 const $historyExpression: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.calculator.labelText,
+  color: colors.calculator.textMuted,
   textAlign: "right",
 });
 
 const $historyResult: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.text,
+  color: colors.calculator.textPrimary,
   textAlign: "right",
 });
 
@@ -1281,89 +1244,43 @@ const $historyEmptyState: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 });
 
 const $historyEmptyText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.calculator.labelText,
+  color: colors.calculator.textMuted,
   textAlign: "center",
 });
 
-const $displayPanel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  minHeight: 196,
-  justifyContent: "flex-end",
-  paddingHorizontal: spacing.xl,
-  paddingVertical: spacing.xl,
-});
-
-const $displayGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  top: -30,
-  right: -20,
-  width: 300,
-  height: 300,
-  borderRadius: 999,
-  backgroundColor: colors.calculator.displayGlow,
-  opacity: 0.48,
-});
-
-const $expressionLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.labelText,
-  textAlign: "right",
-  fontFamily: typography.primary.medium,
-  letterSpacing: 0.6,
-  textTransform: "uppercase",
-});
-
-const $expressionPreview: ThemedStyle<TextStyle> = ({
-  colors,
-  spacing,
-  typography,
-}) => ({
-  color: colors.calculator.labelText,
-  textAlign: "right",
-  marginTop: spacing.xs,
-  marginBottom: spacing.sm,
-  fontFamily: typography.primary.medium,
-});
-
-const $displayText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.displayValue,
-  textAlign: "right",
-  fontFamily: typography.primary.light,
-  fontSize: 60,
-  lineHeight: 66,
-  letterSpacing: -2.6,
-  textShadowColor: "rgba(255,255,255,0.22)",
-  textShadowRadius: 14,
-  textShadowOffset: { width: 0, height: 0 },
-});
-
 const $keypadPanel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  padding: spacing.md,
   gap: spacing.md,
-  marginTop: -4,
 });
 
 const $advancedToggle: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   ...createMoldedSurface({
-    backgroundColor: colors.calculator.keyFallback,
-    radius: 24,
+    backgroundColor: colors.calculator.surface,
+    radius: 22,
   }),
   alignSelf: "flex-start",
-  minHeight: 50,
+  minHeight: 48,
   paddingHorizontal: spacing.lg,
   justifyContent: "center",
-  ...createSoftShadow({
-    color: colors.calculator.utilityShadow,
-    opacity: 0.1,
-    radius: 10,
-    offsetY: 5,
-    elevation: 3,
-  }),
+  borderWidth: 1,
+  borderColor: colors.calculator.borderSubtle,
+});
+
+const $advancedToggleGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  left: 12,
+  right: 12,
+  bottom: -10,
+  height: 28,
+  borderRadius: 999,
+  backgroundColor: colors.calculator.accentGlow,
+  opacity: 0.12,
 });
 
 const $advancedToggleText: ThemedStyle<TextStyle> = ({
   colors,
   typography,
 }) => ({
-  color: colors.calculator.utilityText,
+  color: colors.calculator.textSecondary,
   fontFamily: typography.primary.medium,
   fontSize: 14,
   lineHeight: 18,
@@ -1390,6 +1307,7 @@ const $menuBackdrop: ThemedStyle<ViewStyle> = ({ colors }) => ({
   bottom: 0,
   left: 0,
   backgroundColor: colors.calculator.menuBackdrop,
+  justifyContent: "flex-start",
 });
 
 const $menuCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -1400,10 +1318,10 @@ const $menuCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingVertical: spacing.xs,
 });
 
-const $menuItem: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
+const $menuItem: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   ...createMoldedSurface({
     backgroundColor: colors.transparent,
-    radius: 22,
+    radius: 20,
   }),
   marginHorizontal: spacing.xs,
   paddingHorizontal: spacing.md,
@@ -1411,6 +1329,6 @@ const $menuItem: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
 });
 
 const $menuItemText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.keyText,
+  color: colors.calculator.textPrimary,
   fontFamily: typography.primary.medium,
 });
