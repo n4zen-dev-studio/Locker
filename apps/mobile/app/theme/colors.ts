@@ -95,4 +95,46 @@ export const colors = {
   blobPink: "rgba(255, 110, 199, 0.22)",
   blobBlue: "rgba(123, 211, 255, 0.18)",
   blobNeutral: "rgba(0, 0, 0, 0.04)",
+  calculator: {
+    backgroundGradient: ["#F9DDEA", "#F5D6EE", "#DCEEFF"] as const,
+    shellGradient: ["rgba(255,255,255,0.7)", "rgba(255,255,255,0.18)"] as const,
+    surfaceGradient: ["#FFF8FD", "#F4E1F1"] as const,
+    surfaceInsetGradient: ["rgba(255,255,255,0.85)", "rgba(243,223,241,0.72)"] as const,
+    surfaceBorder: "rgba(255,255,255,0.78)",
+    surfaceEdge: "rgba(211, 168, 197, 0.35)",
+    displayGlow: "rgba(255,255,255,0.72)",
+    displayValue: "#FFFDFE",
+    labelText: "#8D7390",
+    ambientPink: "rgba(255, 141, 211, 0.36)",
+    ambientPurple: "rgba(204, 167, 255, 0.3)",
+    ambientBlue: "rgba(142, 211, 255, 0.34)",
+    menuBackdrop: "rgba(246, 217, 235, 0.45)",
+    keyFallback: "#F7E9F5",
+    keyBorder: "rgba(255,255,255,0.92)",
+    keyEdgeHighlight: "rgba(255,255,255,0.95)",
+    keyHighlightGradient: ["rgba(255,255,255,0.92)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0)"] as const,
+    keyGlowGradient: ["rgba(255,255,255,0)", "rgba(255,255,255,0.28)"] as const,
+    keyShadow: "rgba(186, 121, 163, 0.34)",
+    keyShadowPressed: "rgba(186, 121, 163, 0.18)",
+    operatorShadow: "rgba(137, 167, 220, 0.3)",
+    utilityShadow: "rgba(194, 150, 220, 0.26)",
+    equalsShadow: "rgba(168, 125, 225, 0.34)",
+    keyText: "#2D2632",
+    operatorText: "#33517B",
+    utilityText: "#6D4C73",
+    equalsText: "#4C2260",
+    // Inside your calculator colors object:
+    keyConcaveHighlightGradient: [
+      "rgba(255, 255, 255, 0.5)", // Light highlight (top-left)
+      "transparent",              // Middle
+      "rgba(0, 0, 0, 0.05)"       // Very soft shadow (bottom-right)
+    ],
+    keyBorderHighlight: "rgba(255, 255, 255, 0.7)", // For the raised edge
+    keyGradients: {
+      number: ["#FFFDFE", "#F2E2F1"] as const,
+      operator: ["#E7F4FF", "#D3E4FF"] as const,
+      utility: ["#F8EAFE", "#E8D7F6"] as const,
+      equals: ["#F8B9E5", "#C8B5FF", "#9EDCFF"] as const,
+    },
+  },
 } as const

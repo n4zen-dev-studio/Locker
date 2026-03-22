@@ -1,15 +1,19 @@
-import { FC, useMemo, useRef, useState } from "react"
+import { FC, ReactNode, useMemo, useRef, useState } from "react"
 import {
   LayoutAnimation,
   Platform,
   Pressable,
   ScrollView,
+  StyleProp,
+  StyleSheet,
   TextStyle,
   UIManager,
   View,
   ViewStyle,
 } from "react-native"
+import { LinearGradient } from "expo-linear-gradient"
 
+import { CalculatorKey } from "@/components/CalculatorKey"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
@@ -89,11 +93,74 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true)
 }
 
+type CalculatorChromeButtonProps = {
+  label: string
+  onPress: () => void
+  style?: StyleProp<ViewStyle>
+  textStyle?: StyleProp<TextStyle>
+}
+
+const CalculatorChromeButton: FC<CalculatorChromeButtonProps> = ({
+  label,
+  onPress,
+  style,
+  textStyle,
+}) => {
+  const { themed, theme } = useAppTheme()
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [themed($chromeButtonWrap), pressed && themed($chromePressed), style]}>
+      <LinearGradient
+        colors={theme.colors.calculator.surfaceInsetGradient}
+        start={{ x: 0.08, y: 0.06 }}
+        end={{ x: 0.92, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <LinearGradient
+        colors={theme.colors.calculator.keyHighlightGradient}
+        start={{ x: 0.25, y: 0 }}
+        end={{ x: 0.75, y: 1 }}
+        style={[StyleSheet.absoluteFillObject, themed($chromeHighlight)]}
+      />
+      <Text style={[themed($chromeButtonText), textStyle]}>{label}</Text>
+    </Pressable>
+  )
+}
+
+type CalculatorPanelProps = {
+  children: ReactNode
+  style?: StyleProp<ViewStyle>
+  inset?: boolean
+}
+
+const CalculatorPanel: FC<CalculatorPanelProps> = ({ children, style, inset }) => {
+  const { themed, theme } = useAppTheme()
+
+  return (
+    <View style={[themed($panelBase), inset && themed($panelInset), style]}>
+      <LinearGradient
+        colors={inset ? theme.colors.calculator.surfaceInsetGradient : theme.colors.calculator.surfaceGradient}
+        start={{ x: 0.08, y: 0.04 }}
+        end={{ x: 0.92, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <LinearGradient
+        colors={theme.colors.calculator.shellGradient}
+        start={{ x: 0.2, y: 0 }}
+        end={{ x: 0.8, y: 1 }}
+        style={[StyleSheet.absoluteFillObject, themed($panelGloss)]}
+      />
+      <View pointerEvents="none" style={themed($panelOutline)} />
+      {children}
+    </View>
+  )
+}
+
 export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> = function CalculatorScreen(
   props,
 ) {
   const { navigation } = props
-  const { themed } = useAppTheme()
+  const { themed, theme, toggleTheme } = useAppTheme()
   const $bottomInsets = useSafeAreaInsetsStyle(["bottom"])
 
   const [display, setDisplay] = useState("0")
@@ -105,16 +172,12 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> = function 
   const [menuVisible, setMenuVisible] = useState(false)
   const longPressTriggered = useRef(false)
 
-  const displayText = useMemo(() => display, [display])
   const expressionText = useMemo(
     () => (lastAction === "equals" && completedExpression ? "Previous expression" : "Current expression"),
     [completedExpression, lastAction],
   )
 
-  const resultText = useMemo(() => {
-    if (lastAction === "equals" && completedExpression) return display
-    return display
-  }, [completedExpression, display, lastAction])
+  const resultText = useMemo(() => display, [display])
 
   const animateLayout = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
@@ -489,196 +552,222 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> = function 
   }
 
   return (
-    <Screen preset="fixed" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed([$screen, $bottomInsets])}>
-      <View style={themed($topBar)}>
-        <Pressable onPress={toggleHistory} style={({ pressed }) => [themed($topButton), pressed && themed($buttonPressed)]}>
-          <Text style={themed($topButtonText)}>
-            {historyExpanded ? "History ▾" : "History ▴"}
-          </Text>
-        </Pressable>
+    <Screen preset="fixed" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed([$screen, $bottomInsets])}>
+      <LinearGradient
+        colors={theme.colors.calculator.backgroundGradient}
+        start={{ x: 0.15, y: 0 }}
+        end={{ x: 0.92, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <View pointerEvents="none" style={themed($ambientPinkOrb)} />
+      <View pointerEvents="none" style={themed($ambientBlueOrb)} />
+      <View pointerEvents="none" style={themed($ambientPurpleOrb)} />
 
-        <Pressable onPress={toggleMenu} style={({ pressed }) => [themed($topButton), pressed && themed($buttonPressed)]}>
-          <Text style={themed($topButtonText)}>⋮</Text>
-        </Pressable>
-      </View>
-
-      <View style={themed($upperSection)}>
-        {historyExpanded ? (
-          <View style={themed($historyPanel)}>
-            <Text preset="subheading" size="xs" style={themed($historyTitle)}>
-              History
-            </Text>
-            {history.length === 0 ? (
-              <View style={themed($historyEmptyState)}>
-                <Text size="xs" style={themed($historyEmptyText)}>
-                  No recent calculations yet.
-                </Text>
-              </View>
-            ) : (
-              <ScrollView
-                style={themed($historyScroll)}
-                contentContainerStyle={themed($historyScrollContent)}
-                showsVerticalScrollIndicator={false}
-              >
-                {history.map((entry) => (
-                  <Pressable
-                    key={entry.id}
-                    onPress={() => handleRestoreHistoryItem(entry)}
-                    style={({ pressed }) => [themed($historyItem), pressed && themed($buttonPressed)]}
-                  >
-                    <Text size="xs" style={themed($historyExpression)} numberOfLines={1}>
-                      {entry.expression}
-                    </Text>
-                    <Text preset="subheading" style={themed($historyResult)} numberOfLines={1}>
-                      {entry.result}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        ) : null}
-
-        <View style={themed($displayContainer)}>
-          <Text size="xs" style={themed($expressionLabel)} numberOfLines={1}>
-            {expressionText}
-          </Text>
-          {lastAction === "equals" && completedExpression ? (
-            <Text size="sm" style={themed($expressionPreview)} numberOfLines={1}>
-              {completedExpression}
-            </Text>
-          ) : null}
-          <Text preset="heading" style={themed($displayText)} numberOfLines={1}>
-            {resultText}
-          </Text>
+      <View style={themed($shellFrame)}>
+        <View style={themed($topBar)}>
+          <CalculatorChromeButton
+            label={historyExpanded ? "History ▾" : "History ▴"}
+            onPress={toggleHistory}
+            style={themed($historyTrigger)}
+            textStyle={themed($chromeButtonLabelLeft)}
+          />
+          <CalculatorChromeButton
+            label="⋯"
+            onPress={toggleMenu}
+            style={themed($menuTrigger)}
+            textStyle={themed($menuTriggerText)}
+          />
         </View>
-      </View>
 
-      <View style={themed($keypadSection)}>
-        <Pressable onPress={toggleAdvanced} style={({ pressed }) => [themed($advancedToggle), pressed && themed($buttonPressed)]}>
-          <Text size="xl" style={themed($advancedToggleText)}>
-            {advancedExpanded ? "▾" : "▴"}
-          </Text>
-        </Pressable>
+        <View style={themed($upperSection)}>
+          {historyExpanded ? (
+            <CalculatorPanel style={themed($historyPanel)}>
+              <Text preset="subheading" size="xs" style={themed($historyTitle)}>
+                History
+              </Text>
+              {history.length === 0 ? (
+                <View style={themed($historyEmptyState)}>
+                  <Text size="xs" style={themed($historyEmptyText)}>
+                    No recent calculations yet.
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView
+                  style={themed($historyScroll)}
+                  contentContainerStyle={themed($historyScrollContent)}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {history.map((entry) => (
+                    <Pressable
+                      key={entry.id}
+                      onPress={() => handleRestoreHistoryItem(entry)}
+                      style={({ pressed }) => [themed($historyItem), pressed && themed($historyItemPressed)]}
+                    >
+                      <Text size="xs" style={themed($historyExpression)} numberOfLines={1}>
+                        {entry.expression}
+                      </Text>
+                      <Text preset="subheading" style={themed($historyResult)} numberOfLines={1}>
+                        {entry.result}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              )}
+            </CalculatorPanel>
+          ) : null}
 
-        {advancedExpanded ? (
-          <View style={themed($advancedSection)}>
-            {advancedRows.map((row, rowIndex) => (
-              <View key={`advanced-row-${rowIndex}`} style={themed($buttonRow)}>
-                {row.map((button) => (
-                  <Pressable
-                    key={button.label}
-                    onPress={() => {
-                      switch (button.label) {
-                        case "+/-":
-                          handleToggleSign()
-                          break
-                        case "√":
-                          handleSquareRoot()
-                          break
-                        case "x²":
-                          handleSquare()
-                          break
-                        case "mod":
-                          handleModulo()
-                          break
-                        case "xʸ":
-                          handlePower()
-                          break
-                      }
-                    }}
-                    style={({ pressed }) => [
-                      themed($buttonBase),
-                      themed($buttonType.action),
-                      { flex: 1 },
-                      pressed && themed($buttonPressed),
-                    ]}
-                  >
-                    <Text preset="subheading" style={themed($buttonText.action)}>
-                      {button.label}
-                    </Text>
-                  </Pressable>
-                ))}
+          <CalculatorPanel style={themed($displayPanel)}>
+            <View style={themed($displayGlow)} pointerEvents="none" />
+            <Text size="xs" style={themed($expressionLabel)} numberOfLines={1}>
+              {expressionText}
+            </Text>
+            {lastAction === "equals" && completedExpression ? (
+              <Text size="sm" style={themed($expressionPreview)} numberOfLines={1}>
+                {completedExpression}
+              </Text>
+            ) : null}
+            <Text
+              preset="heading"
+              style={themed($displayText)}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.45}
+            >
+              {resultText}
+            </Text>
+          </CalculatorPanel>
+        </View>
+
+        <CalculatorPanel style={themed($keypadPanel)} inset>
+          <Pressable onPress={toggleAdvanced} style={({ pressed }) => [themed($advancedToggle), pressed && themed($chromePressed)]}>
+            <LinearGradient
+              colors={theme.colors.calculator.surfaceInsetGradient}
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <Text size="xs" style={themed($advancedToggleText)}>
+              {advancedExpanded ? "Advanced functions ▾" : "Advanced functions ▴"}
+            </Text>
+          </Pressable>
+
+          {advancedExpanded ? (
+            <View style={themed($advancedSection)}>
+              {advancedRows.map((row, rowIndex) => (
+                <View key={`advanced-row-${rowIndex}`} style={themed($buttonRow)}>
+                  {row.map((button) => (
+                    <CalculatorKey
+                      key={button.label}
+                      label={button.label}
+                      variant="utility"
+                      onPress={() => {
+                        switch (button.label) {
+                          case "+/-":
+                            handleToggleSign()
+                            break
+                          case "√":
+                            handleSquareRoot()
+                            break
+                          case "x²":
+                            handleSquare()
+                            break
+                          case "mod":
+                            handleModulo()
+                            break
+                          case "xʸ":
+                            handlePower()
+                            break
+                        }
+                      }}
+                    />
+                  ))}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <View style={themed($buttonGrid)}>
+            {coreRows.map((row, rowIndex) => (
+              <View key={`row-${rowIndex}`} style={themed($buttonRow)}>
+                {row.map((button) => {
+                  const isEquals = button.label === "="
+                  const onPress = () => {
+                    switch (button.label) {
+                      case "()":
+                        handleParentheses()
+                        break
+                      case "AC":
+                        handleClear()
+                        break
+                      case "⌫":
+                        handleBackspace()
+                        break
+                      case "+/-":
+                        handleToggleSign()
+                        break
+                      case "=":
+                        handleEquals()
+                        break
+                      case ".":
+                        handleDecimal()
+                        break
+                      case "%":
+                        handlePercent()
+                        break
+                      default:
+                        if (isOperatorButton(button.label)) {
+                          handleOperator(button.label)
+                        } else {
+                          handleDigit(button.label)
+                        }
+                    }
+                  }
+
+                  return (
+                    <CalculatorKey
+                      key={button.label}
+                      label={button.label}
+                      variant={getKeyVariant(button.type)}
+                      onPress={onPress}
+                      onLongPress={isEquals ? handleEqualsLongPress : undefined}
+                      delayLongPress={900}
+                      style={button.flex ? { flex: button.flex } : undefined}
+                    />
+                  )
+                })}
               </View>
             ))}
           </View>
-        ) : null}
-
-        <View style={themed($buttonGrid)}>
-        {coreRows.map((row, rowIndex) => (
-          <View key={`row-${rowIndex}`} style={themed($buttonRow)}>
-            {row.map((button) => {
-              const isEquals = button.label === "="
-              const onPress = () => {
-                switch (button.label) {
-                  case "()":
-                    handleParentheses()
-                    break
-                  case "AC":
-                    handleClear()
-                    break
-                  case "⌫":
-                    handleBackspace()
-                    break
-                  case "+/-":
-                    handleToggleSign()
-                    break
-                  case "=":
-                    handleEquals()
-                    break
-                  case ".":
-                    handleDecimal()
-                    break
-                  case "%":
-                    handlePercent()
-                    break
-                  default:
-                    if (isOperatorButton(button.label)) {
-                      handleOperator(button.label)
-                    } else {
-                      handleDigit(button.label)
-                    }
-                }
-              }
-
-              return (
-                <Pressable
-                  key={button.label}
-                  onPress={onPress}
-                  onLongPress={isEquals ? handleEqualsLongPress : undefined}
-                  delayLongPress={900}
-                  style={({ pressed }) => [
-                    themed($buttonBase),
-                    themed($buttonType[button.type]),
-                    button.flex ? { flex: button.flex } : { flex: 1 },
-                    pressed && themed($buttonPressed),
-                  ]}
-                >
-                  <Text preset="subheading" style={themed($buttonText[button.type])}>
-                    {button.label}
-                  </Text>
-                </Pressable>
-              )
-            })}
-          </View>
-        ))}
-        </View>
+        </CalculatorPanel>
       </View>
 
       {menuVisible ? (
         <Pressable style={themed($menuBackdrop)} onPress={() => setMenuVisible(false)}>
-          <View style={themed($menuCard)}>
+          <CalculatorPanel style={themed($menuCard)}>
             <Pressable
               onPress={handleClearHistory}
-              style={({ pressed }) => [themed($menuItem), pressed && themed($buttonPressed)]}
+              style={({ pressed }) => [themed($menuItem), pressed && themed($historyItemPressed)]}
             >
               <Text style={themed($menuItemText)}>Clear history</Text>
             </Pressable>
-          </View>
+             <Pressable
+              onPress={() => {toggleTheme()
+                setMenuVisible(false)
+              }}
+              style={({ pressed }) => [themed($menuItem), pressed && themed($historyItemPressed)]}
+            >
+              <Text style={themed($menuItemText)}>Change Theme</Text>
+            </Pressable>
+          </CalculatorPanel>
         </Pressable>
       ) : null}
     </Screen>
   )
+}
+
+function getKeyVariant(type: ButtonType): "number" | "operator" | "utility" | "equals" {
+  if (type === "action") return "utility"
+  return type
 }
 
 function isOperatorChar(value: string) {
@@ -782,31 +871,110 @@ function stripTrailingBinaryOperator(value: string) {
   return value.slice(0, -1)
 }
 
-const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
-  backgroundColor: colors.background,
   paddingHorizontal: spacing.lg,
   paddingTop: spacing.md,
   position: "relative",
+  overflow: "hidden",
+})
+
+const $shellFrame: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  width: "100%",
+  maxWidth: 460,
+  alignSelf: "center",
+  gap: spacing.md,
+})
+
+const $ambientPinkOrb: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  borderRadius: 999,
+  width: 320,
+  height: 320,
+  top: -80,
+  right: -80,
+  backgroundColor: colors.calculator.ambientPink,
+})
+
+const $ambientBlueOrb: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  borderRadius: 999,
+  width: 240,
+  height: 240,
+  bottom: 180,
+  left: -90,
+  backgroundColor: colors.calculator.ambientBlue,
+})
+
+const $ambientPurpleOrb: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  borderRadius: 999,
+  width: 220,
+  height: 220,
+  bottom: -50,
+  right: -50,
+  backgroundColor: colors.calculator.ambientPurple,
 })
 
 const $topBar: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: spacing.md,
+  gap: spacing.sm,
 })
 
-const $topButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  minWidth: 44,
+const $chromeButtonWrap: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  minHeight: 52,
+  borderRadius: 20,
+  justifyContent: "center",
   paddingHorizontal: spacing.md,
-  paddingVertical: spacing.sm,
-  borderRadius: 16,
-  backgroundColor: colors.palette.neutral100,
+  borderWidth: 1,
+  borderColor: colors.calculator.surfaceBorder,
+  overflow: "hidden",
+  shadowColor: colors.calculator.keyShadow,
+  shadowOpacity: 0.16,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 4,
 })
 
-const $topButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.text,
+const $chromeHighlight: ThemedStyle<ViewStyle> = () => ({
+  borderRadius: 20,
+  opacity: 0.75,
+})
+
+const $chromePressed: ThemedStyle<ViewStyle> = () => ({
+  transform: [{ scale: 0.985 }, { translateY: 1 }],
+  opacity: 0.96,
+})
+
+const $historyTrigger: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+})
+
+const $menuTrigger: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  minWidth: 52,
+  paddingHorizontal: spacing.md,
+  alignItems: "center",
+})
+
+const $chromeButtonText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.calculator.keyText,
+  fontFamily: typography.fonts.spaceGrotesk.medium,
+  fontSize: 15,
+  lineHeight: 18,
+  letterSpacing: -0.2,
+  textAlign: "center",
+})
+
+const $chromeButtonLabelLeft: ThemedStyle<TextStyle> = () => ({
+  textAlign: "left",
+})
+
+const $menuTriggerText: ThemedStyle<TextStyle> = () => ({
+  fontSize: 28,
+  lineHeight: 30,
 })
 
 const $upperSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -815,18 +983,54 @@ const $upperSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
 })
 
-const $historyPanel: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.palette.neutral100,
-  borderRadius: 24,
+const $panelBase: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "relative",
+  overflow: "hidden",
+  borderRadius: 30,
+  borderWidth: 1,
+  borderColor: colors.calculator.surfaceBorder,
+  shadowColor: colors.calculator.keyShadow,
+  shadowOpacity: 0.18,
+  shadowRadius: 28,
+  shadowOffset: { width: 0, height: 18 },
+  elevation: 8,
+})
+
+const $panelInset: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  shadowColor: colors.calculator.keyShadowPressed,
+  shadowOpacity: 0.1,
+  shadowRadius: 16,
+  shadowOffset: { width: 0, height: 10 },
+  elevation: 4,
+})
+
+const $panelGloss: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.92,
+})
+
+const $panelOutline: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  ...StyleSheet.absoluteFillObject,
+  borderRadius: 30,
+  borderTopWidth: 1,
+  borderTopColor: colors.calculator.surfaceBorder,
+  borderLeftWidth: 1,
+  borderLeftColor: colors.calculator.surfaceBorder,
+  borderRightWidth: 1,
+  borderRightColor: colors.calculator.surfaceEdge,
+  borderBottomWidth: 1,
+  borderBottomColor: colors.calculator.surfaceEdge,
+})
+
+const $historyPanel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.lg,
   paddingTop: spacing.md,
   paddingBottom: spacing.sm,
   maxHeight: 240,
 })
 
-const $historyTitle: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.textDim,
-  marginBottom: spacing.sm,
+const $historyTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.calculator.labelText,
+  marginBottom: 8,
 })
 
 const $historyScroll: ThemedStyle<ViewStyle> = () => ({
@@ -837,12 +1041,20 @@ const $historyScrollContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
-const $historyItem: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $historyItem: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
+  borderRadius: 18,
+  paddingHorizontal: spacing.md,
   paddingVertical: spacing.sm,
+  backgroundColor: colors.glassHeavy,
+})
+
+const $historyItemPressed: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.82,
+  transform: [{ scale: 0.99 }],
 })
 
 const $historyExpression: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textDim,
+  color: colors.calculator.labelText,
   textAlign: "right",
 })
 
@@ -856,138 +1068,118 @@ const $historyEmptyState: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $historyEmptyText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textDim,
+  color: colors.calculator.labelText,
   textAlign: "center",
 })
 
-const $displayContainer: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.palette.neutral100,
-  borderRadius: 24,
-  paddingHorizontal: spacing.lg,
-  paddingVertical: spacing.xl,
-  minHeight: 120,
+const $displayPanel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  minHeight: 178,
   justifyContent: "flex-end",
-  shadowColor: colors.palette.neutral900,
-  shadowOpacity: 0.08,
-  shadowRadius: 12,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 3,
+  paddingHorizontal: spacing.xl,
+  paddingVertical: spacing.xl,
 })
 
-const $expressionLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textDim,
+const $displayGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  top: -40,
+  right: -20,
+  width: 220,
+  height: 220,
+  borderRadius: 999,
+  backgroundColor: colors.calculator.displayGlow,
+  opacity: 0.32,
+})
+
+const $expressionLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.calculator.labelText,
   textAlign: "right",
+  fontFamily: typography.fonts.spaceGrotesk.medium,
+  letterSpacing: 0.3,
+  textTransform: "uppercase",
 })
 
-const $expressionPreview: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.textDim,
+const $expressionPreview: ThemedStyle<TextStyle> = ({ colors, spacing, typography }) => ({
+  color: colors.calculator.labelText,
   textAlign: "right",
   marginTop: spacing.xs,
-  marginBottom: spacing.xs,
+  marginBottom: spacing.sm,
+  fontFamily: typography.primary.medium,
 })
 
-const $displayText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.text,
+const $displayText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.calculator.displayValue,
   textAlign: "right",
+  fontFamily: typography.fonts.spaceGrotesk.light,
+  fontSize: 58,
+  lineHeight: 64,
+  letterSpacing: -2.2,
+  textShadowColor: "rgba(255,255,255,0.18)",
+  textShadowRadius: 12,
+  textShadowOffset: { width: 0, height: 0 },
 })
 
-const $keypadSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingTop: spacing.md,
+const $keypadPanel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  padding: spacing.md,
   gap: spacing.md,
 })
 
-const $advancedToggle: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  alignSelf: "left",
+const $advancedToggle: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  alignSelf: "flex-start",
+  minHeight: 42,
+  borderRadius: 18,
   paddingHorizontal: spacing.md,
-  paddingVertical: spacing.xs,
+  justifyContent: "center",
+  overflow: "hidden",
+  borderWidth: 1,
+  borderColor: colors.calculator.surfaceBorder,
 })
 
-const $advancedToggleText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textDim,
-})
-
-const $buttonGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
+const $advancedToggleText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.calculator.utilityText,
+  fontFamily: typography.fonts.spaceGrotesk.medium,
+  fontSize: 14,
+  lineHeight: 18,
+  letterSpacing: 0.2,
 })
 
 const $advancedSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
 })
 
+const $buttonGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.md,
+})
+
 const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   gap: spacing.md,
-  flexWrap: "wrap",
 })
 
-const $buttonBase: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
-  borderRadius: 18,
-  minWidth: 0,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  justifyContent: "center",
-  backgroundColor: colors.palette.neutral100,
-  shadowColor: colors.palette.neutral900,
-  shadowOpacity: 0.06,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 2 },
-  elevation: 2,
-})
-
-const $buttonPressed: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.75,
-})
-
-const $buttonType: Record<ButtonType, ThemedStyle<ViewStyle>> = {
-  number: ({ colors }) => ({
-    backgroundColor: colors.palette.neutral100,
-  }),
-  operator: ({ colors }) => ({
-    backgroundColor: colors.palette.neutral200,
-  }),
-  action: ({ colors }) => ({
-    backgroundColor: colors.palette.neutral300,
-  }),
-  equals: ({ colors }) => ({
-    backgroundColor: colors.palette.primary300,
-  }),
-}
-
-const $buttonText: Record<ButtonType, ThemedStyle<TextStyle>> = {
-  number: ({ colors }) => ({ color: colors.text }),
-  operator: ({ colors }) => ({ color: colors.text }),
-  action: ({ colors }) => ({ color: colors.text, fontSize: 16, lineHeight: 20 }),
-  equals: ({ colors }) => ({ color: colors.palette.neutral900 }),
-}
-
-const $menuBackdrop: ThemedStyle<ViewStyle> = () => ({
+const $menuBackdrop: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
   top: 0,
   right: 0,
   bottom: 0,
   left: 0,
+  backgroundColor: colors.calculator.menuBackdrop,
 })
 
-const $menuCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $menuCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   position: "absolute",
   top: spacing.xl * 2,
   right: spacing.lg,
-  minWidth: 160,
-  borderRadius: 16,
-  backgroundColor: colors.palette.neutral100,
+  minWidth: 180,
   paddingVertical: spacing.xs,
-  shadowColor: colors.palette.neutral900,
-  shadowOpacity: 0.12,
-  shadowRadius: 14,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 4,
 })
 
 const $menuItem: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  borderRadius: 18,
+  marginHorizontal: spacing.xs,
   paddingHorizontal: spacing.md,
   paddingVertical: spacing.sm,
 })
 
-const $menuItemText: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $menuItemText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.text,
+  fontFamily: typography.primary.medium,
 })
