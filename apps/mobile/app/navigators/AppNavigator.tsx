@@ -27,6 +27,7 @@ import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
 import { navigationRef, useBackButtonHandler } from "./navigationUtilities"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 
 /**
  * This is a list of all the route names that will exit the app if the back button
@@ -81,7 +82,9 @@ export const AppNavigator = (props: NavigationProps) => {
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme} {...props}>
       <ErrorBoundary catchErrors={Config.catchErrors}>
+      <GestureHandlerRootView>
         <AppStack />
+      </GestureHandlerRootView>
       </ErrorBoundary>
     </NavigationContainer>
   )
