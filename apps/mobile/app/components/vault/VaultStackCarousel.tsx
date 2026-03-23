@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, TextStyle, useWindowDimensions, View, ViewStyle } from "react-native";
+import { Dimensions, Pressable, TextStyle, useWindowDimensions, View, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -18,6 +18,7 @@ import type { SharedValue } from "react-native-reanimated";
 import { Text } from "@/components/Text";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
+import { Ionicons } from '@expo/vector-icons'
 
 import { formatVaultDate, VaultListItem } from "./vaultUi";
 
@@ -29,6 +30,24 @@ type VaultStackCarouselProps = {
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+
+function getVaultIcon(type: string): keyof typeof Ionicons.glyphMap {
+  switch (type) {
+    case "note":
+      return "document-text-outline";
+    case "image":
+      return "image-outline";
+    case "pdf":
+      return "document-attach-outline"; // closest match
+    case "file":
+      return "document-outline";
+    case "voice":
+      return "mic-outline";
+    default:
+      return "document-outline";
+  }
+}
 
 export function VaultStackCarousel(props: VaultStackCarouselProps) {
   const { items, reducedMotion, emptyLabel, onOpenItem } = props;
@@ -144,7 +163,9 @@ export function VaultStackCarousel(props: VaultStackCarouselProps) {
 
   return (
     <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(320)} style={themed($stack)}>
-      <View style={themed($metaRow)}>
+    
+{/* <View style={{height: 60}}/> */}
+<View style={themed($metaRow)}>
         <Text style={themed($metaText)}>
           Card {activeIndex + 1} / {items.length}
         </Text>
@@ -157,7 +178,6 @@ export function VaultStackCarousel(props: VaultStackCarouselProps) {
           />
         </View>
       </View>
-
       <GestureDetector gesture={gesture}>
         <View style={themed($deckShell)}>
           {renderedItems.map(({ item, index }) => (
@@ -176,6 +196,20 @@ export function VaultStackCarousel(props: VaultStackCarouselProps) {
           ))}
         </View>
       </GestureDetector>
+
+        {/* <View style={themed($metaRow)}>
+        <Text style={themed($metaText)}>
+          Card {activeIndex + 1} / {items.length}
+        </Text>
+        <View style={themed($navRow)}>
+          <NavButton label="Prev" disabled={activeIndex === 0} onPress={() => snapTo(activeIndex - 1)} />
+          <NavButton
+            label="Next"
+            disabled={activeIndex === items.length - 1}
+            onPress={() => snapTo(activeIndex + 1)}
+          />
+        </View>
+      </View> */}
     </Animated.View>
   );
 }
@@ -249,7 +283,14 @@ function StackCard(props: StackCardProps) {
 
         <View style={themed($orbWrap)}>
           <View style={themed($orbOuter)}>
-            <View style={themed($orbInner)} />
+           <View style={themed($orbInner)}>
+  <Ionicons
+    name={getVaultIcon(item.type)}
+    size={42}
+    color="rgba(255,255,255,0.9)"
+    style={{alignSelf:'center', justifyContent: 'center', alignItems: 'center', paddingTop: 40}}
+  />
+</View>
           </View>
           <Text preset="bold" style={themed($focusTitle)}>
             {item.classification}
@@ -348,14 +389,14 @@ const $navButtonTextDisabled: ThemedStyle<TextStyle> = ({ colors, typography }) 
 });
 
 const $deckShell: ThemedStyle<ViewStyle> = () => ({
-  height: 482,
+  height: Dimensions.get('screen').height* 0.5,
   alignItems: "center",
   justifyContent: "center",
 });
 
 const $cardShell: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  height: 436,
+  height: Dimensions.get('screen').height* 0.5,
   borderRadius: 34,
   overflow: "hidden",
   backgroundColor: colors.vaultHub.vaultHubCard,
@@ -378,9 +419,9 @@ const $cardGradient: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 const $statusStub: ThemedStyle<ViewStyle> = () => ({
   alignSelf: "center",
   width: 124,
-  height: 18,
+  height: 10,
   borderRadius: 999,
-  marginBottom: 18,
+  marginBottom: 25,
   backgroundColor: "rgba(0,0,0,0.46)",
 });
 
@@ -429,7 +470,7 @@ const $orbInner: ThemedStyle<ViewStyle> = () => ({
   width: 126,
   height: 126,
   borderRadius: 63,
-  backgroundColor: "rgba(255,255,255,0.12)",
+  backgroundColor: "rgba(140, 134, 134, 0.07)",
   borderWidth: 1,
   borderColor: "rgba(255,255,255,0.08)",
 });

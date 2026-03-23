@@ -48,9 +48,9 @@ const AppStack = () => {
       initialRouteName="Calculator"
       screenOptions={{
         headerShown: false,
-        navigationBarColor: colors.background,
+        navigationBarColor: "transparent",
         contentStyle: {
-          backgroundColor: colors.background,
+          backgroundColor: "transparent",
         },
       }}
     >
@@ -80,12 +80,12 @@ export const AppNavigator = (props: NavigationProps) => {
   useBackButtonHandler((routeName) => exitRoutes.includes(routeName))
 
   return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer ref={navigationRef} theme={navigationTheme} {...props}>
       <ErrorBoundary catchErrors={Config.catchErrors}>
-      <GestureHandlerRootView>
         <AppStack />
-      </GestureHandlerRootView>
       </ErrorBoundary>
     </NavigationContainer>
+      </GestureHandlerRootView>
   )
 }

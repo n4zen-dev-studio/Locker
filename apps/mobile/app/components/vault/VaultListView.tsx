@@ -1,4 +1,4 @@
-import { Pressable, TextStyle, View, ViewStyle } from "react-native";
+import { Dimensions, Pressable, TextStyle, View, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { Easing, FadeInUp } from "react-native-reanimated";
 
@@ -7,6 +7,7 @@ import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 
 import { formatVaultDate, VaultListItem } from "./vaultUi";
+import { ScrollView } from "react-native-gesture-handler";
 
 type VaultListViewProps = {
   items: VaultListItem[];
@@ -28,7 +29,7 @@ export function VaultListView(props: VaultListViewProps) {
   }
 
   return (
-    <View style={themed($list)}>
+    <ScrollView style={themed($list)} scrollToOverflowEnabled>
       {items.map((item, index) => (
         <Animated.View
           key={item.id}
@@ -76,7 +77,7 @@ export function VaultListView(props: VaultListViewProps) {
           </Pressable>
         </Animated.View>
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -94,9 +95,11 @@ function Badge({ label, active = false }: { label: string; active?: boolean }) {
 
 const $list: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
+  marginTop: 50,
+  height: Dimensions.get('screen').height* 0.6,
 });
 
-const $cardShell: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $cardShell: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderRadius: 24,
   overflow: "hidden",
   backgroundColor: colors.vaultHub.vaultHubCard,
@@ -107,6 +110,8 @@ const $cardShell: ThemedStyle<ViewStyle> = ({ colors }) => ({
   shadowRadius: 22,
   shadowOffset: { width: 0, height: 16 },
   elevation: 10,
+  marginBottom: 5,
+  //  gap: spacing.md,
 });
 
 const $cardPressed: ThemedStyle<ViewStyle> = () => ({

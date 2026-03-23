@@ -38,8 +38,8 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 const AnimatedView = Animated.createAnimatedComponent(View)
 
 const CANVAS_SIZE = 320
-const CENTER_SIZE = 104
-const SATELLITE_SIZE = 78
+const CENTER_SIZE = 114
+const SATELLITE_SIZE = 90
 
 const CENTER_RADIUS = CENTER_SIZE / 2
 const SATELLITE_RADIUS = SATELLITE_SIZE / 2
@@ -52,14 +52,14 @@ const SATELLITE_RADIUS = SATELLITE_SIZE / 2
  * - file: bottom-right, slightly closer to the center
  */
 const SLOT_LAYOUT = [
-  { angle: -132, distance: 112 }, // note
-  { angle: -42, distance: 108 },  // image
-  { angle: 138, distance: 114 },  // pdf
-  { angle: 48, distance: 114 },    // file (closer like screenshot)
+  { angle: -132, distance: 122 }, // note
+  { angle: -42, distance: 118 },  // image
+  { angle: 138, distance: 124 },  // pdf
+  { angle: 48, distance: 124 },    // file (closer like screenshot)
 ] as const
 
 const ICON_MAP: Record<VaultHeroOrbAction["icon"], keyof typeof MaterialCommunityIcons.glyphMap> = {
-  note: "file-document-outline",
+  note: "pencil-outline",
   image: "image-outline",
   pdf: "file-pdf-box",
   file: "file-outline",
@@ -77,42 +77,49 @@ const ORB_THEMES: Record<
     halo: string
   }
 > = {
-  note: {
-    shellTop: "#E7BC85",
-    shellBottom: "#a35b09",
-    glow: "#FFD39B",
-    glowSoft: "rgba(255,211,155,0.22)",
-    icon: "#FFF8EF",
-    ring: "rgba(255,255,255,0.18)",
-    halo: "rgba(245,191,121,0.24)",
-  },
-  image: {
-    shellTop: "#0F2C24",
-    shellBottom: "#071612",
-    glow: "#47F0A2",
-    glowSoft: "rgba(71,240,162,0.24)",
-    icon: "#F4FFF8",
-    ring: "rgba(147,255,205,0.18)",
-    halo: "rgba(63,241,160,0.22)",
-  },
-  pdf: {
-    shellTop: "#0D4DB5",
-    shellBottom: "#032760",
-    glow: "#D6FF5A",
-    glowSoft: "rgba(214,255,90,0.24)",
-    icon: "#F6FFDA",
-    ring: "rgba(255,255,255,0.16)",
-    halo: "rgba(187,255,73,0.22)",
-  },
-  file: {
-    shellTop: "#999999",
-    shellBottom: "#585858",
-    glow: "#FFFFFF",
-    glowSoft: "rgba(255,255,255,0.26)",
-    icon: "#FFFFFF",
-    ring: "rgba(255,255,255,0.16)",
-    halo: "rgba(255,255,255,0.2)",
-  },
+note: {
+  // lighter pink (sakura glow)
+  shellTop: "#FF7ACF",
+  shellBottom: "#C2188B",
+  glow: "#edbfe2",
+  glowSoft: "rgb(182, 94, 151)",
+  icon: "#FFF0FA",
+  ring: "rgba(107, 60, 91, 0.18)",
+  halo: "rgba(81, 36, 65, 0.91)",
+},
+
+image: {
+  // dark green (night foliage + shadow tones)
+  shellTop: "#0F2F26",
+  shellBottom: "#041512",
+  glow: "#2fe0a564",
+  glowSoft: "rgba(47,224,165,0.22)",
+  icon: "#E9FFF7",
+  ring: "rgba(116, 116, 116, 0.16)",
+  halo: "rgba(47,224,165,0.20)",
+},
+
+pdf: {
+  // blue (night background tones)
+  shellTop: "#1A2A6C",
+  shellBottom: "#0B102A",
+  glow: "#355c78",
+  glowSoft: "rgba(79,209,255,0.22)",
+  icon: "#EAF6FF",
+  ring: "rgba(120,200,255,0.16)",
+  halo: "rgba(79,209,255,0.20)",
+},
+
+file: {
+  // yellowish (vending machine warm light)
+  shellTop: "#937d53",
+  shellBottom: "#A65E00",
+  glow: "#FFD97A",
+  glowSoft: "rgba(255,217,122,0.26)",
+  icon: "#FFF6DB",
+  ring: "rgba(255,230,160,0.16)",
+  halo: "rgba(255,200,90,0.22)",
+},
 }
 
 function degToRad(deg: number) {
@@ -213,7 +220,7 @@ function GlowBlob({
 function CenterSymbol() {
   return (
     <View style={styles.centerSymbolRing}>
-      <MaterialCommunityIcons name="shield-lock-outline" size={34} color="#FFFFFF" />
+      <MaterialCommunityIcons name='lock' size={34} color="#FFFFFF" />
     </View>
   )
 }
@@ -413,10 +420,10 @@ const wrapStyle = useAnimatedStyle(() => {
           >
             <View style={styles.satelliteTopHighlight} />
             <AnimatedView style={[styles.satelliteBlobWrap, innerBlobStyle]}>
-              <GlowBlob size={48} color={palette.glow} opacity={0.95} />
+              <GlowBlob size={70} color={palette.glow} opacity={0.95} />
             </AnimatedView>
 
-            <MaterialCommunityIcons name={ICON_MAP[action.icon]} size={24} color={palette.icon} />
+            <MaterialCommunityIcons name={ICON_MAP[action.icon]} size={34} color={palette.icon} />
           </LinearGradient>
         </LinearGradient>
       </View>
@@ -581,14 +588,14 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({ actions, reducedMotion = f
             style={styles.centerShell}
           >
             <LinearGradient
-              colors={["#7D8BC7", "#5162A4", "#25356D"]}
+              colors={["#d7c9dd", "#79478c", "#0d1122"]}
               start={{ x: 0.18, y: 0.12 }}
               end={{ x: 0.82, y: 1 }}
               style={styles.centerCore}
             >
               <View style={styles.centerTopHighlight} />
               <AnimatedView style={[styles.centerBlobWrap, centerBlobStyle]}>
-                <GlowBlob size={86} color="#DCE3FF" opacity={0.88} />
+                <GlowBlob size={86} color="#fadcff" opacity={0.88} />
               </AnimatedView>
               <CenterSymbol />
             </LinearGradient>
@@ -696,9 +703,9 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
+    borderWidth: 0,
     borderColor: "rgba(255,255,255,0.82)",
-    backgroundColor: "rgba(10,12,22,0.16)",
+    // backgroundColor: "rgba(10,12,22,0.16)",
   },
 
   satelliteWrap: {

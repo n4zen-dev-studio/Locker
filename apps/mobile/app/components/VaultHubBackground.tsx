@@ -297,8 +297,8 @@ export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
             <Pattern
               id={primaryPatternId}
               patternUnits="userSpaceOnUse"
-              width="18"
-              height="18"
+              width="16"
+              height="16"
               x="0"
               y="0"
             >
@@ -306,7 +306,7 @@ export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
                 cx="9"
                 cy="9"
                 r="0.9"
-                fill="rgba(214, 194, 255, 0.9)"
+                fill="rgba(165, 150, 169, 0.75)"
               />
             </Pattern>
           </Defs>

@@ -21,7 +21,7 @@ export const GlowFab: FC<GlowFabProps> = ({ label = "+", onPress, onLongPress, s
       style={({ pressed }) => [themed($fab), pressed && themed($pressed), style]}
     >
       <View style={themed($glow)} />
-      <Text preset="bold" style={themed($label)}>
+      <Text preset="semiBold" style={themed($label)}>
         {label}
       </Text>
     </Pressable>
@@ -29,13 +29,13 @@ export const GlowFab: FC<GlowFabProps> = ({ label = "+", onPress, onLongPress, s
 }
 
 const $fab: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  width: 64,
-  height: 64,
+  width: 50,
+  height: 50,
   borderRadius: 32,
-  backgroundColor: colors.accentPink,
+  backgroundColor: colors.vaultHub.vaultHubChipInactive,
   alignItems: "center",
   justifyContent: "center",
-  shadowColor: colors.accentPink,
+  shadowColor: colors.vaultHub.vaultHubChipActive,
   shadowOpacity: 0.5,
   shadowRadius: 18,
   shadowOffset: { width: 0, height: 8 },
@@ -44,17 +44,17 @@ const $fab: ThemedStyle<ViewStyle> = ({ colors }) => ({
 })
 
 const $label: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
+  color: '#fff',
   fontSize: 26,
   lineHeight: 28,
 })
 
 const $glow: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  width: 88,
-  height: 88,
+  width: 50,
+  height: 50,
   borderRadius: 44,
-  backgroundColor: "rgba(255, 110, 199, 0.25)",
+  // backgroundColor: "rgba(148, 148, 148, 0.25)",
   opacity: 0.9,
 })
 

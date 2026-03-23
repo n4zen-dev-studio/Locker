@@ -2,6 +2,7 @@ import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   AppState,
+  Dimensions,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -45,6 +46,9 @@ import type { VaultStackScreenProps } from "@/navigators/navigationTypes";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
+import { Lock } from 'lucide-react-native'
+import { Ionicons } from "@expo/vector-icons"
+import { GlowFab } from "@/components/GlowFab";
 
 export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = function VaultNotesHomeScreen(props) {
   const { navigation } = props;
@@ -327,6 +331,10 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
     scrollRef.current?.scrollTo({ y: Math.max(0, vaultSectionY), animated: true });
   }, [vaultSectionY]);
 
+    const handleScrollToTop= useCallback(() => {
+    scrollRef.current?.scrollTo({ y: Math.min(0, vaultSectionY), animated: true });
+  }, [vaultSectionY]);
+
   return (
     <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])} systemBarStyle="light">
       <VaultHubBackground reducedMotion={reducedMotion} />
@@ -343,31 +351,38 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         >
           <View style={themed($headerTopRow)}>
             <View style={themed($headerCopy)}>
-              <Text size="xxs" style={themed($eyebrow)}>
+              {/* <Text size="xxs" style={themed($eyebrow)}>
                 Locker
+              </Text> */}
+               <Text size="xxs" style={themed($eyebrow)}>
+                 {activeVaultId ? "Personal cloud vault" : "Local-only vault"}
               </Text>
               <Text preset="heading" style={themed($vaultNameText)}>
                 {activeVaultName ?? "Personal Vault"}
               </Text>
-              <Text style={themed($metaText)}>
+              {/* <Text style={themed($metaText)}>
                 {activeVaultId ? "Personal cloud vault" : "Local-only vault"}
-              </Text>
+              </Text> */}
             </View>
 
             <View style={themed($headerActions)}>
-              <HeaderPill label="Security" onPress={() => navigation.navigate("VaultTabs", { screen: "Security" })} />
-              <HeaderPill label="Settings" onPress={() => navigation.navigate("VaultTabs", { screen: "Settings" })} />
               <Pressable onPress={handleLock} style={themed($lockButton)}>
-                <Icon icon="lock" size={16} color={theme.colors.vaultHub.vaultHubTextPrimary} />
+                <Ionicons
+              name={"lock-closed"}
+              size={18}
+              color={'#fff'}
+              style={{ padding: 5 }}
+            />
+                {/* <Lock fill={theme.colors.vaultHub.vaultHubBg} size={18} color={theme.colors.vaultHub.vaultHubTextPrimary}  /> */}
               </Pressable>
             </View>
           </View>
 
-          <View style={themed($headerMetaRow)}>
+          {/* <View style={themed($headerMetaRow)}>
             {unlockMethod ? <MetaPill label={`Unlock ${unlockMethod}`} /> : null}
             <MetaPill label={`Sync ${syncStatus.state} · Queue ${syncStatus.queueSize}`} />
             {__DEV__ && metaVersion ? <MetaPill label={`Meta v${metaVersion}`} /> : null}
-          </View>
+          </View> */}
         </Animated.View>
 
         <Animated.View
@@ -382,41 +397,51 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
           style={themed($toolbarSection)}
         >
           <View style={themed($toolbarHeader)}>
-            <Text preset="bold" style={themed($toolbarTitle)}>
-              Vault Tools
-            </Text>
-            <Pressable style={themed($jumpButton)} onPress={handleScrollToVault}>
-              <Text style={themed($jumpButtonText)}>Jump to Vault</Text>
+             <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={handleScrollToVault}>
+              <Ionicons
+              name={"arrow-down"}
+              size={18}
+              color={'#fff'}
+              style={{ paddingVertical: 5 }}
+            />
+             
+            </Pressable>
+            <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={handleScrollToVault}>
+              {/* <Ionicons
+              name={"arrow-down"}
+              size={18}
+              color={'#fff'}
+              style={{ paddingVertical: 5 }}
+            /> */}
+              <Ionicons
+              name={"wallet"}
+              size={18}
+              color={'#fff'}
+              style={{ paddingVertical: 5 }}
+            />
+              {/* <Text style={themed($jumpButtonText)}>Jump to Vault</Text> */}
             </Pressable>
           </View>
 
-          <View style={themed($searchSurface)}>
-            <SearchGlyph />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search vault content"
-              placeholderTextColor={theme.colors.vaultHub.vaultHubMuted}
-              style={themed($searchInput)}
-            />
-          </View>
+         
 
-          <Text style={themed($toolbarHint)}>
+          {/* <Text style={themed($toolbarHint)}>
             Search first, then browse in stack mode or switch back to list mode when you need density.
-          </Text>
+          </Text> */}
         </Animated.View>
 
-        {syncReason ? (
+        {/* {syncReason ? (
           <View style={themed($syncHint)}>
             <Text style={themed($metaText)}>Sync disabled: {syncReason}</Text>
           </View>
-        ) : null}
+        ) : null} */}
 
         {error ? (
           <View style={themed($errorCard)}>
             <Text style={themed($errorText)}>{error}</Text>
           </View>
         ) : null}
+        <View style={{height: 60}}/>
 
         <VaultSection
           filter={filter}
@@ -430,14 +455,35 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
           onSortCycle={() => setSort(nextVaultSort(sort))}
           onOpenItem={handleOpenVaultItem}
         />
+         <View style={themed($searchSurface)}>
+            <SearchGlyph />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search vault contents"
+              placeholderTextColor={theme.colors.vaultHub.vaultHubMuted}
+              style={themed($searchInput)}
+            />
+            {query &&
+             <Ionicons
+              name={"close"}
+              size={18}
+              color={'#fff'}
+              style={{ paddingVertical: 5 }}
+              onPress={() => setQuery('')}
+            />}
 
-        {__DEV__ && metaVersion === 2 ? (
+          </View>
+
+        {/* {__DEV__ && metaVersion === 2 ? (
           <Pressable style={themed($devButton)} onPress={handleDisablePasskey}>
             <Text preset="bold" style={themed($devText)}>
               Disable Passkey (Dev)
             </Text>
           </Pressable>
-        ) : null}
+        ) : null} */}
+
+         <GlowFab onPress={() => handleScrollToTop()} style={{position: 'absolute', right: 20, bottom: 90}}/>
       </ScrollView>
     </Screen>
   );
@@ -521,20 +567,21 @@ const $headerCopy: ThemedStyle<ViewStyle> = () => ({
 });
 
 const $eyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.vaultHub.vaultHubTextSecondary,
+  color: colors.vaultHub.vaultHubTextPrimary,
   fontFamily: typography.primary.medium,
   textTransform: "uppercase",
   letterSpacing: 1.3,
   marginBottom: 6,
 });
 
-const $vaultNameText: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $vaultNameText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
+  fontFamily: typography.primary.medium,
 });
 
 const $metaText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
-  marginTop: 6,
+  // marginTop: 6,
   fontSize: 12,
 });
 
@@ -559,13 +606,13 @@ const $headerPillText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
 });
 
 const $lockButton: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  width: 36,
-  height: 36,
+  width: 40,
+  height: 40,
   borderRadius: 18,
   alignItems: "center",
   justifyContent: "center",
   backgroundColor: colors.vaultHub.vaultHubChipInactive,
-  borderWidth: 1,
+  borderWidth: 1.5,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
 });
 
@@ -592,6 +639,8 @@ const $metaPillText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
 const $heroSection: ThemedStyle<ViewStyle> = () => ({
   alignItems: "center",
   justifyContent: "center",
+  marginTop: 40,
+  height: Dimensions.get('screen').height* 0.6 ,
 });
 
 const $toolbarSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -615,13 +664,13 @@ const $toolbarHint: ThemedStyle<TextStyle> = ({ colors }) => ({
   lineHeight: 18,
 });
 
-const $jumpButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $jumpButton: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
   borderRadius: 999,
   paddingHorizontal: spacing.md,
   paddingVertical: spacing.xs + 2,
-  backgroundColor: "rgba(255, 77, 186, 0.14)",
-  borderWidth: 1,
-  borderColor: "rgba(255, 154, 219, 0.38)",
+  backgroundColor: colors.vaultHub.vaultHubChipInactive,
+  borderWidth: 1.5,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
 });
 
 const $jumpButtonText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
@@ -633,12 +682,14 @@ const $jumpButtonText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
 const $searchSurface: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
-  borderRadius: 22,
+  borderRadius: 999,
   paddingHorizontal: spacing.md,
-  paddingVertical: spacing.sm,
+  paddingVertical: spacing.xs,
   backgroundColor: colors.vaultHub.vaultHubSurface,
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
+  marginBottom: spacing.lg,
+  marginRight: spacing.xxxl,
 });
 
 const $searchIconWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
