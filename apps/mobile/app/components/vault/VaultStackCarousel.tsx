@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dimensions, Pressable, TextStyle, useWindowDimensions, View, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   Extrapolation,
@@ -162,6 +162,7 @@ export function VaultStackCarousel(props: VaultStackCarouselProps) {
   }
 
   return (
+    <GestureHandlerRootView>
     <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(320)} style={themed($stack)}>
     
 {/* <View style={{height: 60}}/> */}
@@ -211,6 +212,7 @@ export function VaultStackCarousel(props: VaultStackCarouselProps) {
         </View>
       </View> */}
     </Animated.View>
+    </GestureHandlerRootView>
   );
 }
 
