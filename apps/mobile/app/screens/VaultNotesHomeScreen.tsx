@@ -73,6 +73,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
   const [reducedMotion, setReducedMotion] = useState(false);
   const [vaultSectionY, setVaultSectionY] = useState(0);
   const unlocked = vaultSession.isUnlocked();
+  const [scrollEnabled, setScrollEnabled] = useState(true)
 
   const [activeVaultId, setActiveVaultId] = useState<string | null>(() => getRemoteVaultId());
   const [activeVaultName, setActiveVaultName] = useState<string | null>(() => getRemoteVaultName());
@@ -316,6 +317,14 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         distance: 110,
         onPress: () => navigation.navigate("VaultNote", { importType: "file" }),
       },
+      {
+        id: "voice",
+        label: "Import Voice Recording",
+        icon: "voice" as const,
+        angle: 45,
+        distance: 110,
+        onPress: () => navigation.navigate("VaultNote", { importType: "file" }),
+      },
     ],
     [navigation],
   );
@@ -341,9 +350,15 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
 
       <ScrollView
         ref={scrollRef}
+        scrollEnabled={scrollEnabled}
         contentContainerStyle={themed($content)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleSyncNow} />}
-        showsVerticalScrollIndicator={false}
+refreshControl={
+  <RefreshControl
+    refreshing={refreshing}
+    onRefresh={handleSyncNow}
+    enabled={!scrollEnabled}
+  />
+}        showsVerticalScrollIndicator={false}
       >
         <Animated.View
           entering={reducedMotion ? undefined : FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))}
@@ -389,7 +404,10 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
           entering={reducedMotion ? undefined : FadeIn.duration(520).easing(Easing.bezier(0.22, 1, 0.36, 1))}
           style={themed($heroSection)}
         >
-          <VaultHeroOrb actions={heroActions} reducedMotion={reducedMotion} />
+<VaultHeroOrb
+  actions={heroActions}
+  onOrbitDragStateChange={(dragging) => setScrollEnabled(!dragging)}
+/>
         </Animated.View>
 
         <Animated.View

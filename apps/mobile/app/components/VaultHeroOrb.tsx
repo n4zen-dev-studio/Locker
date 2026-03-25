@@ -1,10 +1,14 @@
-import React, { FC, useEffect, useMemo } from "react"
-import { Pressable, StyleSheet, View } from "react-native"
+import React, { FC, useEffect, useMemo, useRef, useState } from "react"
+import { LayoutChangeEvent, Pressable, StyleSheet, View } from "react-native"
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler"
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withDecay,
   withDelay,
   withRepeat,
   withSequence,
@@ -26,13 +30,16 @@ type VaultHeroOrbAction = {
   id: string
   label: string
   onPress: () => void
-  icon: "note" | "image" | "pdf" | "file"
+  icon: "note" | "image" | "pdf" | "file" | "voice"
 }
 
 type VaultHeroOrbProps = {
   actions: VaultHeroOrbAction[]
   reducedMotion?: boolean
+  onOrbitDragStateChange?: (isDragging: boolean) => void
 }
+
+
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 const AnimatedView = Animated.createAnimatedComponent(View)
@@ -45,25 +52,34 @@ const CENTER_RADIUS = CENTER_SIZE / 2
 const SATELLITE_RADIUS = SATELLITE_SIZE / 2
 
 /**
- * These are the visual positions that better match your screenshot:
- * - note: top-left
- * - image: top-right
- * - pdf: bottom-left
- * - file: bottom-right, slightly closer to the center
+ * Drag / inertia tuning
+ * Change these to control responsiveness:
+ * - DRAG_ROTATION_MULTIPLIER: how much rotation follows finger movement
+ * - RELEASE_VELOCITY_MULTIPLIER: how much speed carries after release
+ * - ROTATION_DECELERATION: higher = longer spin before slowing down
+ * - DRAG_TOUCH_SCALE: tiny grow while dragging the orbit
  */
+const DRAG_ROTATION_MULTIPLIER = 1
+const RELEASE_VELOCITY_MULTIPLIER = 1.15
+const ROTATION_DECELERATION = 0.992
+const PAN_ACTIVATION_DISTANCE = 4
+const DRAG_TOUCH_SCALE = 1.03
+
 const SLOT_LAYOUT = [
-  { angle: -132, distance: 122 }, // note
-  { angle: -42, distance: 118 },  // image
-  { angle: 138, distance: 124 },  // pdf
-  { angle: 48, distance: 124 },    // file (closer like screenshot)
+  { angle: -90, distance: 122 }, // top (voice)
+  { angle: -18, distance: 122 }, // top-right
+  { angle: 54, distance: 122 }, // bottom-right
+  { angle: 126, distance: 122 }, // bottom-left
+  { angle: 198, distance: 122 }, // top-left
 ] as const
 
-const ICON_MAP: Record<VaultHeroOrbAction["icon"], keyof typeof MaterialCommunityIcons.glyphMap> = {
+const ICON_MAP = {
   note: "pencil-outline",
   image: "image-outline",
   pdf: "file-pdf-box",
   file: "file-outline",
-}
+  voice: "microphone-outline",
+} as const
 
 const ORB_THEMES: Record<
   VaultHeroOrbAction["icon"],
@@ -77,53 +93,66 @@ const ORB_THEMES: Record<
     halo: string
   }
 > = {
-note: {
-  // lighter pink (sakura glow)
-  shellTop: "#FF7ACF",
-  shellBottom: "#C2188B",
-  glow: "#edbfe2",
-  glowSoft: "rgb(182, 94, 151)",
-  icon: "#FFF0FA",
-  ring: "rgba(107, 60, 91, 0.18)",
-  halo: "rgba(81, 36, 65, 0.91)",
-},
+  note: {
+    shellTop: "#c55cf6",
+    shellBottom: "#3B1D7A",
+    glow: "#C4B5FD",
+    glowSoft: "rgba(196,181,253,0.22)",
+    icon: "#F5F3FF",
+    ring: "rgba(160,140,255,0.18)",
+    halo: "rgba(140,120,255,0.22)",
+  },
 
-image: {
-  // dark green (night foliage + shadow tones)
-  shellTop: "#0F2F26",
-  shellBottom: "#041512",
-  glow: "#2fe0a564",
-  glowSoft: "rgba(47,224,165,0.22)",
-  icon: "#E9FFF7",
-  ring: "rgba(116, 116, 116, 0.16)",
-  halo: "rgba(47,224,165,0.20)",
-},
+  voice: {
+    shellTop: "#FF7ACF",
+    shellBottom: "#C2188B",
+    glow: "#edbfe2",
+    glowSoft: "rgb(182, 94, 151)",
+    icon: "#FFF0FA",
+    ring: "rgba(107, 60, 91, 0.18)",
+    halo: "rgba(81, 36, 65, 0.91)",
+  },
 
-pdf: {
-  // blue (night background tones)
-  shellTop: "#1A2A6C",
-  shellBottom: "#0B102A",
-  glow: "#355c78",
-  glowSoft: "rgba(79,209,255,0.22)",
-  icon: "#EAF6FF",
-  ring: "rgba(120,200,255,0.16)",
-  halo: "rgba(79,209,255,0.20)",
-},
+  image: {
+    shellTop: "#FF7ACF",
+    shellBottom: "#a122d3",
+    glow: "#edbfe2",
+    glowSoft: "rgb(86, 47, 89)",
+    icon: "#fff0fa",
+    ring: "rgba(222, 35, 160, 0.18)",
+    halo: "rgba(101, 43, 81, 0.91)",
+  },
 
-file: {
-  // yellowish (vending machine warm light)
-  shellTop: "#937d53",
-  shellBottom: "#A65E00",
-  glow: "#FFD97A",
-  glowSoft: "rgba(255,217,122,0.26)",
-  icon: "#FFF6DB",
-  ring: "rgba(255,230,160,0.16)",
-  halo: "rgba(255,200,90,0.22)",
-},
+  pdf: {
+    shellTop: "#8B5CF6",
+    shellBottom: "#3B1D7A",
+    glow: "#C4B5FD",
+    glowSoft: "rgba(196,181,253,0.22)",
+    icon: "#F5F3FF",
+    ring: "rgba(160,140,255,0.18)",
+    halo: "rgba(140,120,255,0.22)",
+  },
+
+  file: {
+    shellTop: "#FF7ACF",
+    shellBottom: "#930cfa",
+    glow: "#edbfe2",
+    glowSoft: "rgb(86, 47, 89)",
+    icon: "#fff0fa",
+    ring: "rgba(222, 35, 160, 0.18)",
+    halo: "rgba(101, 43, 81, 0.91)",
+  },
 }
 
 function degToRad(deg: number) {
   return (deg * Math.PI) / 180
+}
+
+function normalizeAngleDelta(delta: number) {
+  "worklet"
+  if (delta > Math.PI) return delta - Math.PI * 2
+  if (delta < -Math.PI) return delta + Math.PI * 2
+  return delta
 }
 
 function getOrbOffset(angle: number, distance: number) {
@@ -134,13 +163,6 @@ function getOrbOffset(angle: number, distance: number) {
   }
 }
 
-/**
- * Curved connector between center orb and satellite orb.
- * This makes the connector feel more like the reference image:
- * - thinner
- * - softer
- * - a bit curved instead of rigidly straight
- */
 function getCurvedConnectorPath(
   x: number,
   y: number,
@@ -220,7 +242,7 @@ function GlowBlob({
 function CenterSymbol() {
   return (
     <View style={styles.centerSymbolRing}>
-      <MaterialCommunityIcons name='lock' size={34} color="#FFFFFF" />
+      <MaterialCommunityIcons name="lock" size={34} color="#FFFFFF" />
     </View>
   )
 }
@@ -230,11 +252,13 @@ function SatelliteOrb({
   index,
   slot,
   reducedMotion,
+  orbitRotation,
 }: {
   action: VaultHeroOrbAction
   index: number
   slot: { angle: number; distance: number }
   reducedMotion: boolean
+  orbitRotation: Animated.SharedValue<number>
 }) {
   const palette = ORB_THEMES[action.icon]
   const { x, y } = getOrbOffset(slot.angle, slot.distance)
@@ -246,28 +270,32 @@ function SatelliteOrb({
   const blobDriftY = useSharedValue(0)
   const blobPulse = useSharedValue(0)
   const introRotate = useSharedValue(reducedMotion ? 0 : -0.52)
-
+const iconUprightStyle = useAnimatedStyle(() => ({
+  transform: [{ rotate: `${-orbitRotation.value}rad` }],
+}))
+const highlightUprightStyle = useAnimatedStyle(() => ({
+  transform: [{ rotate: `${-orbitRotation.value}rad` }],
+}))
   useEffect(() => {
     if (reducedMotion) return
 
     appear.value = withDelay(
-  120 + index * 70,
-  withSpring(1, {
-    damping: 16,
-    stiffness: 125,
-    mass: 0.95,
-  }),
-)
+      120 + index * 70,
+      withSpring(1, {
+        damping: 16,
+        stiffness: 125,
+        mass: 0.95,
+      }),
+    )
 
-introRotate.value = withDelay(
-  80 + index * 70,
-  withTiming(0, {
-    duration: 980,
-    easing: Easing.out(Easing.cubic),
-  }),
-)
+    introRotate.value = withDelay(
+      80 + index * 70,
+      withTiming(0, {
+        duration: 980,
+        easing: Easing.out(Easing.cubic),
+      }),
+    )
 
-    // each orb gets slightly different loop timing
     orbitFloat.value = withDelay(
       320 + index * 90,
       withRepeat(
@@ -286,7 +314,6 @@ introRotate.value = withDelay(
       ),
     )
 
-    // unique blob X drift
     blobDriftX.value = withDelay(
       480 + index * 110,
       withRepeat(
@@ -305,7 +332,6 @@ introRotate.value = withDelay(
       ),
     )
 
-    // unique blob Y drift
     blobDriftY.value = withDelay(
       620 + index * 90,
       withRepeat(
@@ -324,7 +350,6 @@ introRotate.value = withDelay(
       ),
     )
 
-    // unique pulse timing
     blobPulse.value = withDelay(
       500 + index * 130,
       withRepeat(
@@ -342,37 +367,27 @@ introRotate.value = withDelay(
         true,
       ),
     )
-  }, [appear, blobDriftX, blobDriftY, blobPulse, index, orbitFloat, reducedMotion])
+  }, [appear, blobDriftX, blobDriftY, blobPulse, index, orbitFloat, reducedMotion, introRotate])
 
-  /**
-   * Important fix:
-   * satelliteWrap is anchored exactly at center using left/top = 50%
-   * and then translated by x/y minus half its own size.
-   * Do NOT also use margin offsets here or it can visually drift.
-   */
-const wrapStyle = useAnimatedStyle(() => {
-  const arcRotate = introRotate.value * (1 - appear.value * 0.15)
+  const wrapStyle = useAnimatedStyle(() => {
+    const arcRotate = introRotate.value * (1 - appear.value * 0.15)
 
-  const rotatedX =
-    x * Math.cos(arcRotate) - y * Math.sin(arcRotate)
-  const rotatedY =
-    x * Math.sin(arcRotate) + y * Math.cos(arcRotate)
+    const rotatedX = x * Math.cos(arcRotate) - y * Math.sin(arcRotate)
+    const rotatedY = x * Math.sin(arcRotate) + y * Math.cos(arcRotate)
 
-  const tx = interpolate(appear.value, [0, 1], [0, rotatedX])
-  const ty =
-    interpolate(appear.value, [0, 1], [0, rotatedY]) +
-    interpolate(orbitFloat.value, [-1, 1], [-3, 3])
+    const tx = interpolate(appear.value, [0, 1], [0, rotatedX])
+    const ty = interpolate(appear.value, [0, 1], [0, rotatedY])
 
-  return {
-    transform: [
-      { translateX: tx - SATELLITE_SIZE / 2 },
-      { translateY: ty - SATELLITE_SIZE / 2 },
-      { scale: interpolate(appear.value, [0, 1], [0.62, 1]) },
-      { scale: interpolate(press.value, [0, 1], [1, 0.95]) },
-    ],
-    opacity: appear.value,
-  }
-})
+    return {
+      transform: [
+        { translateX: tx - SATELLITE_SIZE / 2 },
+        { translateY: ty - SATELLITE_SIZE / 2 },
+        { scale: interpolate(appear.value, [0, 1], [0.62, 1]) },
+        { scale: interpolate(press.value, [0, 1], [1, 0.95]) },
+      ],
+      opacity: appear.value,
+    }
+  })
 
   const haloStyle = useAnimatedStyle(() => ({
     opacity: interpolate(blobPulse.value, [0, 1], [0.72, 1]),
@@ -418,12 +433,17 @@ const wrapStyle = useAnimatedStyle(() => {
             end={{ x: 0.82, y: 1 }}
             style={styles.satelliteCore}
           >
-            <View style={styles.satelliteTopHighlight} />
+            
+<AnimatedView pointerEvents="none" style={[styles.satelliteHighlightOverlay, highlightUprightStyle]}>
+  <View style={styles.satelliteTopHighlight} />
+</AnimatedView>
             <AnimatedView style={[styles.satelliteBlobWrap, innerBlobStyle]}>
               <GlowBlob size={70} color={palette.glow} opacity={0.95} />
             </AnimatedView>
 
-            <MaterialCommunityIcons name={ICON_MAP[action.icon]} size={34} color={palette.icon} />
+<AnimatedView style={iconUprightStyle}>
+  <MaterialCommunityIcons name={ICON_MAP[action.icon]} size={34} color={palette.icon} />
+</AnimatedView>
           </LinearGradient>
         </LinearGradient>
       </View>
@@ -431,14 +451,34 @@ const wrapStyle = useAnimatedStyle(() => {
   )
 }
 
-export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({ actions, reducedMotion = false }) => {
-  const { themed } = useAppTheme()
-  const heroActions = useMemo(() => actions.slice(0, 4), [actions])
+export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
+  actions,
+  reducedMotion = false,
+  onOrbitDragStateChange,
+}) => {
+    const { themed } = useAppTheme()
+const canvasRef = useRef<View>(null)
+const [canvasCenter, setCanvasCenter] = useState({
+  x: 0,
+  y: 0,
+})
+
+  const heroActions = useMemo(() => actions.slice(0, 5), [actions])
 
   const connectorsIn = useSharedValue(reducedMotion ? 1 : 0)
   const corePulse = useSharedValue(0)
   const coreBlobX = useSharedValue(0)
   const coreBlobY = useSharedValue(0)
+
+  const orbitRotation = useSharedValue(0)
+  const orbitTouchScale = useSharedValue(1)
+  const lastTouchAngle = useSharedValue(0)
+  const lastTouchTime = useSharedValue(0)
+  const angularVelocity = useSharedValue(0)
+
+const notifyOrbitDragState = (isDragging: boolean) => {
+  onOrbitDragStateChange?.(isDragging)
+}
 
   useEffect(() => {
     if (reducedMotion) return
@@ -494,9 +534,25 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({ actions, reducedMotion = f
     )
   }, [connectorsIn, coreBlobX, coreBlobY, corePulse, reducedMotion])
 
+
+const onCanvasLayout = () => {
+  requestAnimationFrame(() => {
+    canvasRef.current?.measureInWindow((x, y, width, height) => {
+      setCanvasCenter({
+        x: x + width / 2,
+        y: y + height / 2,
+      })
+    })
+  })
+}
+
   const connectorStyle = useAnimatedStyle(() => ({
     opacity: interpolate(connectorsIn.value, [0, 1], [0, 1]),
     transform: [{ scale: interpolate(connectorsIn.value, [0, 1], [0.92, 1]) }],
+  }))
+
+  const orbitLayerStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${orbitRotation.value}rad` }, { scale: orbitTouchScale.value }],
   }))
 
   const centerPulseStyle = useAnimatedStyle(() => ({
@@ -512,113 +568,181 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({ actions, reducedMotion = f
     ],
   }))
 
-  const connectorThickness = 12
+  const orbitPanGesture = Gesture.Pan()
+  .minDistance(3)
+  .shouldCancelWhenOutside(false)
+  .onBegin((event) => {
+    cancelAnimation(orbitRotation)
+    orbitTouchScale.value = withTiming(DRAG_TOUCH_SCALE, { duration: 120 })
+    runOnJS(notifyOrbitDragState)(true)
+
+    const dx = event.absoluteX - canvasCenter.x
+    const dy = event.absoluteY - canvasCenter.y
+
+    lastTouchAngle.value = Math.atan2(dy, dx)
+    lastTouchTime.value = event.timestamp || Date.now()
+    angularVelocity.value = 0
+  })
+  .onUpdate((event) => {
+    const dx = event.absoluteX - canvasCenter.x
+    const dy = event.absoluteY - canvasCenter.y
+    const currentAngle = Math.atan2(dy, dx)
+
+    const delta = normalizeAngleDelta(currentAngle - lastTouchAngle.value)
+    if (!Number.isFinite(delta)) return
+
+    orbitRotation.value += delta * DRAG_ROTATION_MULTIPLIER
+
+    const now = event.timestamp || Date.now()
+    const dt = Math.max((now - lastTouchTime.value) / 1000, 0.001)
+
+    const nextVelocity = (delta / dt) * DRAG_ROTATION_MULTIPLIER
+    if (Number.isFinite(nextVelocity)) {
+      angularVelocity.value = nextVelocity
+    }
+
+    lastTouchAngle.value = currentAngle
+    lastTouchTime.value = now
+  })
+  .onEnd(() => {
+    orbitTouchScale.value = withTiming(1, { duration: 180 })
+    runOnJS(notifyOrbitDragState)(false)
+
+    if (Number.isFinite(angularVelocity.value)) {
+      orbitRotation.value = withDecay({
+        velocity: angularVelocity.value * RELEASE_VELOCITY_MULTIPLIER,
+        deceleration: ROTATION_DECELERATION,
+      })
+    }
+  })
+  .onFinalize(() => {
+    orbitTouchScale.value = withTiming(1, { duration: 180 })
+    runOnJS(notifyOrbitDragState)(false)
+  })
 
   return (
+    <GestureHandlerRootView style={{flex:1}}>
     <View style={[styles.root, themed?.(($ => $ as any) as any)]}>
-      <View style={styles.canvas}>
-        <AnimatedView style={[styles.connectorLayer, connectorStyle]}>
-          <Svg width={CANVAS_SIZE} height={CANVAS_SIZE} viewBox={`0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`}>
-            <Defs>
-  <SvgRadialGradient id="connectorBody" cx="50%" cy="45%" r="85%">
-    <Stop offset="0%" stopColor="rgba(41, 31, 31, 0.13)" />
-    <Stop offset="38%" stopColor="rgba(32, 44, 96, 0.22)" />
-    <Stop offset="100%" stopColor="rgba(20, 35, 77, 0.06)" />
-  </SvgRadialGradient>
+      <GestureDetector gesture={orbitPanGesture}>
+<View ref={canvasRef} style={styles.canvas} onLayout={onCanvasLayout} collapsable={false}>
+  <AnimatedView
+  pointerEvents="box-none"
+  style={[styles.orbitLayer, orbitLayerStyle]}
+>           
+ <AnimatedView style={[styles.connectorLayer, connectorStyle]}>
+              <Svg width={CANVAS_SIZE} height={CANVAS_SIZE} viewBox={`0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`}>
+                <Defs>
+                  <SvgRadialGradient id="connectorBody" cx="50%" cy="45%" r="85%">
+                    <Stop offset="0%" stopColor="rgba(41, 31, 31, 0.13)" />
+                    <Stop offset="38%" stopColor="rgba(32, 44, 96, 0.22)" />
+                    <Stop offset="100%" stopColor="rgba(20, 35, 77, 0.06)" />
+                  </SvgRadialGradient>
 
-  <SvgRadialGradient id="connectorHighlight" cx="50%" cy="30%" r="75%">
-    <Stop offset="0%" stopColor="rgba(110, 19, 19, 0.2)" />
-    <Stop offset="35%" stopColor="rgba(36, 19, 19, 0.08)" />
-    <Stop offset="100%" stopColor="rgba(60, 26, 26, 0)" />
-  </SvgRadialGradient>
-</Defs>
+                  <SvgRadialGradient id="connectorHighlight" cx="50%" cy="30%" r="75%">
+                    <Stop offset="0%" stopColor="rgba(110, 19, 19, 0.2)" />
+                    <Stop offset="35%" stopColor="rgba(36, 19, 19, 0.08)" />
+                    <Stop offset="100%" stopColor="rgba(60, 26, 26, 0)" />
+                  </SvgRadialGradient>
+                </Defs>
 
-{heroActions.map((action, index) => {
-  const slot = SLOT_LAYOUT[index] ?? SLOT_LAYOUT[0]
-  const { x, y } = getOrbOffset(slot.angle, slot.distance)
+                {heroActions.map((action, index) => {
+                  const slot = SLOT_LAYOUT[index] ?? SLOT_LAYOUT[0]
+                  const { x, y } = getOrbOffset(slot.angle, slot.distance)
 
-  const bodyPath = getCurvedConnectorPath(
-    x,
-    y,
-    CENTER_RADIUS - 8,
-    SATELLITE_RADIUS - 6,
-    12,
-    index === 0 ? 4 : index === 1 ? -4 : index === 2 ? -4 : 4,
-  )
+                  const bodyPath = getCurvedConnectorPath(
+                    x,
+                    y,
+                    CENTER_RADIUS - 8,
+                    SATELLITE_RADIUS - 6,
+                    12,
+                    [4, -4, 4, -4, 0][index] ?? 0,
+                  )
 
-  const innerHighlightPath = getCurvedConnectorPath(
-    x,
-    y,
-    CENTER_RADIUS - 10,
-    SATELLITE_RADIUS - 8,
-    6,
-    index === 0 ? 3 : index === 1 ? -3 : index === 2 ? -3 : 3,
-  )
+                  const innerHighlightPath = getCurvedConnectorPath(
+                    x,
+                    y,
+                    CENTER_RADIUS - 10,
+                    SATELLITE_RADIUS - 8,
+                    6,
+                    [3, -3, 3, -3, 0][index] ?? 0,
+                  )
 
-  return (
-    <React.Fragment key={`connector-${action.id}`}>
-      <Path
-        d={bodyPath}
-        fill="url(#connectorBody)"
-        stroke="rgba(74, 58, 58, 0.14)"
-        strokeWidth={0.65}
-        transform={`translate(${CANVAS_SIZE / 2}, ${CANVAS_SIZE / 2})`}
-      />
-      <Path
-        d={innerHighlightPath}
-        fill="url(#connectorHighlight)"
-        opacity={0.72}
-        transform={`translate(${CANVAS_SIZE / 2}, ${CANVAS_SIZE / 2})`}
-      />
-    </React.Fragment>
-  )
-})}
-          </Svg>
-        </AnimatedView>
+                  return (
+                    <React.Fragment key={`connector-${action.id}`}>
+                      <Path
+                        d={bodyPath}
+                        fill="url(#connectorBody)"
+                        stroke="rgba(74, 58, 58, 0.14)"
+                        strokeWidth={0.65}
+                        transform={`translate(${CANVAS_SIZE / 2}, ${CANVAS_SIZE / 2})`}
+                      />
+                      <Path
+                        d={innerHighlightPath}
+                        fill="url(#connectorHighlight)"
+                        opacity={0.72}
+                        transform={`translate(${CANVAS_SIZE / 2}, ${CANVAS_SIZE / 2})`}
+                      />
+                    </React.Fragment>
+                  )
+                })}
+              </Svg>
+            </AnimatedView>
 
-        <AnimatedView style={[styles.centerWrap, centerPulseStyle]}>
-          <View style={styles.centerOuterGlow}>
-            <GlowBlob size={162} color="#95A5FF" opacity={0.45} />
-          </View>
+{heroActions.map((action, index) => (
+  <SatelliteOrb
+    key={action.id}
+    action={action}
+    index={index}
+    slot={SLOT_LAYOUT[index] ?? SLOT_LAYOUT[0]}
+    reducedMotion={reducedMotion}
+    orbitRotation={orbitRotation}
+  />
+))}
+          </AnimatedView>
 
-          <LinearGradient
-            colors={["rgba(255,255,255,0.22)", "rgba(255,255,255,0.06)", "rgba(0,0,0,0.2)"]}
-            start={{ x: 0.12, y: 0.06 }}
-            end={{ x: 0.88, y: 1 }}
-            style={styles.centerShell}
-          >
+          <AnimatedView style={[styles.centerWrap, centerPulseStyle]}>
+            <View style={styles.centerOuterGlow}>
+              <GlowBlob size={162} color="#95A5FF" opacity={0.45} />
+            </View>
+
             <LinearGradient
-              colors={["#d7c9dd", "#79478c", "#0d1122"]}
-              start={{ x: 0.18, y: 0.12 }}
-              end={{ x: 0.82, y: 1 }}
-              style={styles.centerCore}
+              colors={["rgba(255,255,255,0.22)", "rgba(255, 255, 255, 0.06)", "rgba(169, 162, 172, 0.2)"]}
+              start={{ x: 0.12, y: 0.06 }}
+              end={{ x: 0.88, y: 1 }}
+              style={styles.centerShell}
             >
-              <View style={styles.centerTopHighlight} />
-              <AnimatedView style={[styles.centerBlobWrap, centerBlobStyle]}>
-                <GlowBlob size={86} color="#fadcff" opacity={0.88} />
-              </AnimatedView>
-              <CenterSymbol />
+              <LinearGradient
+                colors={["#d650be", "#7a3c92", "#8320b9"]}
+                start={{ x: 0.18, y: 0.12 }}
+                end={{ x: 0.82, y: 1 }}
+                style={styles.centerCore}
+              >
+                <View
+                  style={[
+                    styles.centerTopHighlight,
+                    {
+                      transform: [{ rotate: "-15deg" }, { translateX: -2 }],
+                    },
+                  ]}
+                />
+                <AnimatedView style={[styles.centerBlobWrap, centerBlobStyle]}>
+                  <GlowBlob size={86} color="#fadcff" opacity={0.88} />
+                </AnimatedView>
+                <CenterSymbol />
+              </LinearGradient>
             </LinearGradient>
-          </LinearGradient>
-        </AnimatedView>
-
-        {heroActions.map((action, index) => (
-          <SatelliteOrb
-            key={action.id}
-            action={action}
-            index={index}
-            slot={SLOT_LAYOUT[index] ?? SLOT_LAYOUT[0]}
-            reducedMotion={reducedMotion}
-          />
-        ))}
-      </View>
+          </AnimatedView>
+        </View>
+      </GestureDetector>
     </View>
+    </GestureHandlerRootView>
   )
 }
 
 const styles = StyleSheet.create({
   root: {
     width: "100%",
+    height: '100%',
     alignItems: "center",
     justifyContent: "center",
   },
@@ -628,6 +752,13 @@ const styles = StyleSheet.create({
     height: CANVAS_SIZE,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  orbitLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 8,
   },
 
   connectorLayer: {
@@ -675,20 +806,19 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2C376B",
+    backgroundColor: "#66297e",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
 
   centerTopHighlight: {
     position: "absolute",
-    top: 7,
+    top: 4,
     left: 10,
-    right: 10,
-    height: 40,
-    borderTopLeftRadius: 999,
-    borderTopRightRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.26)",
+    right: 30,
+    height: 20,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
   },
 
   centerBlobWrap: {
@@ -705,7 +835,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 0,
     borderColor: "rgba(255,255,255,0.82)",
-    // backgroundColor: "rgba(10,12,22,0.16)",
   },
 
   satelliteWrap: {
@@ -750,16 +879,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  satelliteHighlightOverlay: {
+  ...StyleSheet.absoluteFillObject,
+  alignItems: "stretch",
+  justifyContent: "flex-start",
+},
 
   satelliteTopHighlight: {
     position: "absolute",
-    top: 6,
+    top: 0,
     left: 7,
-    right: 7,
-    height: 18,
-    borderTopLeftRadius: 999,
-    borderTopRightRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    right: 30,
+    height: 15,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+      transform: [{ rotate: "-15deg" }, { translateX: -2 }],
+
   },
 
   satelliteBlobWrap: {
