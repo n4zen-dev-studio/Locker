@@ -264,7 +264,7 @@ function StackCard(props: StackCardProps) {
       <LinearGradient
         colors={
           isActive
-            ? ["rgba(255, 179, 127, 0.34)", "rgba(101, 53, 84, 0.18)", "rgba(13, 12, 18, 0.92)"]
+            ? ["rgba(121, 72, 156, 0.55)", "rgba(144, 64, 116, 0.18)", "rgba(13, 12, 18, 0.92)"]
             : ["rgba(255,255,255,0.08)", "rgba(28, 26, 34, 0.08)", "rgba(13, 12, 18, 0.84)"]
         }
         start={{ x: 0, y: 0 }}
@@ -472,9 +472,9 @@ const $orbInner: ThemedStyle<ViewStyle> = () => ({
   width: 126,
   height: 126,
   borderRadius: 63,
-  backgroundColor: "rgba(140, 134, 134, 0.07)",
+  backgroundColor: "rgba(114, 95, 95, 0.07)",
   borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.08)",
+  borderColor: "rgba(255, 255, 255, 0.03)",
 });
 
 const $focusTitle: ThemedStyle<TextStyle> = ({ colors }) => ({

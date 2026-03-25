@@ -4,6 +4,7 @@ import { Pressable, StyleProp, TextStyle, View, ViewStyle } from "react-native"
 import { Text } from "@/components/Text"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { Ionicons } from '@expo/vector-icons'
 
 type GlowFabProps = {
   label?: string
@@ -22,7 +23,13 @@ export const GlowFab: FC<GlowFabProps> = ({ label = "+", onPress, onLongPress, s
     >
       <View style={themed($glow)} />
       <Text preset="semiBold" style={themed($label)}>
-        {label}
+         <Ionicons
+              name={"arrow-up"}
+              size={18}
+              color={'#fff'}
+              style={{ paddingVertical: 5 }}
+            /> 
+        {/* {label} */}
       </Text>
     </Pressable>
   )
