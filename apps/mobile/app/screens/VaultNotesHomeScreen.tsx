@@ -41,7 +41,11 @@ import { getRemoteVaultId, getRemoteVaultName } from "@/locker/storage/remoteVau
 import { getMeta } from "@/locker/storage/vaultMetaRepo";
 import { requestSync } from "@/locker/sync/syncCoordinator";
 import { getSyncStatus } from "@/locker/sync/syncEngine";
-import { getVaultItemTypeFromMime, isSensitiveClassification } from "@/locker/vault/types";
+import {
+  getVaultItemTypeFromMime,
+  getVaultItemTypeFromImportType,
+  isSensitiveClassification,
+} from "@/locker/vault/types";
 import type { VaultStackScreenProps } from "@/navigators/navigationTypes";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
@@ -49,6 +53,7 @@ import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 import { Lock } from 'lucide-react-native'
 import { Ionicons } from "@expo/vector-icons"
 import { GlowFab } from "@/components/GlowFab";
+import { VaultLockBackground } from "@/components/VaultLockBackground";
 
 export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = function VaultNotesHomeScreen(props) {
   const { navigation } = props;
@@ -220,20 +225,29 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
     const list: VaultListItem[] = [];
     for (const note of noteMap.values()) {
       const itemSyncStatus: "cloud" | "local" = note.vaultId ? "cloud" : "local";
+      const primaryAttachment = (note.attachments ?? []).find(
+        (attachment) => attachment.id === note.primaryAttachmentId,
+      ) ?? note.attachments?.[0];
       list.push({
         id: `note:${note.id}`,
         noteId: note.id,
-        type: "note",
+        type: note.itemType ?? "note",
         title: note.title || "Untitled",
         preview: hideSensitivePreviews && isSensitiveClassification(note.classification)
           ? `Preview hidden for ${note.classification}`
-          : note.body,
+          : note.itemType === "voice"
+            ? `Voice recording${note.voiceDurationMs ? ` · ${Math.round(note.voiceDurationMs / 1000)}s` : ""}`
+            : note.itemType && note.itemType !== "note"
+              ? primaryAttachment?.mime ?? "Encrypted file"
+            : note.body,
         updatedAt: note.updatedAt,
         createdAt: note.createdAt,
         classification: note.classification,
         deleted: !!note.deletedAt,
         syncStatus: itemSyncStatus,
       });
+
+      if ((note.itemType ?? "note") !== "note") continue;
 
       for (const attachment of note.attachments ?? []) {
         list.push({
@@ -265,7 +279,8 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         if (filter === "notes") return item.type === "note";
         if (filter === "images") return item.type === "image";
         if (filter === "pdfs") return item.type === "pdf";
-        if (filter === "files") return item.type === "file";
+        if (filter === "files") return item.type === "doc";
+        if (filter === "voices") return item.type === "voice";
         if (filter === "sensitive") return isSensitiveClassification(item.classification);
         if (filter === "recent") {
           return Date.now() - new Date(item.updatedAt).getTime() <= RECENT_WINDOW_MS;
@@ -299,7 +314,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         icon: "image" as const,
         angle: -45,
         distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "image" }),
+        onPress: () => navigation.navigate("VaultNote", { importType: "image", createType: 'image' }),
       },
       {
         id: "import-pdf",
@@ -307,7 +322,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         icon: "pdf" as const,
         angle: 135,
         distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "pdf" }),
+        onPress: () => navigation.navigate("VaultNote", { importType: "pdf", createType: 'pdf'  }),
       },
       {
         id: "import-file",
@@ -315,15 +330,15 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         icon: "file" as const,
         angle: 45,
         distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "file" }),
+        onPress: () => navigation.navigate("VaultNote", { importType: "file",  createType: 'doc' }),
       },
       {
         id: "voice",
-        label: "Import Voice Recording",
+        label: "Secure Voice",
         icon: "voice" as const,
         angle: 45,
         distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "file" }),
+        onPress: () => navigation.navigate("VaultNote", { createType: getVaultItemTypeFromImportType("voice") }),
       },
     ],
     [navigation],
@@ -331,7 +346,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
 
   const handleOpenVaultItem = useCallback(
     (item: VaultListItem) => {
-      navigation.navigate("VaultNote", { noteId: item.noteId });
+      navigation.navigate("VaultNote", { noteId: item.noteId, attachmentId: item.attachmentId });
     },
     [navigation],
   );
@@ -346,6 +361,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
 
   return (
     <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])} systemBarStyle="light">
+      {/* <VaultLockBackground reducedMotion={reducedMotion} /> */}
       <VaultHubBackground reducedMotion={reducedMotion} />
 
       <ScrollView
