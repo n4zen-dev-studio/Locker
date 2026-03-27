@@ -386,7 +386,7 @@ refreshControl={
                 Locker
               </Text> */}
                <Text size="xxs" style={themed($eyebrow)}>
-                 {activeVaultId ? "Personal cloud vault" : "Local-only vault"}
+                 {activeVaultId ? "Synced vault" : "Local-only vault"}
               </Text>
               <Text preset="heading" style={themed($vaultNameText)}>
                 {activeVaultName ?? "Personal Vault"}

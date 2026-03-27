@@ -1,5 +1,5 @@
-import { FC, useCallback, useEffect, useState } from "react"
-import { Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
+import { FC, useCallback, useMemo, useState } from "react"
+import { Pressable, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
 import { Screen } from "@/components/Screen"
@@ -11,12 +11,14 @@ import { vaultSession } from "@/locker/session"
 import { getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
 import { getRemoteVaultKey, setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { randomBytes } from "@/locker/crypto/random"
-import { bytesToBase64, utf8ToBytes } from "@/locker/crypto/encoding"
-import { fetchJson, getApiBaseUrl } from "@/locker/net/apiClient"
-import { encryptV1 } from "@/locker/crypto/aead"
-import { sha256Hex } from "@/locker/crypto/sha"
+import { fetchJson } from "@/locker/net/apiClient"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { putAndVerifySyncKeyCheck } from "@/locker/sync/syncKeyCheck"
+import {
+  buildWrappedVaultKeyPayload,
+  formatPairingCode,
+  generatePairingCode,
+} from "@/locker/pairing/pairingCode"
 
 export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> = function VaultPairDeviceScreen(
   props,
@@ -25,58 +27,59 @@ export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> =
   const { themed } = useAppTheme()
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
-  const [payload, setPayload] = useState("")
+  const [pairingCode, setPairingCode] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [expiresAt, setExpiresAt] = useState<string | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
 
-  const buildPayload = useCallback(async () => {
+  const formattedCode = useMemo(() => formatPairingCode(pairingCode), [pairingCode])
+
+  const buildPairingCode = useCallback(async () => {
     setError(null)
-    const vaultId = getRemoteVaultId()
-    if (!vaultId) {
-      setError("Select an active remote vault first")
-      return
-    }
+    setStatus(null)
+    try {
+      const vaultId = getRemoteVaultId()
+      if (!vaultId) {
+        setError("Set up vault sync on this device first")
+        return
+      }
 
-    let rvk = await getRemoteVaultKey(vaultId)
-    if (!rvk) {
-      rvk = randomBytes(32)
-      await setRemoteVaultKey(vaultId, rvk)
-      await uploadSyncKeyCheck(vaultId, rvk)
-    }
+      let rvk = await getRemoteVaultKey(vaultId)
+      if (!rvk) {
+        rvk = randomBytes(32)
+        await setRemoteVaultKey(vaultId, rvk)
+        await uploadSyncKeyCheck(vaultId, rvk)
+      }
 
-    const data = {
-      t: "locker-pair-v1",
-      apiBase: getApiBaseUrl(),
-      vaultId,
-      rvkB64: bytesToBase64(rvk),
-      createdAt: new Date().toISOString(),
+      const nextCode = generatePairingCode()
+      const wrappedVaultKeyB64 = buildWrappedVaultKeyPayload({
+        pairingCode: nextCode,
+        vaultId,
+        rvk,
+      })
+
+      const data = await fetchJson<{ pairingCode: string; expiresAt: string }>(
+        `/v1/vaults/${vaultId}/pairing-codes`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            pairingCode: nextCode,
+            wrappedVaultKeyB64,
+          }),
+        },
+      )
+
+      setPairingCode(data.pairingCode)
+      setExpiresAt(data.expiresAt)
+      setStatus("Pairing code ready. Enter it on your other linked device.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate pairing code")
     }
-    setPayload(JSON.stringify(data))
-    console.log("Generated pairing payload", JSON.stringify(data))
   }, [])
 
   const uploadSyncKeyCheck = async (vaultId: string, rvk: Uint8Array) => {
     await putAndVerifySyncKeyCheck(vaultId, rvk)
   }
-
-  // const uploadSyncKeyCheck = async (vaultId: string, rvk: Uint8Array) => {
-  //   const payload = {
-  //     v: 1,
-  //     type: "sync-key-check",
-  //     vaultId,
-  //     createdAt: new Date().toISOString(),
-  //   }
-  //   const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(payload)))
-  //   const bytes = utf8ToBytes(JSON.stringify(envelope))
-  //   const sha256 = sha256Hex(bytes)
-  //   await fetchJson<{ ok: boolean }>(
-  //     `/v1/vaults/${vaultId}/blobs/sync-key-check-v1?sha256=${sha256}`,
-  //     {
-  //       method: "PUT",
-  //       headers: { "content-type": "application/octet-stream" },
-  //       body: bytes,
-  //     },
-  //   )
-  // }
 
   useFocusEffect(
     useCallback(() => {
@@ -84,37 +87,41 @@ export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> =
         navigation.replace("VaultLocked")
         return
       }
-      void buildPayload()
-    }, [navigation, buildPayload]),
+      void buildPairingCode()
+    }, [navigation, buildPairingCode]),
   )
-
-  useEffect(() => {
-    void buildPayload()
-  }, [buildPayload])
 
   return (
     <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
       <View style={themed($header)}>
         <Text preset="heading" style={themed($title)}>
-          Pair New Device
+          Link Another Device
         </Text>
         <Text preset="subheading" style={themed($subtitle)}>
-          Share this pairing payload
+          Generate a one-time code for another one of your devices
         </Text>
       </View>
 
       {error ? <Text style={themed($errorText)}>{error}</Text> : null}
+      {status ? <Text style={themed($statusText)}>{status}</Text> : null}
 
-      <TextInput
-        value={payload}
-        editable={false}
-        multiline
-        style={themed($payload)}
-      />
+      <View style={themed($payload)}>
+        <Text preset="heading" style={themed($codeText)}>
+          {formattedCode || "---- ----"}
+        </Text>
+        <Text style={themed($codeHelpText)}>
+          Link the other device to the same Locker account, then enter this code within 10 minutes.
+        </Text>
+        {expiresAt ? (
+          <Text style={themed($codeHelpText)}>
+            Expires: {new Date(expiresAt).toLocaleTimeString()}
+          </Text>
+        ) : null}
+      </View>
 
-      <Pressable style={themed($secondaryButton)} onPress={buildPayload}>
+      <Pressable style={themed($secondaryButton)} onPress={buildPairingCode}>
         <Text preset="bold" style={themed($secondaryButtonText)}>
-          Regenerate
+          Generate New Code
         </Text>
       </Pressable>
 
@@ -150,12 +157,25 @@ const $payload: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
   backgroundColor: "rgba(255, 255, 255, 0.08)",
   borderRadius: 14,
   padding: spacing.md,
-  color: colors.palette.neutral100,
-  minHeight: 200,
-  textAlignVertical: "top",
+  minHeight: 180,
+  justifyContent: "center",
+  alignItems: "center",
   borderWidth: 1,
   borderColor: "rgba(255, 255, 255, 0.15)",
   marginBottom: spacing.md,
+})
+
+const $codeText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral100,
+  letterSpacing: 4,
+  marginBottom: 16,
+  textAlign: "center",
+})
+
+const $codeHelpText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral300,
+  textAlign: "center",
+  marginBottom: 8,
 })
 
 const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -183,5 +203,10 @@ const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
   color: colors.palette.angry500,
+  marginBottom: spacing.md,
+})
+
+const $statusText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
+  color: colors.palette.neutral300,
   marginBottom: spacing.md,
 })

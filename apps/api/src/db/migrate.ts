@@ -153,12 +153,23 @@ export function runMigrations(db: Database.Database): void {
       createdAt TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS device_pairing_codes (
+      code TEXT PRIMARY KEY,
+      vaultId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      wrappedVaultKeyB64 TEXT NOT NULL,
+      expiresAt TEXT NOT NULL,
+      usedAt TEXT NULL,
+      createdAt TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_vault_id ON audit_events (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_events (userId, id);
     CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens (userId, deviceId);
     CREATE INDEX IF NOT EXISTS idx_push_events_created ON push_events (createdAt, id);
+    CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_user ON device_pairing_codes (userId, expiresAt);
   `)
 
   try {

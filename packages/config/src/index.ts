@@ -58,7 +58,7 @@ export function getApiEnv(): ApiEnv {
     ADMIN_PURGE_ENABLED: parseBool(process.env.ADMIN_PURGE_ENABLED, false),
     RATE_LIMIT_ENABLED: parseBool(process.env.RATE_LIMIT_ENABLED, true),
     RATE_LIMIT_PER_MINUTE: Number(process.env.RATE_LIMIT_PER_MINUTE ?? 120),
-    MAX_BLOB_BYTES: Number(process.env.MAX_BLOB_BYTES ?? 5_000_000),
+    MAX_BLOB_BYTES: Number(process.env.MAX_BLOB_BYTES ?? 20_000_000),
     PUSH_ENABLED: parseBool(process.env.PUSH_ENABLED, true),
     PUSH_PROVIDER: process.env.PUSH_PROVIDER === "expo" ? "expo" : "mock",
     EXPO_PUSH_ENDPOINT: process.env.EXPO_PUSH_ENDPOINT || "https://exp.host/--/api/v2/push/send",

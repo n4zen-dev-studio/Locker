@@ -12,14 +12,14 @@ type Props = {
   title: string
   subtitle: string
   itemType: VaultItemType
-  role: string
+  scopeLabel: string
   canExport: boolean
   onExport: () => void
   icon: React.ReactNode
 }
 
 export function HeroCard(props: Props) {
-  const { themed, title, subtitle, itemType, role, canExport, onExport, icon } = props
+  const { themed, title, subtitle, itemType, scopeLabel, canExport, onExport, icon } = props
   return (
     <View style={themed($heroCard)}>
       <View style={themed($heroTopRow)}>
@@ -30,7 +30,7 @@ export function HeroCard(props: Props) {
         <View style={themed($heroControls)}>
           <View style={themed($rolePill)}>
             <LockKeyhole size={12} color="#FCE7FF" />
-            <Text style={themed($rolePillText)}>{role}</Text>
+            <Text style={themed($rolePillText)}>{scopeLabel}</Text>
           </View>
           <Pressable onPress={onExport} disabled={!canExport} style={themed($downloadPill)}>
             <Download size={14} color="#0d0a14" />

@@ -55,8 +55,6 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     () => remoteVaults.find((vault) => vault.id === vaultId) ?? null,
     [remoteVaults, vaultId],
   )
-  const legacyVaultCount = Math.max(remoteVaults.length - (activeVault ? 1 : 0), 0)
-
   const refreshToken = useCallback(async () => {
     const token = await getToken()
     setTokenPresent(!!token)
@@ -91,7 +89,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         const preferred = vaults[0]
         setRemoteVaultId(preferred.id, preferred.name)
         setVaultIdState(preferred.id)
-        setStatus("Using the existing personal vault for this account on this device.")
+        setStatus("Using your linked vault on this device.")
       } else {
         clearRemoteVaultId()
         setVaultIdState(null)
@@ -135,7 +133,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
       const preferred = remoteVaults[0]
       setRemoteVaultId(preferred.id, preferred.name)
       setVaultIdState(preferred.id)
-      setStatus("Using the existing personal vault on your account.")
+      setStatus("Using your linked vault.")
       return
     }
 
@@ -147,7 +145,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
       setRemoteVaultId(data.vault.id, data.vault.name)
       setVaultIdState(data.vault.id)
       setRemoteVaults([data.vault])
-      setStatus("Personal vault sync enabled.")
+      setStatus("Vault sync enabled for this account.")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create personal vault"
       setError(message)
@@ -182,8 +180,8 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
 
   const handleDeleteRemote = () => {
     Alert.alert(
-      "Delete Personal Vault",
-      "This deletes the synced personal vault and its cloud state. Local encrypted content stays on this device until you remove it separately.",
+      "Delete Synced Vault",
+      "This deletes the synced vault and its cloud state. Local encrypted content stays on this device until you remove it separately.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -206,7 +204,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
               setOutbox([])
               setVaultIdState(null)
               setRemoteVaults([])
-              setStatus("Personal vault deleted from the sync service.")
+              setStatus("Synced vault deleted from the service.")
             } catch (err) {
               const message = err instanceof Error ? err.message : "Delete failed"
               setError(message)
@@ -224,7 +222,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
           Sync Setup
         </Text>
         <Text preset="subheading" style={themed($subtitle)}>
-          One personal vault, encrypted before sync.
+          One vault, synced only across your linked devices.
         </Text>
       </View>
 
@@ -236,7 +234,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         <Text style={themed($metaText)}>Token: {tokenPresent ? "present" : "missing"}</Text>
         <Text style={themed($metaText)}>Device ID: {account?.device.id ?? "n/a"}</Text>
         <Text style={themed($metaText)}>User: {account?.user.email ?? account?.user.id ?? "n/a"}</Text>
-        <Text style={themed($metaText)}>Personal Vault ID: {vaultId ?? "not configured"}</Text>
+        <Text style={themed($metaText)}>Vault ID: {vaultId ?? "not configured"}</Text>
 
         {!account ? (
           <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultLinkDevice")}>
@@ -256,38 +254,27 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
       {account ? (
         <View style={themed($card)}>
           <Text preset="bold" style={themed($sectionTitle)}>
-            Personal Vault
+            Your Vault
           </Text>
           {isLoadingVaults ? <Text style={themed($metaText)}>Loading cloud vault state…</Text> : null}
           {activeVault ? (
             <>
               <Text style={themed($bodyText)}>
-                Sync is connected to {activeVault.name}. This is the only vault exposed in the active mobile flow.
+                Sync is connected to {activeVault.name}. This is the only vault used by the mobile app.
               </Text>
               <Text style={themed($metaText)}>Vault ID: {activeVault.id}</Text>
             </>
           ) : (
             <Text style={themed($bodyText)}>
-              No personal vault is configured yet. Create one to enable encrypted sync for this device.
+              No vault is configured yet. Create one to enable encrypted sync across your devices.
             </Text>
           )}
 
           <Pressable style={themed($primaryButton)} onPress={handleCreatePersonalVault}>
             <Text preset="bold" style={themed($primaryButtonText)}>
-              {activeVault ? "Use Existing Personal Vault" : "Create Personal Vault"}
+              {activeVault ? "Use This Vault" : "Create Vault"}
             </Text>
           </Pressable>
-
-          {legacyVaultCount > 0 ? (
-            <View style={themed($warningCard)}>
-              <Text preset="bold" style={themed($warningTitle)}>
-                Legacy Vaults Detected
-              </Text>
-              <Text style={themed($warningText)}>
-                This account still has {legacyVaultCount} additional vault{legacyVaultCount === 1 ? "" : "s"} from older flows. They remain untouched, but switching between vaults is no longer exposed in the current app.
-              </Text>
-            </View>
-          ) : null}
         </View>
       ) : null}
 
@@ -320,13 +307,13 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
 
           <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultPairDevice")}>
             <Text preset="bold" style={themed($secondaryButtonText)}>
-              Show Pairing QR
+              Generate Pairing Code
             </Text>
           </Pressable>
 
           <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultImportPairing")}>
             <Text preset="bold" style={themed($secondaryButtonText)}>
-              Import Pairing
+              Enter Pairing Code
             </Text>
           </Pressable>
 

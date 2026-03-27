@@ -250,7 +250,7 @@ async function ensureSyncKeyCheck(
     if (isUnauthorized(err)) throw new Error("Session expired. Please link again.")
     if (isForbidden(err)) throw new Error("Access revoked for this vault.")
     if (isNotFound(err)) {
-      throw new Error("Sync key not initialized for this vault. Create sync key on the owner device.")
+      throw new Error("Sync key not initialized for this vault. Generate a pairing code on another linked device.")
     }
     throw err
   }
