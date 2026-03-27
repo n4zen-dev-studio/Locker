@@ -1,21 +1,36 @@
-import * as FileSystem from "expo-file-system"
+import * as FileSystem from "expo-file-system/legacy"
 import { base64ToBytes, bytesToBase64 } from "@/locker/crypto/encoding"
 
-const ROOT_DIR = `${FileSystem.documentDirectory ?? ""}locker/vaults`
+const fileSystemCompat = FileSystem as any
+const STORAGE_UNAVAILABLE_MESSAGE = "Attachment storage is unavailable on this platform."
 
-function attachmentDir(vaultId: string): string {
-  return `${ROOT_DIR}/${vaultId}/att`
+export class AttachmentCacheUnavailableError extends Error {
+  constructor(message = STORAGE_UNAVAILABLE_MESSAGE) {
+    super(message)
+    this.name = "AttachmentCacheUnavailableError"
+  }
 }
 
-function attachmentPath(vaultId: string, attId: string): string {
-  return `${attachmentDir(vaultId)}/${attId}.bin`
+function resolveWritableRootDirectory(): string | null {
+  const root = fileSystemCompat.documentDirectory ?? fileSystemCompat.cacheDirectory ?? null
+  if (!root || typeof root !== "string") return null
+  return root.endsWith("/") ? root : `${root}/`
+}
+
+function attachmentDir(vaultId: string, rootDir: string): string {
+  return `${rootDir}locker/vaults/${vaultId}/att`
+}
+
+function attachmentPath(vaultId: string, attId: string, rootDir: string): string {
+  return `${attachmentDir(vaultId, rootDir)}/${attId}.bin`
 }
 
 async function ensureDir(vaultId: string): Promise<string> {
-  if (!FileSystem.documentDirectory) {
-    throw new Error("Attachment cache unavailable on this platform")
+  const rootDir = resolveWritableRootDirectory()
+  if (!rootDir) {
+    throw new AttachmentCacheUnavailableError()
   }
-  const dir = attachmentDir(vaultId)
+  const dir = attachmentDir(vaultId, rootDir)
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true })
   return dir
 }
@@ -28,7 +43,7 @@ export async function writeEncryptedAttachment(
   const dir = await ensureDir(vaultId)
   const path = `${dir}/${attId}.bin`
   await FileSystem.writeAsStringAsync(path, bytesToBase64(bytes), {
-    encoding: FileSystem.EncodingType.Base64,
+    encoding: fileSystemCompat.EncodingType.Base64,
   })
   return path
 }
@@ -37,29 +52,34 @@ export async function readEncryptedAttachment(
   vaultId: string,
   attId: string,
 ): Promise<Uint8Array | null> {
-  if (!FileSystem.documentDirectory) return null
-  const path = attachmentPath(vaultId, attId)
+  const rootDir = resolveWritableRootDirectory()
+  if (!rootDir) return null
+  const path = attachmentPath(vaultId, attId, rootDir)
   const info = await FileSystem.getInfoAsync(path)
   if (!info.exists) return null
   const raw = await FileSystem.readAsStringAsync(path, {
-    encoding: FileSystem.EncodingType.Base64,
+    encoding: fileSystemCompat.EncodingType.Base64,
   })
   return base64ToBytes(raw)
 }
 
 export async function hasEncryptedAttachment(vaultId: string, attId: string): Promise<boolean> {
-  if (!FileSystem.documentDirectory) return false
-  const path = attachmentPath(vaultId, attId)
+  const rootDir = resolveWritableRootDirectory()
+  if (!rootDir) return false
+  const path = attachmentPath(vaultId, attId, rootDir)
   const info = await FileSystem.getInfoAsync(path)
   return info.exists
 }
 
 export async function deleteEncryptedAttachment(vaultId: string, attId: string): Promise<void> {
-  if (!FileSystem.documentDirectory) return
-  const path = attachmentPath(vaultId, attId)
+  const rootDir = resolveWritableRootDirectory()
+  if (!rootDir) return
+  const path = attachmentPath(vaultId, attId, rootDir)
   await FileSystem.deleteAsync(path, { idempotent: true })
 }
 
-export function getAttachmentCachePath(vaultId: string, attId: string): string {
-  return attachmentPath(vaultId, attId)
+export function getAttachmentCachePath(vaultId: string, attId: string): string | null {
+  const rootDir = resolveWritableRootDirectory()
+  if (!rootDir) return null
+  return attachmentPath(vaultId, attId, rootDir)
 }
