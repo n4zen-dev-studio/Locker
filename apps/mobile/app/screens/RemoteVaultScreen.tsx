@@ -1,104 +1,90 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react"
-import { Alert, Pressable, TextStyle, View, ViewStyle } from "react-native"
+import { Alert, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
+import { DeviceDTO, VaultDTO } from "@locker/types"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import { clearVaultAttachmentCache } from "@/locker/attachments/attachmentCache"
+import { getAccount } from "@/locker/storage/accountRepo"
+import { fetchJson } from "@/locker/net/apiClient"
+import { clearRemoteVaultKey, getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
+import { provisionVaultForCurrentUser } from "@/locker/keys/userKeyApi"
+import {
+  getRemoteVaultId,
+  listRemoteVaults,
+  setRemoteVaultCatalog,
+  setRemoteVaultId,
+  setVaultEnabledOnDevice,
+} from "@/locker/storage/remoteVaultRepo"
+import { requestSync, cancelVault } from "@/locker/sync/syncCoordinator"
+import { getSyncStatus } from "@/locker/sync/syncEngine"
+import { clearVaultSyncState } from "@/locker/sync/syncStateRepo"
+import { removeNotesForVault } from "@/locker/storage/notesRepo"
+import { clearSearchIndex } from "@/locker/search/searchRepo"
+import { vaultSession } from "@/locker/session"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import { vaultSession } from "@/locker/session"
-import { fetchJson, getApiBaseUrl } from "@/locker/net/apiClient"
-import { getAccount } from "@/locker/storage/accountRepo"
-import {
-  clearRemoteVaultId,
-  getRemoteVaultId,
-  setRemoteVaultId,
-} from "@/locker/storage/remoteVaultRepo"
-import { getToken } from "@/locker/auth/tokenStore"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
-import { VaultDTO } from "@locker/types"
-import { getSyncStatus, setNetworkOnline } from "@/locker/sync/syncEngine"
-import { requestSync } from "@/locker/sync/syncCoordinator"
-import {
-  clearNoteRemoteMeta,
-  clearTombstonesForVault,
-  getState,
-  setLastCursor,
-  setOutbox,
-} from "@/locker/sync/syncStateRepo"
-import { clearRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
-import { listNoteIds } from "@/locker/storage/notesRepo"
+import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 
-const PERSONAL_VAULT_NAME = "Personal Vault"
+const PERSONAL_VAULT_NAME = "Personal"
 
-export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = function RemoteVaultScreen(
-  props,
-) {
+export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = function RemoteVaultScreen(props) {
   const { navigation } = props
   const { themed } = useAppTheme()
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
-  const [vaultId, setVaultIdState] = useState<string | null>(getRemoteVaultId())
+  const [vaults, setVaults] = useState<VaultDTO[]>([])
+  const [devices, setDevices] = useState<DeviceDTO[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [syncStatus, setSyncStatus] = useState(() => getSyncStatus())
-  const [offline, setOffline] = useState(false)
-  const [remoteVaults, setRemoteVaults] = useState<VaultDTO[]>([])
-  const [isLoadingVaults, setIsLoadingVaults] = useState(false)
-  const [tokenPresent, setTokenPresent] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [account, setAccount] = useState(() => getAccount())
+  const [currentVaultId, setCurrentVaultId] = useState<string | null>(() => getRemoteVaultId())
+  const [creatingVault, setCreatingVault] = useState(false)
+  const [newVaultName, setNewVaultName] = useState("")
+  const [vaultKeyPresence, setVaultKeyPresence] = useState<Record<string, boolean>>({})
+  const [activeAccessCode, setActiveAccessCode] = useState<{ vaultId: string; code: string; expiresAt: string } | null>(null)
+  const [, setRefreshClock] = useState(0)
 
-  const apiBaseUrl = getApiBaseUrl()
-
-  const activeVault = useMemo(
-    () => remoteVaults.find((vault) => vault.id === vaultId) ?? null,
-    [remoteVaults, vaultId],
-  )
-  const refreshToken = useCallback(async () => {
-    const token = await getToken()
-    setTokenPresent(!!token)
-  }, [])
-
-  const loadRemoteVaults = useCallback(async () => {
+  const refresh = useCallback(async () => {
     const acct = getAccount()
     setAccount(acct)
-    setVaultIdState(getRemoteVaultId())
-
+    setCurrentVaultId(getRemoteVaultId())
     if (!acct) {
-      setIsLoadingVaults(false)
-      setRemoteVaults([])
+      setVaults([])
+      setDevices([])
       return
     }
 
-    setIsLoadingVaults(true)
+    setLoading(true)
     try {
-      const data = await fetchJson<{ vaults: VaultDTO[] }>("/v1/vaults")
-      const vaults = data.vaults || []
-      setRemoteVaults(vaults)
-
-      const storedVaultId = getRemoteVaultId()
-      const storedVault = storedVaultId ? vaults.find((vault) => vault.id === storedVaultId) : null
-      if (storedVault) {
-        setRemoteVaultId(storedVault.id, storedVault.name)
-        setVaultIdState(storedVault.id)
-        return
+      const [vaultData, deviceData] = await Promise.all([
+        fetchJson<{ vaults: VaultDTO[] }>("/v1/vaults"),
+        fetchJson<{ devices: DeviceDTO[] }>("/v1/devices"),
+      ])
+      let nextVaults = vaultData.vaults ?? []
+      if (nextVaults.length === 0) {
+        const created = await fetchJson<{ vault: VaultDTO }>("/v1/vaults", {
+          method: "POST",
+          body: JSON.stringify({ name: PERSONAL_VAULT_NAME }),
+        })
+        await provisionVaultForCurrentUser(created.vault.id)
+        nextVaults = [created.vault]
       }
-
-      if (vaults.length > 0) {
-        const preferred = vaults[0]
-        setRemoteVaultId(preferred.id, preferred.name)
-        setVaultIdState(preferred.id)
-        setStatus("Using your linked vault on this device.")
-      } else {
-        clearRemoteVaultId()
-        setVaultIdState(null)
-      }
+      setVaults(nextVaults)
+      setDevices(deviceData.devices ?? [])
+      setRemoteVaultCatalog(nextVaults)
+      setCurrentVaultId(getRemoteVaultId())
+      const keyStatusEntries = await Promise.all(
+        nextVaults.map(async (vault) => [vault.id, !!(await getRemoteVaultKey(vault.id))] as const),
+      )
+      setVaultKeyPresence(Object.fromEntries(keyStatusEntries))
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load personal vault"
-      setError(message)
+      setError(err instanceof Error ? err.message : "Failed to load account vaults")
     } finally {
-      setIsLoadingVaults(false)
+      setLoading(false)
     }
   }, [])
 
@@ -108,281 +94,382 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         navigation.replace("VaultLocked")
         return
       }
-
-      setSyncStatus(getSyncStatus())
-      void refreshToken()
-      void loadRemoteVaults()
-    }, [navigation, refreshToken, loadRemoteVaults]),
+      void refresh()
+    }, [navigation, refresh]),
   )
 
   useEffect(() => {
-    const timer = setInterval(() => setSyncStatus(getSyncStatus()), 2000)
+    const timer = setInterval(() => setRefreshClock((value) => value + 1), 2000)
     return () => clearInterval(timer)
   }, [])
 
-  const handleCreatePersonalVault = async () => {
+  const currentDevice = useMemo(
+    () => devices.find((device) => device.current) ?? devices.find((device) => device.id === account?.device.id) ?? null,
+    [account?.device.id, devices],
+  )
+
+  const handleCreateVault = useCallback(async () => {
     setError(null)
     setStatus(null)
-
-    if (!account) {
-      setError("Link this device before enabling personal vault sync.")
+    const trimmedName = newVaultName.trim()
+    if (!trimmedName) {
+      setError("Enter a vault name")
       return
     }
-
-    if (remoteVaults.length > 0) {
-      const preferred = remoteVaults[0]
-      setRemoteVaultId(preferred.id, preferred.name)
-      setVaultIdState(preferred.id)
-      setStatus("Using your linked vault.")
-      return
-    }
-
     try {
       const data = await fetchJson<{ vault: VaultDTO }>("/v1/vaults", {
         method: "POST",
-        body: JSON.stringify({ name: PERSONAL_VAULT_NAME }),
+        body: JSON.stringify({ name: trimmedName }),
       })
+      await provisionVaultForCurrentUser(data.vault.id)
+      setStatus(`${data.vault.name} created and ready to sync.`)
+      setVaultEnabledOnDevice(data.vault.id, true, { name: data.vault.name })
       setRemoteVaultId(data.vault.id, data.vault.name)
-      setVaultIdState(data.vault.id)
-      setRemoteVaults([data.vault])
-      setStatus("Vault sync enabled for this account.")
+      setCurrentVaultId(data.vault.id)
+      setCreatingVault(false)
+      setNewVaultName("")
+      await refresh()
+      void requestSync("vault_enabled", data.vault.id)
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create personal vault"
-      setError(message)
+      setError(err instanceof Error ? err.message : "Failed to create vault")
     }
-  }
+  }, [newVaultName, refresh])
 
-  const handleSyncNow = async () => {
-    setError(null)
-    setStatus(null)
-    try {
-      const result = await requestSync("manual", vaultId ?? undefined)
-      if (result?.errors?.length) {
-        setStatus(`Sync finished with ${result.errors.length} error(s): ${result.errors[0].type}`)
-      } else {
-        setStatus(
-          `Sync complete: pushed ${result?.pushed ?? 0}, pulled ${result?.pulled ?? 0}, conflicts ${result?.conflicts ?? 0}`,
-        )
+  const handleGenerateVaultAccessCode = useCallback(
+    async (vault: VaultDTO) => {
+      setError(null)
+      setStatus(null)
+      try {
+        const rvk = await getRemoteVaultKey(vault.id)
+        if (!rvk) {
+          setError(`${vault.name} is not provisioned on this device yet.`)
+          return
+        }
+        const { buildWrappedVaultKeyPayload, generatePairingCode } = await import("@/locker/pairing/pairingCode")
+        const pairingCode = generatePairingCode()
+        const wrappedVaultKeyB64 = buildWrappedVaultKeyPayload({ pairingCode, vaultId: vault.id, rvk })
+        const data = await fetchJson<{ pairingCode: string; expiresAt: string }>(`/v1/vaults/${vault.id}/pairing-codes`, {
+          method: "POST",
+          body: JSON.stringify({ pairingCode, wrappedVaultKeyB64 }),
+        })
+        setActiveAccessCode({ vaultId: vault.id, code: data.pairingCode, expiresAt: data.expiresAt })
+        setStatus(`Access code ready for ${vault.name}.`)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to create access code")
       }
-      setSyncStatus(getSyncStatus())
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Sync failed"
-      setError(message)
-      setSyncStatus(getSyncStatus())
-    }
-  }
+    },
+    [],
+  )
 
-  const toggleOffline = () => {
-    const next = !offline
-    setOffline(next)
-    setNetworkOnline(!next)
-  }
+  const disableVaultLocally = useCallback(async (vault: VaultDTO) => {
+    cancelVault(vault.id)
+    await clearRemoteVaultKey(vault.id)
+    clearVaultSyncState(vault.id)
+    removeNotesForVault(vault.id)
+    clearSearchIndex(vault.id)
+    await clearVaultAttachmentCache(vault.id)
+    setVaultEnabledOnDevice(vault.id, false, { name: vault.name })
+    setCurrentVaultId(getRemoteVaultId())
+  }, [])
 
-  const handleDeleteRemote = () => {
-    Alert.alert(
-      "Delete Synced Vault",
-      "This deletes the synced vault and its cloud state. Local encrypted content stays on this device until you remove it separately.",
-      [
+  const handleDisableVault = useCallback(
+    (vault: VaultDTO) => {
+      if (!account) return
+      Alert.alert(
+        "Remove from this device",
+        `Remove ${vault.name} from this device? Its local key, cached content, and search index will be cleared here.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await fetchJson(`/v1/devices/${account.device.id}/vaults/${vault.id}`, { method: "DELETE" })
+                await disableVaultLocally(vault)
+                setStatus(`${vault.name} removed from this device.`)
+                await refresh()
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to remove vault from this device")
+              }
+            },
+          },
+        ],
+      )
+    },
+    [account, disableVaultLocally, refresh],
+  )
+
+  const handleSyncNow = useCallback(
+    async (vaultId: string) => {
+      setError(null)
+      setStatus(null)
+      try {
+        const result = await requestSync("manual", vaultId)
+        setStatus(
+          `Sync complete for ${vaults.find((vault) => vault.id === vaultId)?.name ?? "vault"}: pushed ${result?.pushed ?? 0}, pulled ${result?.pulled ?? 0}.`,
+        )
+        setRefreshClock((value) => value + 1)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Sync failed")
+      }
+    },
+    [vaults],
+  )
+
+  const handleRemoveDevice = useCallback(
+    (device: DeviceDTO) => {
+      if (!device.id || device.current) return
+      Alert.alert("Remove device", `Remove ${device.name} from your Locker account?`, [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Delete",
+          text: "Remove",
           style: "destructive",
           onPress: async () => {
             try {
-              const token = await getToken()
-              const activeVaultId = getRemoteVaultId()
-              if (!activeVaultId || !token) return
-
-              await fetch(`${apiBaseUrl}/v1/vaults/${activeVaultId}`, {
-                method: "DELETE",
-                headers: { authorization: `Bearer ${token}` },
-              })
-
-              clearRemoteVaultId()
-              clearRemoteVaultKey(activeVaultId)
-              setLastCursor(0)
-              setOutbox([])
-              setVaultIdState(null)
-              setRemoteVaults([])
-              setStatus("Synced vault deleted from the service.")
+              await fetchJson(`/v1/devices/${device.id}`, { method: "DELETE" })
+              setStatus(`${device.name} removed.`)
+              await refresh()
             } catch (err) {
-              const message = err instanceof Error ? err.message : "Delete failed"
-              setError(message)
+              setError(err instanceof Error ? err.message : "Failed to remove device")
             }
           },
         },
-      ],
-    )
-  }
+      ])
+    },
+    [refresh],
+  )
+
+  const handleRequestApproval = useCallback((vault: VaultDTO) => {
+    setStatus(`Approval flow is scaffolded for ${vault.name}; use the vault access code path for now.`)
+  }, [])
 
   return (
     <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
       <View style={themed($header)}>
         <Text preset="heading" style={themed($title)}>
-          Sync Setup
+          Vaults & Devices
         </Text>
         <Text preset="subheading" style={themed($subtitle)}>
-          One vault, synced only across your linked devices.
+          Same-user sync across your devices. Each vault keeps its own key and device availability.
         </Text>
       </View>
-
-      <View style={themed($card)}>
-        <Text preset="bold" style={themed($sectionTitle)}>
-          Connection
-        </Text>
-        <Text style={themed($metaText)}>API Base: {apiBaseUrl}</Text>
-        <Text style={themed($metaText)}>Token: {tokenPresent ? "present" : "missing"}</Text>
-        <Text style={themed($metaText)}>Device ID: {account?.device.id ?? "n/a"}</Text>
-        <Text style={themed($metaText)}>User: {account?.user.email ?? account?.user.id ?? "n/a"}</Text>
-        <Text style={themed($metaText)}>Vault ID: {vaultId ?? "not configured"}</Text>
-
-        {!account ? (
-          <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultLinkDevice")}>
-            <Text preset="bold" style={themed($primaryButtonText)}>
-              Link This Device
-            </Text>
-          </Pressable>
-        ) : null}
-
-        <Pressable style={themed($secondaryButton)} onPress={loadRemoteVaults}>
-          <Text preset="bold" style={themed($secondaryButtonText)}>
-            Refresh Sync State
-          </Text>
-        </Pressable>
-      </View>
-
-      {account ? (
-        <View style={themed($card)}>
-          <Text preset="bold" style={themed($sectionTitle)}>
-            Your Vault
-          </Text>
-          {isLoadingVaults ? <Text style={themed($metaText)}>Loading cloud vault state…</Text> : null}
-          {activeVault ? (
-            <>
-              <Text style={themed($bodyText)}>
-                Sync is connected to {activeVault.name}. This is the only vault used by the mobile app.
-              </Text>
-              <Text style={themed($metaText)}>Vault ID: {activeVault.id}</Text>
-            </>
-          ) : (
-            <Text style={themed($bodyText)}>
-              No vault is configured yet. Create one to enable encrypted sync across your devices.
-            </Text>
-          )}
-
-          <Pressable style={themed($primaryButton)} onPress={handleCreatePersonalVault}>
-            <Text preset="bold" style={themed($primaryButtonText)}>
-              {activeVault ? "Use This Vault" : "Create Vault"}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {account && vaultId ? (
-        <View style={themed($card)}>
-          <Text preset="bold" style={themed($sectionTitle)}>
-            Sync Status
-          </Text>
-          <Text style={themed($metaText)}>State: {syncStatus.state}</Text>
-          <Text style={themed($metaText)}>Queue: {syncStatus.queueSize}</Text>
-          {syncStatus.lastSyncAt ? (
-            <Text style={themed($metaText)}>Last sync: {new Date(syncStatus.lastSyncAt).toLocaleString()}</Text>
-          ) : null}
-          {syncStatus.lastError ? <Text style={themed($errorText)}>{syncStatus.lastError}</Text> : null}
-
-          <Pressable style={themed($primaryButton)} onPress={handleSyncNow}>
-            <Text preset="bold" style={themed($primaryButtonText)}>
-              Sync Now
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={themed($secondaryButton)}
-            onPress={() => navigation.navigate("VaultTabs", { screen: "Vault", params: { screen: "VaultNote" } })}
-          >
-            <Text preset="bold" style={themed($secondaryButtonText)}>
-              New Secure Note
-            </Text>
-          </Pressable>
-
-          <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultPairDevice")}>
-            <Text preset="bold" style={themed($secondaryButtonText)}>
-              Generate Pairing Code
-            </Text>
-          </Pressable>
-
-          <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultImportPairing")}>
-            <Text preset="bold" style={themed($secondaryButtonText)}>
-              Enter Pairing Code
-            </Text>
-          </Pressable>
-
-          <Pressable style={themed($dangerButton)} onPress={handleDeleteRemote}>
-            <Text preset="bold" style={themed($dangerButtonText)}>
-              Delete Personal Vault
-            </Text>
-          </Pressable>
-
-          {__DEV__ ? (
-            <Pressable style={themed($secondaryButton)} onPress={toggleOffline}>
-              <Text preset="bold" style={themed($secondaryButtonText)}>
-                {offline ? "Go Online" : "Toggle Offline"}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-
-      {__DEV__ && account && vaultId ? (
-        <View style={themed($card)}>
-          <Text preset="bold" style={themed($sectionTitle)}>
-            Dev Diagnostics
-          </Text>
-          <Text style={themed($metaText)}>Last cursor: {getState().lastCursor}</Text>
-          <Text style={themed($metaText)}>Queue size: {getState().outbox.length}</Text>
-          <Text style={themed($metaText)}>Last sync: {getState().lastSyncAt ?? "n/a"}</Text>
-          <Text style={themed($metaText)}>Last sync duration: {getState().lastSyncDurationMs ?? 0} ms</Text>
-          <Text style={themed($metaText)}>Changes processed: {getState().lastChangesProcessed ?? 0}</Text>
-          <Text style={themed($metaText)}>Index size: {getState().lastIndexSize ?? 0}</Text>
-          <Text style={themed($metaText)}>Tombstones: {getState().lastTombstonesCount ?? 0}</Text>
-          <Text style={themed($metaText)}>Lamport clock: {getState().lamportClock}</Text>
-          <Pressable
-            style={themed($secondaryButton)}
-            onPress={async () => {
-              listNoteIds(vaultId).forEach((id) => clearNoteRemoteMeta(id))
-              clearTombstonesForVault(vaultId)
-              setLastCursor(0)
-              setOutbox([])
-              await handleSyncNow()
-            }}
-          >
-            <Text preset="bold" style={themed($secondaryButtonText)}>
-              Force Full Rebuild
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
 
       {error ? <Text style={themed($errorText)}>{error}</Text> : null}
       {status ? <Text style={themed($statusText)}>{status}</Text> : null}
 
-      <Pressable style={themed($linkButton)} onPress={() => navigation.goBack()}>
-        <Text preset="bold" style={themed($linkText)}>
-          Back
+      <View style={themed($card)}>
+        <Text preset="bold" style={themed($sectionTitle)}>
+          Account
         </Text>
-      </Pressable>
+        <Text style={themed($metaText)}>User: {account?.user.email ?? account?.user.id ?? "Not linked"}</Text>
+        <Text style={themed($metaText)}>Current device: {currentDevice?.name ?? account?.device.name ?? "n/a"}</Text>
+        {loading ? <Text style={themed($metaText)}>Refreshing account state…</Text> : null}
+        {!account ? (
+          <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultLinkDevice")}>
+            <Text preset="bold" style={themed($primaryButtonText)}>
+              I Already Use Locker
+            </Text>
+          </Pressable>
+        ) : (
+          <>
+            <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultPairDevice")}>
+              <Text preset="bold" style={themed($primaryButtonText)}>
+                Add Another Device
+              </Text>
+            </Pressable>
+            <Pressable style={themed($secondaryButton)} onPress={refresh}>
+              <Text preset="bold" style={themed($secondaryButtonText)}>
+                Refresh
+              </Text>
+            </Pressable>
+          </>
+        )}
+      </View>
+
+      <View style={themed($card)}>
+        <Text preset="bold" style={themed($sectionTitle)}>
+          Vaults
+        </Text>
+        <Text style={themed($bodyText)}>
+          Personal is created automatically. Use this screen to enable additional vaults on this device or add more vaults to your account.
+        </Text>
+
+        {creatingVault ? (
+          <View style={themed($createVaultCard)}>
+            <TextInput
+              value={newVaultName}
+              onChangeText={setNewVaultName}
+              placeholder="Vault name"
+              placeholderTextColor="#9aa0a6"
+              style={themed($input)}
+            />
+            <Pressable style={themed($primaryButton)} onPress={() => void handleCreateVault()}>
+              <Text preset="bold" style={themed($primaryButtonText)}>
+                Create Vault
+              </Text>
+            </Pressable>
+            <Pressable style={themed($secondaryButton)} onPress={() => {
+              setCreatingVault(false)
+              setNewVaultName("")
+            }}>
+              <Text preset="bold" style={themed($secondaryButtonText)}>
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable style={themed($primaryButton)} onPress={() => setCreatingVault(true)}>
+            <Text preset="bold" style={themed($primaryButtonText)}>
+              Create Additional Vault
+            </Text>
+          </Pressable>
+        )}
+
+        {activeAccessCode ? (
+          <View style={themed($createVaultCard)}>
+            <Text preset="bold" style={themed($rowTitle)}>Access code</Text>
+            <Text style={themed($metaText)}>{activeAccessCode.code}</Text>
+            <Text style={themed($metaText)}>Expires: {new Date(activeAccessCode.expiresAt).toLocaleTimeString()}</Text>
+          </View>
+        ) : null}
+
+        {vaults.map((vault) => {
+          const syncStatus = getSyncStatus(vault.id)
+          const enabled = listRemoteVaults().find((item) => item.id === vault.id)?.enabledOnDevice ?? !!vault.enabledOnDevice
+          const provisioned = vaultKeyPresence[vault.id] === true
+          const isPersonal = vault.name === PERSONAL_VAULT_NAME
+          return (
+            <View key={vault.id} style={themed($rowCard)}>
+              <Text preset="bold" style={themed($rowTitle)}>
+                {vault.name}
+              </Text>
+              <Text style={themed($metaText)}>
+                {enabled
+                  ? provisioned
+                    ? "Available on this device"
+                    : "Access code required"
+                  : "Not on this device"}
+              </Text>
+              <Text style={themed($metaText)}>
+                Last synced: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : "Not yet"}
+              </Text>
+              <Text style={themed($metaText)}>
+                {provisioned ? `Queue: ${syncStatus.queueSize}` : "This device does not have the vault key yet"}
+              </Text>
+              {syncStatus.lastError ? <Text style={themed($errorText)}>{syncStatus.lastError}</Text> : null}
+              <View style={themed($buttonRow)}>
+                {enabled && provisioned ? (
+                  <Pressable style={themed($secondaryButton)} onPress={() => {
+                    setRemoteVaultId(vault.id, vault.name)
+                    setCurrentVaultId(vault.id)
+                  }}>
+                    <Text preset="bold" style={themed($secondaryButtonText)}>
+                      {currentVaultId === vault.id ? "Current vault" : "Switch to this vault"}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {enabled && provisioned && !isPersonal ? (
+                  <Pressable style={themed($secondaryButton)} onPress={() => void handleGenerateVaultAccessCode(vault)}>
+                    <Text preset="bold" style={themed($secondaryButtonText)}>
+                      Generate access code
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {activeAccessCode && activeAccessCode.vaultId === vault.id ? (
+                  <View style={themed($createVaultCard)}>
+                    <Text preset="bold" style={themed($rowTitle)}>Access code</Text>
+                    <Text style={themed($metaText)}>{activeAccessCode.code}</Text>
+                    <Text style={themed($metaText)}>Expires: {new Date(activeAccessCode.expiresAt).toLocaleTimeString()}</Text>
+                  </View>
+                ) : null}
+                {enabled && provisioned ? (
+                  <Pressable style={themed($secondaryButton)} onPress={() => handleSyncNow(vault.id)}>
+                    <Text preset="bold" style={themed($secondaryButtonText)}>
+                      Sync now
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {!enabled && isPersonal ? (
+                  <Text style={themed($metaText)}>Personal is enabled automatically when a device is linked.</Text>
+                ) : null}
+                {!enabled && !isPersonal ? (
+                  <>
+                    <Pressable
+                      style={themed($secondaryButton)}
+                      onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
+                    >
+                      <Text preset="bold" style={themed($secondaryButtonText)}>
+                        Enter access code
+                      </Text>
+                    </Pressable>
+                    <Pressable style={themed($secondaryButton)} onPress={() => handleRequestApproval(vault)}>
+                      <Text preset="bold" style={themed($secondaryButtonText)}>
+                        Request approval
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : null}
+                {enabled && !provisioned && !isPersonal ? (
+                  <Pressable
+                    style={themed($primaryButton)}
+                    onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
+                  >
+                    <Text preset="bold" style={themed($primaryButtonText)}>
+                      Enter access code
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {enabled && provisioned && !isPersonal ? (
+                  <Pressable style={themed($secondaryButton)} onPress={() => handleDisableVault(vault)}>
+                    <Text preset="bold" style={themed($secondaryButtonText)}>
+                      Remove from this device
+                    </Text>
+                  </Pressable>
+                ) : null}
+                
+              </View>
+            </View>
+          )
+        })}
+      </View>
+
+      <View style={themed($card)}>
+        <Text preset="bold" style={themed($sectionTitle)}>
+          Devices
+        </Text>
+        {devices.map((device) => (
+          <View key={device.id} style={themed($rowCard)}>
+            <Text preset="bold" style={themed($rowTitle)}>
+              {device.name} {device.current ? "• This device" : ""}
+            </Text>
+            <Text style={themed($metaText)}>
+              Last active: {device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "Unknown"}
+            </Text>
+            {!device.current ? (
+              <Pressable style={themed($secondaryButton)} onPress={() => handleRemoveDevice(device)}>
+                <Text preset="bold" style={themed($secondaryButtonText)}>
+                  Remove device
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
+      </View>
     </Screen>
   )
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  flexGrow: 1,
   backgroundColor: colors.palette.neutral900,
   paddingHorizontal: spacing.xl,
+  gap: spacing.md,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingTop: spacing.xl,
-  marginBottom: spacing.lg,
+  gap: spacing.xs,
 })
 
 const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
@@ -393,30 +480,56 @@ const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral300,
 })
 
-const $card: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.palette.neutral800,
-  borderRadius: 16,
-  padding: spacing.lg,
-  marginBottom: spacing.md,
+const $card: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+  padding: spacing.md,
+  borderRadius: 18,
+  backgroundColor: "rgba(255,255,255,0.06)",
   borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.12)",
+  borderColor: "rgba(255,255,255,0.12)",
 })
 
-const $sectionTitle: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
+const $rowCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+  paddingVertical: spacing.sm,
+  borderTopWidth: 1,
+  borderTopColor: "rgba(255,255,255,0.08)",
+})
+
+const $sectionTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
-  marginBottom: spacing.sm,
+})
+
+const $rowTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral100,
 })
 
 const $metaText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral300,
-  fontSize: 12,
-  marginBottom: 6,
 })
 
-const $bodyText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
+const $bodyText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral200,
   lineHeight: 22,
-  marginBottom: spacing.sm,
+})
+
+const $createVaultCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $input: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
+  backgroundColor: "rgba(255,255,255,0.08)",
+  borderRadius: 14,
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.sm,
+  color: colors.palette.neutral100,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.15)",
+})
+
+const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+  marginTop: spacing.xs,
 })
 
 const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
@@ -424,8 +537,6 @@ const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderRadius: 14,
   paddingVertical: spacing.md,
   alignItems: "center",
-  marginTop: spacing.sm,
-  marginBottom: spacing.sm,
 })
 
 const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
@@ -433,67 +544,22 @@ const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
 })
 
 const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  backgroundColor: "rgba(255, 255, 255, 0.08)",
+  backgroundColor: "rgba(255,255,255,0.08)",
   borderRadius: 14,
   paddingVertical: spacing.md,
   alignItems: "center",
   borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.15)",
-  marginBottom: spacing.sm,
+  borderColor: "rgba(255,255,255,0.12)",
 })
 
 const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
 })
 
-const $dangerButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  backgroundColor: "rgba(255, 90, 90, 0.15)",
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  borderWidth: 1,
-  borderColor: "rgba(255, 90, 90, 0.4)",
-  marginBottom: spacing.sm,
-})
-
-const $dangerButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.angry500,
 })
 
-const $warningCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  backgroundColor: "rgba(255, 196, 61, 0.12)",
-  borderRadius: 14,
-  padding: spacing.md,
-  borderWidth: 1,
-  borderColor: "rgba(255, 196, 61, 0.26)",
-  marginTop: spacing.sm,
-})
-
-const $warningTitle: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.palette.neutral100,
-  marginBottom: spacing.xs,
-})
-
-const $warningText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-  lineHeight: 20,
-})
-
-const $errorText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.error,
-  marginBottom: spacing.sm,
-})
-
-const $statusText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.palette.success500,
-  marginBottom: spacing.sm,
-})
-
-const $linkButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  alignItems: "center",
-  marginBottom: spacing.lg,
-})
-
-const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
+const $statusText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral200,
 })

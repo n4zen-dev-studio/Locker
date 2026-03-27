@@ -41,7 +41,7 @@ export function enqueueUpsertNoteData(
   rvk: Uint8Array,
   deviceId: string,
 ): void {
-  const lamport = nextLamport()
+  const lamport = nextLamport(vaultId)
   const payload: NotePayload = {
     v: 1,
     type: "note",
@@ -67,7 +67,7 @@ export function enqueueUpsertNoteData(
     noteUpdatedAt: note.updatedAt,
     lamport,
   }
-  setOutbox([op, ...getOutbox()])
+  setOutbox(vaultId, [op, ...getOutbox(vaultId)])
 }
 
 export function enqueueDeleteNoteData(
@@ -77,7 +77,7 @@ export function enqueueDeleteNoteData(
   rvk: Uint8Array,
   deviceId: string,
 ): void {
-  const lamport = nextLamport()
+  const lamport = nextLamport(vaultId)
   const now = new Date().toISOString()
   const payload: TombstonePayload = {
     v: 1,
@@ -105,7 +105,7 @@ export function enqueueDeleteNoteData(
     noteUpdatedAt: now,
     lamport,
   }
-  setOutbox([op, ...getOutbox()])
+  setOutbox(vaultId, [op, ...getOutbox(vaultId)])
 }
 
 export function enqueueUpdateIndexData(
@@ -114,7 +114,7 @@ export function enqueueUpdateIndexData(
   rvk: Uint8Array,
   deviceId: string,
 ): void {
-  const lamport = nextLamport()
+  const lamport = nextLamport(vaultId)
   const payload: IndexPayload = {
     v: 1,
     type: "notes-index",
@@ -138,7 +138,7 @@ export function enqueueUpdateIndexData(
     nextRetryAt: undefined,
     lamport,
   }
-  setOutbox([op, ...getOutbox()])
+  setOutbox(vaultId, [op, ...getOutbox(vaultId)])
 }
 
 export function enqueueUpsertAttachmentBlob(input: {
@@ -161,7 +161,7 @@ export function enqueueUpsertAttachmentBlob(input: {
     attempts: 0,
     nextRetryAt: undefined,
   }
-  setOutbox([op, ...getOutbox()])
+  setOutbox(input.vaultId, [op, ...getOutbox(input.vaultId)])
 }
 
 function randomId(): string {

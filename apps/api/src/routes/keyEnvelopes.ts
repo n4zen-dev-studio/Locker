@@ -5,6 +5,7 @@ import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
 import { recordAuditEvent } from "../db/audit"
 import { sendVaultChangedPush } from "../push/pushService"
+import { userOwnsVault } from "./access"
 
 const upsertEnvelopeSchema = z.object({
   userId: z.string().min(1),
@@ -26,11 +27,7 @@ export async function registerKeyEnvelopeRoutes(app: FastifyInstance) {
       }
 
       const db = getDb()
-      const member = db
-        .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
-        .get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || (member.role !== "owner" && member.role !== "admin")) {
+      if (!userOwnsVault(user.id, vaultId)) {
         reply.code(403).send({ error: "Forbidden" })
         return
       }
@@ -75,10 +72,7 @@ export async function registerKeyEnvelopeRoutes(app: FastifyInstance) {
       const { vaultId } = request.params as { vaultId: string }
       const db = getDb()
 
-      const member = db
-        .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
-        .get(vaultId, user.id)
-      if (!member) {
+      if (!userOwnsVault(user.id, vaultId)) {
         reply.code(403).send({ error: "Forbidden" })
         return
       }
@@ -108,11 +102,7 @@ export async function registerKeyEnvelopeRoutes(app: FastifyInstance) {
       const { vaultId } = request.params as { vaultId: string }
       const db = getDb()
 
-      const member = db
-        .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
-        .get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || (member.role !== "owner" && member.role !== "admin")) {
+      if (!userOwnsVault(user.id, vaultId)) {
         reply.code(403).send({ error: "Forbidden" })
         return
       }

@@ -37,7 +37,7 @@ import { vaultSession } from "@/locker/session";
 import { getPrivacyPrefs } from "@/locker/security/privacyPrefsRepo";
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
 import { listNotesForVault, Note } from "@/locker/storage/notesRepo";
-import { getRemoteVaultId, getRemoteVaultName } from "@/locker/storage/remoteVaultRepo";
+import { getRemoteVaultId, getRemoteVaultName, listRemoteVaults, setRemoteVaultId } from "@/locker/storage/remoteVaultRepo";
 import { getMeta } from "@/locker/storage/vaultMetaRepo";
 import { requestSync } from "@/locker/sync/syncCoordinator";
 import { getSyncStatus } from "@/locker/sync/syncEngine";
@@ -82,10 +82,12 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
 
   const [activeVaultId, setActiveVaultId] = useState<string | null>(() => getRemoteVaultId());
   const [activeVaultName, setActiveVaultName] = useState<string | null>(() => getRemoteVaultName());
+  const [availableVaults, setAvailableVaults] = useState(() => listRemoteVaults().filter((vault) => vault.enabledOnDevice));
 
   const refreshActiveVault = useCallback(() => {
     setActiveVaultId(getRemoteVaultId());
     setActiveVaultName(getRemoteVaultName());
+    setAvailableVaults(listRemoteVaults().filter((vault) => vault.enabledOnDevice));
   }, []);
 
   const refreshNotes = useCallback(() => {
@@ -173,11 +175,11 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setSyncStatus(getSyncStatus());
+      setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
     }, 2000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [activeVaultId]);
 
   const syncReason = useMemo(() => {
     if (!activeVaultId) return "Select a remote vault";
@@ -203,7 +205,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
       setError(err instanceof Error ? err.message : "Sync failed");
     } finally {
       setRefreshing(false);
-      setSyncStatus(getSyncStatus());
+      setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
     }
   };
 
@@ -351,6 +353,17 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
     [navigation],
   );
 
+  const handleSwitchVault = useCallback(
+    (vaultId: string, vaultName?: string | null) => {
+      setRemoteVaultId(vaultId, vaultName ?? undefined)
+      refreshActiveVault()
+      refreshNotes()
+      refreshSyncPrereqs().catch(() => undefined)
+      setSyncStatus(getSyncStatus(vaultId))
+    },
+    [refreshActiveVault, refreshNotes, refreshSyncPrereqs],
+  )
+
   const handleScrollToVault = useCallback(() => {
     scrollRef.current?.scrollTo({ y: Math.max(0, vaultSectionY), animated: true });
   }, [vaultSectionY]);
@@ -455,6 +468,22 @@ refreshControl={
 
 
         </Animated.View>
+
+        {availableVaults.length > 1 ? (
+          <View style={themed($vaultSwitcher)}>
+            {availableVaults.map((vault) => (
+              <Pressable
+                key={vault.id}
+                style={themed([$vaultChip, activeVaultId === vault.id && $vaultChipActive])}
+                onPress={() => handleSwitchVault(vault.id, vault.name)}
+              >
+                <Text style={themed([$vaultChipText, activeVaultId === vault.id && $vaultChipTextActive])}>
+                  {vault.name ?? "Vault"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         {/* {syncReason ? (
           <View style={themed($syncHint)}>
@@ -663,6 +692,35 @@ const $heroSection: ThemedStyle<ViewStyle> = () => ({
 
 const $toolbarSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
+});
+
+const $vaultSwitcher: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.sm,
+});
+
+const $vaultChip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.xs,
+  borderRadius: 999,
+  backgroundColor: colors.vaultHub.vaultHubChipInactive,
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+});
+
+const $vaultChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  backgroundColor: colors.vaultHub.vaultHubAccentPink,
+  borderColor: colors.vaultHub.vaultHubAccentPink,
+});
+
+const $vaultChipText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 12,
+});
+
+const $vaultChipTextActive: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral900,
 });
 
 const $toolbarHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({

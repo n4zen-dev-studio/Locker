@@ -14,6 +14,10 @@ import { getServerUrl, setServerUrl } from "@/locker/storage/serverConfigRepo"
 import { normalizeApiBaseUrl } from "@/locker/net/apiClient"
 import { setToken } from "@/locker/auth/tokenStore"
 import { AccountState, setAccount } from "@/locker/storage/accountRepo"
+import { ensureBootstrapState } from "@/locker/bootstrap/bootstrapRepo"
+import { setRemoteVaultId, setVaultEnabledOnDevice } from "@/locker/storage/remoteVaultRepo"
+import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
+import { unwrapProvisioningPayload, formatDeviceLinkCode, normalizeDeviceLinkCode } from "@/locker/linking/deviceLinkPayload"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { DeviceDTO, UserDTO } from "@locker/types"
 
@@ -50,7 +54,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
     setStatus(null)
     const trimmed = payload.trim()
     if (!trimmed) {
-      setError("Paste a link payload or code")
+      setError("Paste your one-time device code")
       return
     }
 
@@ -63,27 +67,29 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
         if (parsed.linkCode) linkCode = parsed.linkCode
         if (parsed.apiBase) apiBase = parsed.apiBase
       } catch {
-        setError("Invalid link payload")
+        setError("Invalid device code")
         return
       }
     } else {
-      linkCode = trimmed
+      linkCode = normalizeDeviceLinkCode(trimmed)
     }
 
     if (!linkCode) {
-      setError("Missing link code")
+      setError("Missing device code")
       return
     }
 
     try {
-      setStatus("Redeeming link code...")
+      setStatus("Linking this device...")
       apiBase = normalizeApiBaseUrl(apiBase)
-      const data = await fetchJson<{ token: string; user: UserDTO; device: DeviceDTO }>(
+      const bootstrap = ensureBootstrapState()
+      const data = await fetchJson<{ token: string; user: UserDTO; device: DeviceDTO; provisioningPayload?: string | null }>(
         "/v1/devices/link-code/redeem",
         {
           method: "POST",
           body: JSON.stringify({
             linkCode,
+            deviceId: bootstrap.deviceId,
             deviceName: deviceName.trim() || "Locker Mobile",
             platform: Platform.OS === "ios" ? "ios" : "android",
           }),
@@ -104,7 +110,16 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
 
       const me = await fetchJson<{ user: UserDTO }>("/v1/me", {}, { baseUrl: apiBase, token: data.token })
       setAccount({ ...account, user: me.user })
-      setStatus("Linked successfully")
+      if (data.provisioningPayload) {
+        const provisionedVaults = unwrapProvisioningPayload({ linkCode, provisioningPayload: data.provisioningPayload })
+        for (const vault of provisionedVaults) {
+          await setRemoteVaultKey(vault.vaultId, vault.rvk)
+          setVaultEnabledOnDevice(vault.vaultId, true, { name: vault.name })
+        }
+        const personal = provisionedVaults.find((vault) => vault.name === "Personal") ?? provisionedVaults[0]
+        if (personal) setRemoteVaultId(personal.vaultId, personal.name)
+      }
+      setStatus("Device linked. Choose which vaults belong on this device next.")
       navigation.replace("RemoteVault")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Link failed"
@@ -116,10 +131,10 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
     <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
       <View style={themed($header)}>
         <Text preset="heading" style={themed($title)}>
-          Link Device
+          Set Up This Device
         </Text>
         <Text preset="subheading" style={themed($subtitle)}>
-          Link this phone to your Locker account
+          Add this phone to your existing Locker account
         </Text>
       </View>
 
@@ -132,11 +147,11 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
         style={themed($input)}
       />
 
-      <Text style={themed($label)}>Link payload or code</Text>
+      <Text style={themed($label)}>One-time device code</Text>
       <TextInput
-        value={payload}
+        value={formatDeviceLinkCode(payload)}
         onChangeText={setPayload}
-        placeholder='{"t":"locker-link-v1", ...}'
+        placeholder="Paste the code from one of your linked devices"
         placeholderTextColor="#9aa0a6"
         style={themed([$input, $payloadInput])}
         multiline
@@ -147,7 +162,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
 
       <Pressable style={themed($primaryButton)} onPress={handleRedeem}>
         <Text preset="bold" style={themed($primaryButtonText)}>
-          Link This Device
+          Add My Device
         </Text>
       </Pressable>
 

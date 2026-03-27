@@ -8,7 +8,10 @@ import {
   encodeEnvelopeToBase64,
   openSealedBoxEnvelope,
 } from "@/locker/crypto/sealedBox"
-import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
+import { getAccount } from "@/locker/storage/accountRepo"
+import { getRemoteVaultKey, setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
+import { putAndVerifySyncKeyCheck } from "@/locker/sync/syncKeyCheck"
+import { randomBytes } from "@/locker/crypto/random"
 
 export async function ensureUserKeypairUploaded(): Promise<void> {
   const token = await getToken()
@@ -50,4 +53,31 @@ export function buildVaultKeyEnvelope(recipientPublicKeyB64: string, rvk: Uint8A
   const recipientPublicKey = base64ToBytes(recipientPublicKeyB64)
   const envelope = createSealedBoxEnvelope(recipientPublicKey, rvk)
   return encodeEnvelopeToBase64(envelope)
+}
+
+export async function provisionVaultForCurrentUser(vaultId: string): Promise<Uint8Array> {
+  const account = getAccount()
+  if (!account) throw new Error("Link device first")
+
+  await ensureUserKeypairUploaded()
+
+  let rvk = await getRemoteVaultKey(vaultId)
+  if (!rvk) {
+    rvk = randomBytes(32)
+    await setRemoteVaultKey(vaultId, rvk)
+  }
+
+  await putAndVerifySyncKeyCheck(vaultId, rvk, { provisionedForUserId: account.user.id })
+  const { publicKeyB64 } = ensureUserKeypair()
+  const envelopeB64 = buildVaultKeyEnvelope(publicKeyB64, rvk)
+  await fetchJson<{ ok: boolean }>(`/v1/vaults/${vaultId}/key-envelopes`, {
+    method: "POST",
+    body: JSON.stringify({
+      userId: account.user.id,
+      alg: "X25519",
+      envelopeB64,
+    }),
+  })
+
+  return rvk
 }

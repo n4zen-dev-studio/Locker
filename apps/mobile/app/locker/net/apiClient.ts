@@ -37,10 +37,14 @@ async function buildHeaders(
   extraHeaders?: Record<string, string>,
 ): Promise<Headers> {
   const headers = new Headers(init.headers || {})
+  const account = getAccount()
   if (hasBody && !headers.has("content-type")) {
     headers.set("content-type", "application/json")
   }
   if (token) headers.set("authorization", `Bearer ${token}`)
+  if (account?.device.id && !headers.has("x-device-id")) {
+    headers.set("x-device-id", account.device.id)
+  }
   if (extraHeaders) {
     Object.entries(extraHeaders).forEach(([key, value]) => headers.set(key, value))
   }

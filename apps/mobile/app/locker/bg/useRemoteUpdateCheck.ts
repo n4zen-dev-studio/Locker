@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import { AppState, AppStateStatus } from "react-native"
-import { getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { getEnabledRemoteVaultIds } from "@/locker/storage/remoteVaultRepo"
 import { checkForRemoteUpdates } from "./updateCheck"
 
 export function useRemoteUpdateCheck(): void {
@@ -12,13 +12,10 @@ export function useRemoteUpdateCheck(): void {
       lastState.current = nextState
 
       if (prev !== "active" && nextState === "active") {
-        const vaultId = getRemoteVaultId()
-        if (vaultId) {
-          void checkForRemoteUpdates(vaultId, { mode: "foreground", source: "app_active" }).catch(
-            (err) => {
-              if (__DEV__) console.log("[bg] remote check failed", err)
-            },
-          )
+        for (const vaultId of getEnabledRemoteVaultIds()) {
+          void checkForRemoteUpdates(vaultId, { mode: "foreground", source: "app_active" }).catch((err) => {
+            if (__DEV__) console.log("[bg] remote check failed", err)
+          })
         }
       }
     })

@@ -1,11 +1,19 @@
 import { getToken } from "@/locker/auth/tokenStore"
-import { getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
+import { getEnabledRemoteVaultIds, getRemoteVaultId, isVaultEnabledOnDevice } from "@/locker/storage/remoteVaultRepo"
 import { vaultSession } from "@/locker/session"
-import { syncNow } from "./syncEngine"
 import { clearPendingUpdatesForVault } from "@/locker/bg/pendingUpdatesRepo"
+import { getOutbox } from "./syncStateRepo"
+import { syncNow } from "./syncEngine"
 
-export type SyncReason = "app_active" | "note_change" | "manual" | "vault_switch" | "push"
+export type SyncReason =
+  | "app_active"
+  | "note_change"
+  | "manual"
+  | "vault_switch"
+  | "push"
+  | "vault_enabled"
+  | "device_linked"
 
 type SyncState = {
   syncing: boolean
@@ -17,30 +25,32 @@ type SyncState = {
 type SyncEntry = {
   state: SyncState
   timer: ReturnType<typeof setTimeout> | null
-  controller: AbortController | null
-  inFlight: Promise<any> | null
 }
-
-const entries = new Map<string, SyncEntry>()
 
 const NOTE_DEBOUNCE_MS = 2000
 const APP_ACTIVE_THROTTLE_MS = 30_000
 
+const entries = new Map<string, SyncEntry>()
+const queue = new Set<string>()
+let runningVaultId: string | null = null
+
 function getEntry(vaultId: string): SyncEntry {
   const existing = entries.get(vaultId)
   if (existing) return existing
-  const created: SyncEntry = {
-    state: { syncing: false, pending: false },
-    timer: null,
-    controller: null,
-    inFlight: null,
-  }
+  const created: SyncEntry = { state: { syncing: false, pending: false }, timer: null }
   entries.set(vaultId, created)
   return created
 }
 
+function clearTimer(entry: SyncEntry) {
+  if (!entry.timer) return
+  clearTimeout(entry.timer)
+  entry.timer = null
+}
+
 async function hasPrereqs(vaultId: string): Promise<boolean> {
   if (!vaultSession.isUnlocked()) return false
+  if (!isVaultEnabledOnDevice(vaultId)) return false
   const token = await getToken()
   if (!token) return false
   const rvk = await getRemoteVaultKey(vaultId)
@@ -48,87 +58,90 @@ async function hasPrereqs(vaultId: string): Promise<boolean> {
   return true
 }
 
-function clearTimer(entry: SyncEntry) {
-  if (entry.timer) {
-    clearTimeout(entry.timer)
-    entry.timer = null
-  }
+function getPriority(vaultId: string): number {
+  const currentVaultId = getRemoteVaultId()
+  if (vaultId === currentVaultId) return 0
+  if (getOutbox(vaultId).length > 0) return 1
+  return 2
 }
 
-async function runSync(vaultId: string, reason: SyncReason): Promise<any> {
-  const entry = getEntry(vaultId)
-  if (entry.state.syncing) {
-    entry.state.pending = true
-    return entry.inFlight
-  }
+async function processQueue(reason: SyncReason): Promise<any> {
+  if (runningVaultId) return
+  const pendingVaults = [...queue]
+  if (!pendingVaults.length) return
 
+  pendingVaults.sort((a, b) => getPriority(a) - getPriority(b))
+  const vaultId = pendingVaults[0]
+  queue.delete(vaultId)
+  runningVaultId = vaultId
+
+  const entry = getEntry(vaultId)
   entry.state.syncing = true
   entry.state.pending = false
-  const controller = new AbortController()
-  entry.controller = controller
-
-  const runPromise = syncNow({ vaultId, signal: controller.signal, reason })
-  entry.inFlight = runPromise
 
   try {
-    const result = await runPromise
-    entry.state.lastRunAt = new Date().toISOString()
-    entry.state.lastError = undefined
-    clearPendingUpdatesForVault(vaultId)
-    return result
+    const ok = reason === "manual" ? true : await hasPrereqs(vaultId)
+    if (ok) {
+      const result = await syncNow({ vaultId, reason })
+      entry.state.lastError = undefined
+      clearPendingUpdatesForVault(vaultId)
+      return result
+    }
   } catch (err) {
-    entry.state.lastRunAt = new Date().toISOString()
     entry.state.lastError = err instanceof Error ? err.message : "Sync failed"
-    throw err
+    if (reason === "manual") throw err
   } finally {
+    entry.state.lastRunAt = new Date().toISOString()
     entry.state.syncing = false
-    entry.controller = null
-    entry.inFlight = null
-
-    if (entry.state.pending) {
-      entry.state.pending = false
-      void runSync(vaultId, "note_change").catch(() => undefined)
+    runningVaultId = null
+    if (queue.size > 0) {
+      void processQueue("note_change").catch(() => undefined)
     }
   }
 }
 
-export async function requestSync(reason: SyncReason, vaultId?: string): Promise<any> {
-  const id = vaultId ?? getRemoteVaultId()
-  if (!id) return
-
-  const entry = getEntry(id)
+async function enqueueVault(vaultId: string, reason: SyncReason): Promise<void> {
+  const entry = getEntry(vaultId)
   clearTimer(entry)
-
-  if (reason !== "manual") {
-    const ok = await hasPrereqs(id)
-    if (!ok) return
-  }
-
-  if (reason === "note_change") {
-    entry.timer = setTimeout(() => {
-      void runSync(id, reason).catch(() => undefined)
-    }, NOTE_DEBOUNCE_MS)
-    return
-  }
 
   if (reason === "app_active") {
     const lastRun = entry.state.lastRunAt ? new Date(entry.state.lastRunAt).getTime() : 0
     if (Date.now() - lastRun < APP_ACTIVE_THROTTLE_MS) return
   }
 
-  const promise = runSync(id, reason)
-  if (reason === "manual") return promise
-  return promise.catch(() => undefined)
+  if (reason === "note_change") {
+    entry.timer = setTimeout(() => {
+      queue.add(vaultId)
+      void processQueue(reason).catch(() => undefined)
+    }, NOTE_DEBOUNCE_MS)
+    return
+  }
+
+  queue.add(vaultId)
+  await processQueue(reason)
+}
+
+export async function requestSync(reason: SyncReason, vaultId?: string): Promise<any> {
+  const targets = vaultId ? [vaultId] : getEnabledRemoteVaultIds()
+  if (!targets.length) return
+
+  let result: any
+  for (const id of targets) {
+    const next = enqueueVault(id, reason)
+    if (reason === "manual") {
+      result = await next
+    } else {
+      void next.catch(() => undefined)
+    }
+  }
+  return result
 }
 
 export function cancelVault(vaultId: string): void {
   const entry = entries.get(vaultId)
   if (!entry) return
   clearTimer(entry)
-  if (entry.controller) {
-    entry.controller.abort()
-    entry.controller = null
-  }
+  queue.delete(vaultId)
   entry.state.syncing = false
   entry.state.pending = false
 }

@@ -1,8 +1,7 @@
 import { FastifyInstance } from "fastify"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
-
-type MemberRow = { role: string }
+import { userOwnsVault } from "./access"
 type ChangeRow = { id: number; type: string; blobId: string | null; createdAt: string }
 
 export async function registerChangeRoutes(app: FastifyInstance) {
@@ -28,11 +27,7 @@ export async function registerChangeRoutes(app: FastifyInstance) {
         return
       }
 
-      const member = db
-        .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
-        .get(vaultId, user.id) as MemberRow | undefined
-
-      if (!member) {
+      if (!userOwnsVault(user.id, vaultId)) {
         reply.code(403).send({ error: "Forbidden" })
         return
       }

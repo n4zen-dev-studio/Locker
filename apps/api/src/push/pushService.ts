@@ -46,7 +46,7 @@ export async function sendVaultChangedPush(
 
   const tokens = db
     .prepare(
-      "SELECT token FROM push_tokens WHERE userId IN (SELECT userId FROM vault_members WHERE vaultId = ?)"
+      "SELECT token FROM push_tokens WHERE userId IN (SELECT ownerUserId FROM vaults WHERE id = ?)"
     )
     .all(input.vaultId) as PushTokenRow[]
 

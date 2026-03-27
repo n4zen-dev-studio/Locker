@@ -20,6 +20,7 @@ export function runMigrations(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS device_link_codes (
       code TEXT PRIMARY KEY,
       userId TEXT,
+      provisioningPayload TEXT NULL,
       expiresAt TEXT,
       usedAt TEXT NULL,
       createdAt TEXT
@@ -163,6 +164,13 @@ export function runMigrations(db: Database.Database): void {
       createdAt TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS device_vaults (
+      deviceId TEXT NOT NULL,
+      vaultId TEXT NOT NULL,
+      enabledAt TEXT NOT NULL,
+      PRIMARY KEY (deviceId, vaultId)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_vault_id ON audit_events (vaultId, id);
@@ -170,6 +178,8 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens (userId, deviceId);
     CREATE INDEX IF NOT EXISTS idx_push_events_created ON push_events (createdAt, id);
     CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_user ON device_pairing_codes (userId, expiresAt);
+    CREATE INDEX IF NOT EXISTS idx_device_vaults_device ON device_vaults (deviceId, enabledAt);
+    CREATE INDEX IF NOT EXISTS idx_device_vaults_vault ON device_vaults (vaultId, enabledAt);
   `)
 
   try {
@@ -182,5 +192,9 @@ export function runMigrations(db: Database.Database): void {
 
   try {
     db.exec("ALTER TABLE vaults ADD COLUMN deletedByUserId TEXT")
+  } catch {}
+
+  try {
+    db.exec("ALTER TABLE device_link_codes ADD COLUMN provisioningPayload TEXT")
   } catch {}
 }

@@ -1,4 +1,4 @@
-import { load, save } from "@/utils/storage"
+import { load, remove, save } from "@/utils/storage"
 import { getNote, listNoteIds } from "@/locker/storage/notesRepo"
 import { vaultSession } from "@/locker/session"
 import type { Note } from "@/locker/storage/notesRepo"
@@ -152,6 +152,11 @@ export function deleteNoteFromIndex(noteId: string, vaultId: string | null): voi
   removeFromInverted(index.inverted, existing)
   delete index.notes[noteId]
   persistIndex(vaultId, index)
+}
+
+export function clearSearchIndex(vaultId: string | null): void {
+  CACHE.delete(vaultKey(vaultId))
+  remove(storageKey(vaultId))
 }
 
 function matchesFilters(note: IndexedNote, filters?: SearchOptions["filters"]): boolean {

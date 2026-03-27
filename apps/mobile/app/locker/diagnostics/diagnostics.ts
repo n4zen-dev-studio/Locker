@@ -51,8 +51,8 @@ export async function buildDiagnosticsSnapshot(): Promise<DiagnosticsSnapshot> {
   const vaultId = getRemoteVaultId()
   const rvk = vaultId ? await getRemoteVaultKey(vaultId) : null
   const token = await getToken()
-  const syncState = getState()
-  const syncStatus = getSyncStatus()
+  const syncState = vaultId ? getState(vaultId) : null
+  const syncStatus = getSyncStatus(vaultId ?? undefined)
   const trust = getTrustSnapshot()
   const prefs = getPrivacyPrefs()
   const vmk = vaultSession.getKey()
@@ -73,14 +73,14 @@ export async function buildDiagnosticsSnapshot(): Promise<DiagnosticsSnapshot> {
     userEmail: account?.user.email ?? null,
     tokenPresent: !!token,
     rvkPresent: !!rvk,
-    cursor: syncState.lastCursor ?? 0,
-    lamport: syncState.lamportClock ?? 0,
-    outboxSize: syncState.outbox.length,
-    lastSyncAt: syncState.lastSyncAt,
+    cursor: syncState?.lastCursor ?? 0,
+    lamport: syncState?.lamportClock ?? 0,
+    outboxSize: syncState?.outbox.length ?? 0,
+    lastSyncAt: syncState?.lastSyncAt,
     lastErrors: syncStatus.lastErrors ?? null,
     counts: {
       notes: noteCount,
-      tombstones: Object.keys(syncState.tombstones ?? {}).length,
+      tombstones: Object.keys(syncState?.tombstones ?? {}).length,
       indexSize: listNoteIds(vaultId ?? null).length,
     },
     app: {

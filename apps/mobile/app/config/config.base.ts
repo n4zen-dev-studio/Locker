@@ -26,7 +26,7 @@ const BaseConfig: ConfigBaseProps = {
   /**
    * Locker API base URL for local dev.
    */
-  API_BASE_URL: "http://localhost:4000",
+  API_BASE_URL: "http://10.0.2.2:4000",
 }
 
 export default BaseConfig

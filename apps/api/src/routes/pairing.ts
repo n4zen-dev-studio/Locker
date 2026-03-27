@@ -3,6 +3,7 @@ import { z } from "zod"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
 import { recordAuditEvent } from "../db/audit"
+import { userOwnsVault } from "./access"
 
 const createSchema = z.object({
   pairingCode: z.string().min(8).max(9),
@@ -29,11 +30,7 @@ export async function registerPairingRoutes(app: FastifyInstance) {
       }
 
       const db = getDb()
-      const member = db
-        .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
-        .get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member) {
+      if (!userOwnsVault(user.id, vaultId)) {
         reply.code(403).send({ error: "Forbidden" })
         return
       }
@@ -119,11 +116,7 @@ export async function registerPairingRoutes(app: FastifyInstance) {
       return
     }
 
-    const member = db
-      .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
-      .get(row.vaultId, user.id) as { role?: string } | undefined
-
-    if (!member) {
+    if (!userOwnsVault(user.id, row.vaultId)) {
       reply.code(403).send({ error: "Forbidden" })
       return
     }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import { AppState, AppStateStatus } from "react-native"
 import { requestSync, cancelVault } from "./syncCoordinator"
-import { subscribeRemoteVaultChanges } from "@/locker/storage/remoteVaultRepo"
+import { getEnabledRemoteVaultIds, subscribeRemoteVaultChanges } from "@/locker/storage/remoteVaultRepo"
 
 export function useAutoSync(): void {
   const lastState = useRef<AppStateStatus>(AppState.currentState)
@@ -23,6 +23,10 @@ export function useAutoSync(): void {
         void requestSync("vault_switch", nextVaultId)
       }
     })
+
+    void Promise.all(getEnabledRemoteVaultIds().map((vaultId) => requestSync("app_active", vaultId))).catch(
+      () => undefined,
+    )
 
     return () => {
       sub.remove()

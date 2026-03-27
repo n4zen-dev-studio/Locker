@@ -1,7 +1,7 @@
 import * as TaskManager from "expo-task-manager"
 import * as BackgroundTask from "expo-background-task"
 
-import { getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { getEnabledRemoteVaultIds } from "@/locker/storage/remoteVaultRepo"
 import { getToken } from "@/locker/auth/tokenStore"
 import { checkForRemoteUpdates } from "./updateCheck"
 
@@ -10,17 +10,19 @@ const TASK_NAME = "LOCKER_REMOTE_CHECK"
 // IMPORTANT: must be defined in the module/global scope.
 TaskManager.defineTask(TASK_NAME, async () => {
   try {
-    const vaultId = getRemoteVaultId()
-    if (!vaultId) return BackgroundTask.BackgroundTaskResult.Success
+    const vaultIds = getEnabledRemoteVaultIds()
+    if (!vaultIds.length) return BackgroundTask.BackgroundTaskResult.Success
 
     const token = await getToken()
     if (!token) return BackgroundTask.BackgroundTaskResult.Success
 
     // This should be a "light check" only (no decrypt/apply while locked)
-    await checkForRemoteUpdates(vaultId, {
-      mode: "background",
-      source: "background_task",
-    })
+    for (const vaultId of vaultIds) {
+      await checkForRemoteUpdates(vaultId, {
+        mode: "background",
+        source: "background_task",
+      })
+    }
 
     // expo-background-task only supports Success/Failed (no NoData/NewData)
     return BackgroundTask.BackgroundTaskResult.Success
