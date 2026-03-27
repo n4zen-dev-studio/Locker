@@ -108,13 +108,6 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     }, [navigation, refresh]),
   )
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      void refresh()
-    }, 10_000)
-    return () => clearInterval(timer)
-  }, [refresh])
-
   const currentDevice = useMemo(
     () => devices.find((device) => device.current) ?? devices.find((device) => device.id === account?.device.id) ?? null,
     [account?.device.id, devices],
