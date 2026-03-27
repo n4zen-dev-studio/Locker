@@ -18,7 +18,8 @@
     "icon": "./assets/images/app-icon-android-legacy.png",
     "package": "com.n4zen.calculator",
     "permissions": [
-      "android.permission.RECORD_AUDIO"
+      "android.permission.RECORD_AUDIO",
+      "android.permission.CAMERA"
     ],
     "adaptiveIcon": {
       "foregroundImage": "./assets/images/app-icon-android-adaptive-foreground.png",
@@ -32,7 +33,8 @@
     "supportsTablet": true,
     "bundleIdentifier": "com.n4zen.calculator",
     "infoPlist": {
-      "NSMicrophoneUsageDescription": "Locker uses the microphone so you can create encrypted voice items inside your vault."
+      "NSMicrophoneUsageDescription": "Locker uses the microphone so you can create encrypted voice items inside your vault.",
+      "NSCameraUsageDescription": "Locker uses the camera so you can scan one-time QR codes for your own devices and vaults."
     }
   },
   "web": {
@@ -58,6 +60,12 @@
           "parentTheme": "Light",
           "enforceNavigationBarContrast": false
         }
+      }
+    ],
+    [
+      "expo-camera",
+      {
+        "cameraPermission": "Locker uses the camera so you can scan one-time QR codes for your own devices and vaults."
       }
     ],
     [

@@ -1,6 +1,8 @@
-import { FC, useCallback, useMemo, useState } from "react"
+import { FC, useCallback, useEffect, useMemo, useState } from "react"
 import { Pressable, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
+import { SvgXml } from "react-native-svg"
+import QRCode from "qrcode"
 
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
@@ -17,6 +19,9 @@ import {
   formatDeviceLinkCode,
   generateDeviceLinkCode,
 } from "@/locker/linking/deviceLinkPayload"
+import { encodeDeviceLinkQrPayload } from "@/locker/linking/qrPayload"
+import { getServerUrl } from "@/locker/storage/serverConfigRepo"
+import { DEFAULT_API_BASE_URL } from "@/locker/config"
 
 const PERSONAL_VAULT_NAME = "Personal"
 
@@ -31,8 +36,37 @@ export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> =
   const [error, setError] = useState<string | null>(null)
   const [expiresAt, setExpiresAt] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
+  const [qrXml, setQrXml] = useState<string | null>(null)
 
   const formattedCode = useMemo(() => formatDeviceLinkCode(linkCode), [linkCode])
+  const qrPayload = useMemo(
+    () =>
+      linkCode
+        ? encodeDeviceLinkQrPayload({
+            apiBase: getServerUrl() || DEFAULT_API_BASE_URL,
+            linkCode,
+          })
+        : null,
+    [linkCode],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    if (!qrPayload) {
+      setQrXml(null)
+      return
+    }
+    QRCode.toString(qrPayload, { type: "svg", margin: 1, width: 220 })
+      .then((xml) => {
+        if (!cancelled) setQrXml(xml)
+      })
+      .catch(() => {
+        if (!cancelled) setQrXml(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [qrPayload])
 
   const buildCode = useCallback(async () => {
     setError(null)
@@ -98,6 +132,8 @@ export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> =
           On the new device, choose “I already use Locker”, enter this code, and Personal will be enabled automatically.
         </Text>
         {expiresAt ? <Text style={themed($codeHelpText)}>Expires: {new Date(expiresAt).toLocaleTimeString()}</Text> : null}
+        {qrXml ? <SvgXml xml={qrXml} width={220} height={220} /> : null}
+        <Text style={themed($codeHelpText)}>Or scan the QR code from the new device.</Text>
       </View>
 
       <Pressable style={themed($secondaryButton)} onPress={() => void buildCode()}>

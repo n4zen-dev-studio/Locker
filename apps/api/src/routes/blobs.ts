@@ -7,7 +7,7 @@ import { getApiEnv } from "@locker/config"
 import { rateLimit } from "../middleware/rateLimit"
 import { recordAuditEvent } from "../db/audit"
 import { sendVaultChangedPush } from "../push/pushService"
-import { userOwnsVault } from "./access"
+import { ensureDeviceVaultAccess, userOwnsVault } from "./access"
 
 export async function registerBlobRoutes(app: FastifyInstance) {
   const env = getApiEnv()
@@ -35,6 +35,7 @@ export async function registerBlobRoutes(app: FastifyInstance) {
       if (vault.deletedAt) return reply.code(404).send({ error: "Vault deleted" })
 
       if (!userOwnsVault(user.id, vaultId)) return reply.code(403).send({ error: "Forbidden" })
+      if (!ensureDeviceVaultAccess(request, reply, vaultId)) return
 
       const body = await readBody(request)
       if (body.length > env.MAX_BLOB_BYTES) {
@@ -105,6 +106,7 @@ export async function registerBlobRoutes(app: FastifyInstance) {
       if (vault.deletedAt) return reply.code(404).send({ error: "Vault deleted" })
 
       if (!userOwnsVault(user.id, vaultId)) return reply.code(403).send({ error: "Forbidden" })
+      if (!ensureDeviceVaultAccess(request, reply, vaultId)) return
 
       // Prefer file as source-of-truth to prevent 404 when DB row is missing.
       let data: Buffer
@@ -139,6 +141,7 @@ export async function registerBlobRoutes(app: FastifyInstance) {
       if (vault.deletedAt) return reply.code(404).send({ error: "Vault deleted" })
 
       if (!userOwnsVault(user.id, vaultId)) return reply.code(403).send({ error: "Forbidden" })
+      if (!ensureDeviceVaultAccess(request, reply, vaultId)) return
 
       await deleteBlob(vaultId, blobId)
 

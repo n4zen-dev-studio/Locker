@@ -1,4 +1,4 @@
-import { FC, useCallback, useState } from "react"
+import { FC, useCallback, useEffect, useState } from "react"
 import { Platform, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
@@ -18,6 +18,7 @@ import { ensureBootstrapState } from "@/locker/bootstrap/bootstrapRepo"
 import { setRemoteVaultId, setVaultEnabledOnDevice } from "@/locker/storage/remoteVaultRepo"
 import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { unwrapProvisioningPayload, formatDeviceLinkCode, normalizeDeviceLinkCode } from "@/locker/linking/deviceLinkPayload"
+import { parseLockerQrPayload } from "@/locker/linking/qrPayload"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { DeviceDTO, UserDTO } from "@locker/types"
 
@@ -31,6 +32,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
   props,
 ) {
   const { navigation } = props
+  const initialPayload = props.route.params?.initialPayload ?? ""
   const { themed } = useAppTheme()
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
@@ -40,6 +42,12 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
   )
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (initialPayload) {
+      setPayload(initialPayload)
+    }
+  }, [initialPayload])
 
   useFocusEffect(
     useCallback(() => {
@@ -62,13 +70,19 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
     let apiBase = getServerUrl() || DEFAULT_API_BASE_URL
 
     if (trimmed.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(trimmed) as LinkPayload
-        if (parsed.linkCode) linkCode = parsed.linkCode
-        if (parsed.apiBase) apiBase = parsed.apiBase
-      } catch {
-        setError("Invalid device code")
-        return
+      const qrPayload = parseLockerQrPayload(trimmed)
+      if (qrPayload?.t === "locker-device-link") {
+        linkCode = qrPayload.linkCode
+        if (qrPayload.apiBase) apiBase = qrPayload.apiBase
+      } else {
+        try {
+          const parsed = JSON.parse(trimmed) as LinkPayload
+          if (parsed.linkCode) linkCode = parsed.linkCode
+          if (parsed.apiBase) apiBase = parsed.apiBase
+        } catch {
+          setError("Invalid device code")
+          return
+        }
       }
     } else {
       linkCode = normalizeDeviceLinkCode(trimmed)
@@ -157,6 +171,12 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
         multiline
       />
 
+      <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultQrScanner", { mode: "device-link" })}>
+        <Text preset="bold" style={themed($secondaryButtonText)}>
+          Scan QR Instead
+        </Text>
+      </Pressable>
+
       {error ? <Text style={themed($errorText)}>{error}</Text> : null}
       {status ? <Text style={themed($statusText)}>{status}</Text> : null}
 
@@ -240,6 +260,20 @@ const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
 const $linkButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginTop: spacing.sm,
   alignItems: "center",
+})
+
+const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  backgroundColor: "rgba(255, 255, 255, 0.08)",
+  borderRadius: 14,
+  paddingVertical: spacing.md,
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: "rgba(255, 255, 255, 0.15)",
+  marginBottom: spacing.md,
+})
+
+const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral100,
 })
 
 const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({

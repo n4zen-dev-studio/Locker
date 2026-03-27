@@ -52,10 +52,17 @@ export type AppStackParamList = {
   VaultOnboarding: undefined
   VaultTabs: NavigatorScreenParams<VaultTabsParamList>
   CalculatorEntryCodes: undefined
-  VaultLinkDevice: undefined
+  VaultLinkDevice: { initialPayload?: string } | undefined
   RemoteVault: undefined
   VaultPairDevice: undefined
-  VaultImportPairing: { vaultId?: string; vaultName?: string } | undefined
+  VaultImportPairing: { vaultId?: string; vaultName?: string; initialPayload?: string } | undefined
+  VaultQrScanner:
+    | {
+        mode: "device-link" | "vault-access"
+        vaultId?: string
+        vaultName?: string
+      }
+    | undefined
   VaultDiagnostics: undefined
   ThreatModel: undefined
   ServerUrl: undefined

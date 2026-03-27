@@ -30,7 +30,7 @@ export function generateDeviceLinkCode(): string {
 }
 
 export function normalizeDeviceLinkCode(input: string): string {
-  return input.toUpperCase().replace(/[^A-Z2-7]/g, "")
+  return input.toUpperCase().replace(/[^A-Z2-9]/g, "")
 }
 
 export function formatDeviceLinkCode(input: string): string {

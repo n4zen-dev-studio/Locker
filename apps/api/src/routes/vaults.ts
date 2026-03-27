@@ -14,6 +14,12 @@ const vaultSchema = z.object({
   name: z.string().min(1)
 })
 
+const renameSchema = z.object({
+  name: z.string().min(1),
+})
+
+const PERSONAL_VAULT_NAME = "Personal"
+
 export async function registerVaultRoutes(app: FastifyInstance) {
   const env = getApiEnv()
   app.post("/v1/vaults", { preHandler: authMiddleware }, async (request, reply) => {
@@ -81,6 +87,51 @@ export async function registerVaultRoutes(app: FastifyInstance) {
     })
   })
 
+  app.patch("/v1/vaults/:vaultId", { preHandler: authMiddleware }, async (request, reply) => {
+    const user = request.user!
+    const { vaultId } = request.params as { vaultId: string }
+    const parse = renameSchema.safeParse(request.body)
+    if (!parse.success) {
+      reply.code(400).send({ error: "Invalid body" })
+      return
+    }
+    if (!ensureVaultOwner(request, reply, vaultId)) {
+      return
+    }
+
+    const db = getDb()
+    const vault = db
+      .prepare("SELECT id, ownerUserId, name, createdAt FROM vaults WHERE id = ? AND deletedAt IS NULL")
+      .get(vaultId) as { id: string; ownerUserId: string; name: string; createdAt: string } | undefined
+
+    if (!vault) {
+      reply.code(404).send({ error: "Vault not found" })
+      return
+    }
+    if (vault.name === PERSONAL_VAULT_NAME) {
+      reply.code(400).send({ error: "Personal vault name is fixed" })
+      return
+    }
+
+    db.prepare("UPDATE vaults SET name = ? WHERE id = ?").run(parse.data.name, vaultId)
+    db.prepare("INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)")
+      .run(vaultId, "vault_meta", null, new Date().toISOString())
+
+    recordAuditEvent(db, {
+      userId: user.id,
+      vaultId,
+      type: "vault_rename",
+      meta: { previousName: vault.name, nextName: parse.data.name },
+    })
+
+    reply.send({
+      vault: {
+        ...vault,
+        name: parse.data.name,
+      },
+    })
+  })
+
   app.delete(
     "/v1/vaults/:vaultId",
     { preHandler: authMiddleware },
@@ -93,15 +144,34 @@ export async function registerVaultRoutes(app: FastifyInstance) {
         return
       }
 
+      const existing = db.prepare(
+        "SELECT name FROM vaults WHERE id = ? AND ownerUserId = ? AND deletedAt IS NULL"
+      ).get(vaultId, user.id) as { name?: string } | undefined
+      if (!existing) {
+        reply.code(404).send({ error: "Vault not found" })
+        return
+      }
+      if (existing.name === PERSONAL_VAULT_NAME) {
+        reply.code(400).send({ error: "Personal vault cannot be deleted" })
+        return
+      }
+
       const now = new Date().toISOString()
 
-      db.prepare(
-        "UPDATE vaults SET deletedAt = ?, deletedByUserId = ? WHERE id = ? AND deletedAt IS NULL"
-      ).run(now, user.id, vaultId)
+      const tx = db.transaction(() => {
+        db.prepare(
+          "UPDATE vaults SET deletedAt = ?, deletedByUserId = ? WHERE id = ? AND deletedAt IS NULL"
+        ).run(now, user.id, vaultId)
+        db.prepare("DELETE FROM device_vaults WHERE vaultId = ?").run(vaultId)
+        db.prepare("DELETE FROM device_pairing_codes WHERE vaultId = ?").run(vaultId)
+        db.prepare("DELETE FROM vault_key_envelopes WHERE vaultId = ?").run(vaultId)
+        db.prepare("DELETE FROM vault_access_requests WHERE vaultId = ?").run(vaultId)
+        db.prepare(
+          "INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)"
+        ).run(vaultId, "vault_meta", null, now)
+      })
 
-      db.prepare(
-        "INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)"
-      ).run(vaultId, "vault_meta", null, now)
+      tx()
 
       recordAuditEvent(db, {
         userId: user.id,
@@ -141,6 +211,9 @@ export async function registerVaultRoutes(app: FastifyInstance) {
         db.prepare("DELETE FROM blobs WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM changes WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM device_vaults WHERE vaultId = ?").run(vaultId)
+        db.prepare("DELETE FROM device_pairing_codes WHERE vaultId = ?").run(vaultId)
+        db.prepare("DELETE FROM vault_key_envelopes WHERE vaultId = ?").run(vaultId)
+        db.prepare("DELETE FROM vault_access_requests WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vault_members WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vaults WHERE id = ?").run(vaultId)
       })

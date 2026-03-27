@@ -1,4 +1,4 @@
-import { FC, useCallback, useState } from "react"
+import { FC, useCallback, useEffect, useState } from "react"
 import { Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
@@ -21,20 +21,28 @@ import {
   normalizePairingCode,
   unwrapVaultKeyPayload,
 } from "@/locker/pairing/pairingCode"
+import { parseLockerQrPayload } from "@/locker/linking/qrPayload"
 
 export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairing">> =
   function VaultImportPairingScreen(props) {
     const { navigation, route } = props
     const { themed } = useAppTheme()
     const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
-        const expectedVaultId = route.params?.vaultId
+    const expectedVaultId = route.params?.vaultId
     const expectedVaultName = route.params?.vaultName
+    const initialPayload = route.params?.initialPayload ?? ""
 
 
     const [pairingCode, setPairingCode] = useState("")
     const [error, setError] = useState<string | null>(null)
     const [status, setStatus] = useState<string | null>(null)
     const [isLinked, setIsLinked] = useState(false)
+
+    useEffect(() => {
+      if (initialPayload) {
+        setPairingCode(initialPayload)
+      }
+    }, [initialPayload])
 
     const refreshLinked = useCallback(async () => {
       try {
@@ -64,7 +72,12 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
       setError(null)
       setStatus(null)
 
-      const normalizedCode = normalizePairingCode(pairingCode)
+      const qrPayload = parseLockerQrPayload(pairingCode)
+      const rawCode =
+        qrPayload?.t === "locker-vault-access"
+          ? qrPayload.pairingCode
+          : pairingCode
+      const normalizedCode = normalizePairingCode(rawCode)
       if (!normalizedCode) {
         setError("Enter a pairing code")
         return
@@ -139,15 +152,24 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
           </View>
         ) : null}
 
-        <TextInput
-          value={formatPairingCode(pairingCode)}
-          onChangeText={setPairingCode}
+      <TextInput
+        value={formatPairingCode(pairingCode)}
+        onChangeText={setPairingCode}
           autoCapitalize="characters"
           autoCorrect={false}
           placeholder="ABCD-EFGH"
           placeholderTextColor="#9aa0a6"
-          style={themed($payload)}
-        />
+        style={themed($payload)}
+      />
+
+      <Pressable
+        style={themed($secondaryButton)}
+        onPress={() => navigation.navigate("VaultQrScanner", { mode: "vault-access", vaultId: expectedVaultId, vaultName: expectedVaultName })}
+      >
+        <Text preset="bold" style={themed($secondaryButtonText)}>
+          Scan QR Instead
+        </Text>
+      </Pressable>
 
         {error ? <Text style={themed($errorText)}>{error}</Text> : null}
         {status ? <Text style={themed($statusText)}>{status}</Text> : null}

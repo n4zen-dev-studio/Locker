@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
-import { userOwnsVault } from "./access"
+import { ensureDeviceVaultAccess, userOwnsVault } from "./access"
 type ChangeRow = { id: number; type: string; blobId: string | null; createdAt: string }
 
 export async function registerChangeRoutes(app: FastifyInstance) {
@@ -29,6 +29,9 @@ export async function registerChangeRoutes(app: FastifyInstance) {
 
       if (!userOwnsVault(user.id, vaultId)) {
         reply.code(403).send({ error: "Forbidden" })
+        return
+      }
+      if (!ensureDeviceVaultAccess(request, reply, vaultId)) {
         return
       }
 
