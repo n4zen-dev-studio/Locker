@@ -131,17 +131,11 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> =
           }
           style={themed($headerRow)}
         >
-          {/* <Pressable style={themed($backButton)} onPress={() => navigation.goBack()}>
-            <Text style={themed($backButtonText)}>‹ Back</Text>
-          </Pressable> */}
 
           <View style={themed($headerCopy)}>
             <Text size="xs" style={themed($eyebrow)}>
               Locker
             </Text>
-            {/* <Text preset="heading" style={themed($title)}>
-              Vault Locked
-            </Text> */}
           </View>
         </Animated.View>
 
