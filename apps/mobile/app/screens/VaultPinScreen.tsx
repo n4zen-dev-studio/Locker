@@ -29,8 +29,8 @@ export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function Vaul
     useCallback(() => {
       if (vaultSession.isUnlocked()) {
         const next = getPostUnlockRoute()
-        if (next.name === "VaultOnboarding") {
-          navigation.replace("VaultOnboarding")
+        if (next.name === "VaultSelection") {
+          navigation.replace("VaultSelection")
           return
         }
         navigation.replace(next.name, next.params)
@@ -57,8 +57,8 @@ export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function Vaul
           style: "cancel",
           onPress: () => {
             const next = getPostUnlockRoute()
-            if (next.name === "VaultOnboarding") {
-              navigation.replace("VaultOnboarding")
+            if (next.name === "VaultSelection") {
+              navigation.replace("VaultSelection")
               return
             }
             navigation.replace(next.name, next.params)

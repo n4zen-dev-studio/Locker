@@ -73,3 +73,8 @@ export async function deleteKeyDevOnly(): Promise<void> {
   if (Platform.OS !== "android" || !nativeModule) return
   await nativeModule.deleteKey(KEY_ALIAS)
 }
+
+export async function deleteKey(): Promise<void> {
+  if (Platform.OS !== "android" || !nativeModule) return
+  await nativeModule.deleteKey(KEY_ALIAS)
+}

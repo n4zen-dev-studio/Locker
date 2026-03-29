@@ -3,6 +3,7 @@ import { createBottomTabNavigator, BottomTabBarProps } from "@react-navigation/b
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { NavigationState, PartialState, Route } from "@react-navigation/native";
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
   useAnimatedStyle,
@@ -26,6 +27,7 @@ import type {
   VaultTabsParamList,
 } from "@/navigators/navigationTypes";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
+import { useEffect } from "react";
 
 const Tabs = createBottomTabNavigator<VaultTabsParamList>();
 const VaultStack = createNativeStackNavigator<VaultStackParamList>();
@@ -75,7 +77,7 @@ const TAB_ITEMS: Array<{
 const ACTIVE_TAB_WIDTH = 90;
 
 function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const { themed, theme } = useAppTheme();
+  const { themed } = useAppTheme();
   const $safeBottom = useSafeAreaInsetsStyle(["bottom"]);
   const containerWidth = useSharedValue(0);
   const visibleProgress = useSharedValue(1);
@@ -86,15 +88,21 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     return shouldHideTabBar(route);
   });
 
-visibleProgress.value = withTiming(shouldHide ? 0 : 1, {
-  duration: shouldHide ? 420 : 280,
-  easing: Easing.bezier(0.22, 1, 0.36, 1),
-})
+  useEffect(() => {
+    cancelAnimation(visibleProgress);
+    visibleProgress.value = withTiming(shouldHide ? 0 : 1, {
+      duration: shouldHide ? 420 : 280,
+      easing: Easing.bezier(0.22, 1, 0.36, 1),
+    });
+  }, [shouldHide, visibleProgress]);
 
-activeIndexSv.value = withTiming(state.index, {
-  duration: 720,
-  easing: Easing.bezier(0.2, 0.9, 0.2, 1),
-})
+  useEffect(() => {
+    cancelAnimation(activeIndexSv);
+    activeIndexSv.value = withTiming(state.index, {
+      duration: 420,
+      easing: Easing.bezier(0.2, 0.9, 0.2, 1),
+    });
+  }, [state.index, activeIndexSv]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     containerWidth.value = event.nativeEvent.layout.width;
@@ -112,33 +120,25 @@ activeIndexSv.value = withTiming(state.index, {
     ],
   }));
 
-const indicatorStyle = useAnimatedStyle(() => {
-  const slotWidth =
-    containerWidth.value > 0 ? containerWidth.value / TAB_ITEMS.length : ACTIVE_TAB_WIDTH
-  const offset = (slotWidth - ACTIVE_TAB_WIDTH) / 2
+  const indicatorStyle = useAnimatedStyle(() => {
+    const slotWidth =
+      containerWidth.value > 0 ? containerWidth.value / TAB_ITEMS.length : ACTIVE_TAB_WIDTH;
+    const offset = (slotWidth - ACTIVE_TAB_WIDTH) / 2;
+    const progress = Math.abs(activeIndexSv.value - Math.round(activeIndexSv.value));
+    const translateX = activeIndexSv.value * slotWidth + offset;
 
-  const translateX = activeIndexSv.value * slotWidth + offset
-
-  return {
-    transform: [
-      { translateX },
-      {
-        scaleX: interpolate(
-          Math.abs(activeIndexSv.value - Math.round(activeIndexSv.value)),
-          [0, 0.5],
-          [1, 1.06],
-        ),
-      },
-      {
-        scaleY: interpolate(
-          Math.abs(activeIndexSv.value - Math.round(activeIndexSv.value)),
-          [0, 0.5],
-          [1, 0.96],
-        ),
-      },
-    ],
-  }
-})
+    return {
+      transform: [
+        { translateX },
+        {
+          scaleX: interpolate(progress, [0, 0.5], [1, 1.06]),
+        },
+        {
+          scaleY: interpolate(progress, [0, 0.5], [1, 0.96]),
+        },
+      ],
+    };
+  });
 
   return (
     <View pointerEvents="box-none" style={themed($tabBarPortal)}>

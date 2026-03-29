@@ -15,6 +15,7 @@ import { normalizeApiBaseUrl } from "@/locker/net/apiClient"
 import { setToken } from "@/locker/auth/tokenStore"
 import { AccountState, setAccount } from "@/locker/storage/accountRepo"
 import { ensureBootstrapState } from "@/locker/bootstrap/bootstrapRepo"
+import { completeVaultSelectionFlow } from "@/locker/storage/onboardingRepo"
 import { setRemoteVaultId, setVaultEnabledOnDevice } from "@/locker/storage/remoteVaultRepo"
 import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { unwrapProvisioningPayload, formatDeviceLinkCode, normalizeDeviceLinkCode } from "@/locker/linking/deviceLinkPayload"
@@ -133,6 +134,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
         const personal = provisionedVaults.find((vault) => vault.name === "Personal") ?? provisionedVaults[0]
         if (personal) setRemoteVaultId(personal.vaultId, personal.name)
       }
+      completeVaultSelectionFlow()
       setStatus("Device linked. Choose which vaults belong on this device next.")
       navigation.replace("RemoteVault")
     } catch (err) {
