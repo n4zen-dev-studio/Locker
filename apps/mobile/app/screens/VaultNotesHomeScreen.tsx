@@ -3,6 +3,7 @@ import {
   AccessibilityInfo,
   AppState,
   Dimensions,
+  InteractionManager,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,11 +12,10 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import Animated, { Easing, FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
 
-import { Icon } from "@/components/Icon";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { VaultHeroOrb } from "@/components/VaultHeroOrb";
@@ -50,16 +50,16 @@ import type { VaultStackScreenProps } from "@/navigators/navigationTypes";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
-import { Lock } from 'lucide-react-native'
+import { useSessionIntroAnimation } from "@/utils/useSessionIntroAnimation";
 import { Ionicons } from "@expo/vector-icons"
 import { GlowFab } from "@/components/GlowFab";
-import { VaultLockBackground } from "@/components/VaultLockBackground";
 
 export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = function VaultNotesHomeScreen(props) {
   const { navigation } = props;
   const { themed, theme } = useAppTheme();
-  const $insets = useSafeAreaInsetsStyle(["top", "bottom"]);
+  const $insets = useSafeAreaInsetsStyle(["top"]);
   const scrollRef = useRef<ScrollView>(null);
+  const isFocused = useIsFocused();
 
   const [notes, setNotes] = useState<Note[]>([]);
   const [localNotes, setLocalNotes] = useState<Note[]>([]);
@@ -83,6 +83,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
   const [activeVaultId, setActiveVaultId] = useState<string | null>(() => getRemoteVaultId());
   const [activeVaultName, setActiveVaultName] = useState<string | null>(() => getRemoteVaultName());
   const [availableVaults, setAvailableVaults] = useState(() => listRemoteVaults().filter((vault) => vault.enabledOnDevice));
+  const shouldAnimateIntro = useSessionIntroAnimation("vault-home-intro", !reducedMotion);
 
   const refreshActiveVault = useCallback(() => {
     setActiveVaultId(getRemoteVaultId());
@@ -138,30 +139,28 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         return;
       }
 
-      refreshActiveVault();
-      refreshNotes();
-      refreshMeta();
-      setHideSensitivePreviews(getPrivacyPrefs().hideSensitivePreviews);
-      refreshSyncPrereqs().catch(() => undefined);
-      ensureUserKeypairUploaded().catch(() => undefined);
+      const task = InteractionManager.runAfterInteractions(() => {
+        refreshActiveVault();
+        refreshNotes();
+        refreshMeta();
+        setHideSensitivePreviews(getPrivacyPrefs().hideSensitivePreviews);
+        refreshSyncPrereqs().catch(() => undefined);
+        ensureUserKeypairUploaded().catch(() => undefined);
+      });
+
+      return () => task.cancel();
     }, [navigation, refreshActiveVault, refreshMeta, refreshNotes, refreshSyncPrereqs]),
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      const sub = AppState.addEventListener("change", (state) => {
-        if (state === "active" && !vaultSession.isUnlocked()) {
-          navigation.replace("VaultLocked");
-        }
-      });
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active" && !vaultSession.isUnlocked()) {
+        navigation.replace("VaultLocked");
+      }
+    });
 
-      refreshActiveVault();
-      refreshNotes();
-      refreshSyncPrereqs().catch(() => undefined);
-
-      return () => sub.remove();
-    }, [navigation, refreshActiveVault, refreshNotes, refreshSyncPrereqs]),
-  );
+    return () => sub.remove();
+  }, [navigation]);
 
   useEffect(() => {
     refreshMeta().catch(() => undefined);
@@ -174,12 +173,14 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
   }, []);
 
   useEffect(() => {
+    if (!isFocused) return;
+
     const timer = setInterval(() => {
       setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
     }, 2000);
 
     return () => clearInterval(timer);
-  }, [activeVaultId]);
+  }, [activeVaultId, isFocused]);
 
   const syncReason = useMemo(() => {
     if (!activeVaultId) return "Select a remote vault";
@@ -373,7 +374,12 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
   }, [vaultSectionY]);
 
   return (
-    <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])} systemBarStyle="light">
+    <Screen
+      preset="fixed"
+      backgroundColor={theme.colors.vaultHub.vaultHubBg}
+      contentContainerStyle={themed([$screen, $insets])}
+      systemBarStyle="light"
+    >
       {/* <VaultLockBackground reducedMotion={reducedMotion} /> */}
       <VaultHubBackground reducedMotion={reducedMotion} />
 
@@ -390,7 +396,11 @@ refreshControl={
 }        showsVerticalScrollIndicator={false}
       >
         <Animated.View
-          entering={reducedMotion ? undefined : FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))}
+          entering={
+            reducedMotion || !shouldAnimateIntro
+              ? undefined
+              : FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
+          }
           style={themed($header)}
         >
           <View style={themed($headerTopRow)}>
@@ -430,7 +440,11 @@ refreshControl={
         </Animated.View>
 
         <Animated.View
-          entering={reducedMotion ? undefined : FadeIn.duration(520).easing(Easing.bezier(0.22, 1, 0.36, 1))}
+          entering={
+            reducedMotion || !shouldAnimateIntro
+              ? undefined
+              : FadeIn.duration(520).easing(Easing.bezier(0.22, 1, 0.36, 1))
+          }
           style={themed($heroSection)}
         >
 <VaultHeroOrb
@@ -441,7 +455,11 @@ refreshControl={
         </Animated.View>
 
         <Animated.View
-          entering={reducedMotion ? undefined : FadeInUp.delay(80).duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))}
+          entering={
+            reducedMotion || !shouldAnimateIntro
+              ? undefined
+              : FadeInUp.delay(80).duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
+          }
           style={themed($toolbarSection)}
         >
           <View style={themed($toolbarHeader)}>
@@ -499,6 +517,7 @@ refreshControl={
         <View style={{height: 60}}/>
 
         <VaultSection
+          animateOnMount={shouldAnimateIntro}
           filter={filter}
           items={visibleItems}
           sort={sort}
