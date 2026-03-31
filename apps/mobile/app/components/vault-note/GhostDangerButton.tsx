@@ -4,6 +4,7 @@ import { Text } from "@/components/Text"
 import type { ThemedStyle } from "@/theme/types"
 
 import type { VaultThemed } from "./types"
+import { spacing } from "@/theme/spacing"
 
 type Props = {
   themed: VaultThemed
@@ -30,6 +31,7 @@ const $dangerButton: ThemedStyle<ViewStyle> = () => ({
   backgroundColor: "rgba(255,73,123,0.08)",
   borderWidth: 1,
   borderColor: "rgba(255,115,155,0.18)",
+  paddingHorizontal: spacing.sm,
 })
 
 const $ghostButtonContent: ThemedStyle<ViewStyle> = () => ({

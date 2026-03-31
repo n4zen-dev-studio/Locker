@@ -1,12 +1,35 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react"
-import { Alert, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
+import { Alert, Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
+import { Ionicons } from "@expo/vector-icons"
+import {
+  ChevronDown,
+  ChevronUp,
+  HardDrive,
+  KeyRound,
+  PencilLine,
+  Plus,
+  QrCode,
+  RefreshCw,
+  Shield,
+  Smartphone,
+  Trash2,
+} from "lucide-react-native"
 import QRCode from "qrcode"
 import { SvgXml } from "react-native-svg"
 
 import { DeviceDTO, VaultAccessRequestDTO, VaultDTO } from "@locker/types"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
+import { VaultHubBackground } from "@/components/VaultHubBackground"
+import { GhostButton } from "@/components/vault-note/GhostButton"
+import { GhostDangerButton } from "@/components/vault-note/GhostDangerButton"
+import { GlassSection } from "@/components/vault-note/GlassSection"
+import { GradientPrimaryButton } from "@/components/vault-note/GradientPrimaryButton"
+import { GlassChip } from "@/components/vault-note/GlassChip"
+import { IconTextInput } from "@/components/vault-note/IconTextInput"
+import { MetaChip } from "@/components/vault-note/MetaChip"
+import { MiniIconButton } from "@/components/vault-note/MiniIconButton"
 import { getAccount } from "@/locker/storage/accountRepo"
 import { fetchJson } from "@/locker/net/apiClient"
 import { getRemoteVaultKey, setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
@@ -27,11 +50,18 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
-import { generatePairingCode, buildWrappedVaultKeyPayload } from "@/locker/pairing/pairingCode"
-import { createVaultAccessRequestKeypair, clearVaultAccessRequestKeypair, getVaultAccessRequestPrivateKey, storeVaultAccessRequestKeypair } from "@/locker/linking/vaultAccessRequestRepo"
+import { buildWrappedVaultKeyPayload, generatePairingCode } from "@/locker/pairing/pairingCode"
+import {
+  clearVaultAccessRequestKeypair,
+  createVaultAccessRequestKeypair,
+  getVaultAccessRequestPrivateKey,
+  storeVaultAccessRequestKeypair,
+} from "@/locker/linking/vaultAccessRequestRepo"
 import { decodeEnvelopeFromBase64, openSealedBoxEnvelope } from "@/locker/crypto/sealedBox"
 import { encodeVaultAccessQrPayload } from "@/locker/linking/qrPayload"
-import { removeVaultFromCurrentDevice, forgetDeletedVaultLocally } from "@/locker/vaults/deviceVaultCleanup"
+import { forgetDeletedVaultLocally, removeVaultFromCurrentDevice } from "@/locker/vaults/deviceVaultCleanup"
+import { typography } from "@/theme/typography"
+import { DescriptionChip } from "@/components/vault-note/DescriptionChip"
 
 const PERSONAL_VAULT_NAME = "Personal"
 
@@ -44,13 +74,14 @@ type GeneratedVaultAccess = {
 
 export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = function RemoteVaultScreen(props) {
   const { navigation } = props
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
   const [vaults, setVaults] = useState<VaultDTO[]>([])
   const [devices, setDevices] = useState<DeviceDTO[]>([])
   const [requests, setRequests] = useState<VaultAccessRequestDTO[]>([])
   const [vaultAccessDevices, setVaultAccessDevices] = useState<Record<string, DeviceDTO[]>>({})
+  const [expandedVaultIds, setExpandedVaultIds] = useState<Record<string, boolean>>({})
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -62,6 +93,14 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
   const [generatedAccess, setGeneratedAccess] = useState<GeneratedVaultAccess | null>(null)
   const [editingVaultId, setEditingVaultId] = useState<string | null>(null)
   const [editingVaultName, setEditingVaultName] = useState("")
+
+  const openVaultPanel = useCallback((vaultId: string) => {
+    setExpandedVaultIds((current) => ({ ...current, [vaultId]: true }))
+  }, [])
+
+  const toggleVaultPanel = useCallback((vaultId: string) => {
+    setExpandedVaultIds((current) => ({ ...current, [vaultId]: !current[vaultId] }))
+  }, [])
 
   const refresh = useCallback(async () => {
     const acct = getAccount()
@@ -154,12 +193,13 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
       setCurrentVaultId(data.vault.id)
       setCreatingVault(false)
       setNewVaultName("")
+      openVaultPanel(data.vault.id)
       await refresh()
       void requestSync("vault_enabled", data.vault.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create vault")
     }
-  }, [newVaultName, refresh])
+  }, [newVaultName, openVaultPanel, refresh])
 
   const buildVaultQr = useCallback(async (vault: VaultDTO, pairingCode: string) => {
     const payload = encodeVaultAccessQrPayload({
@@ -188,12 +228,13 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         })
         const qrXml = await buildVaultQr(vault, data.pairingCode)
         setGeneratedAccess({ vaultId: vault.id, code: data.pairingCode, expiresAt: data.expiresAt, qrXml })
+        openVaultPanel(vault.id)
         setStatus(`Vault access ready for ${vault.name}.`)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create access code")
       }
     },
-    [buildVaultQr],
+    [buildVaultQr, openVaultPanel],
   )
 
   const handleRemoveFromDevice = useCallback(
@@ -290,10 +331,11 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     try {
       const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vault.id}/devices`)
       setVaultAccessDevices((current) => ({ ...current, [vault.id]: data.devices ?? [] }))
+      openVaultPanel(vault.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load vault devices")
     }
-  }, [])
+  }, [openVaultPanel])
 
   const handleRevokeVaultFromDevice = useCallback(
     (vault: VaultDTO, device: DeviceDTO) => {
@@ -385,13 +427,14 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
           requesterPublicKey: data.request.requesterPublicKey,
           privateKey,
         })
+        openVaultPanel(vault.id)
         setStatus(`Access request sent for ${vault.name}. Approve it from another linked device that already has this vault.`)
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to request access")
       }
     },
-    [account?.device.id, refresh],
+    [account?.device.id, openVaultPanel, refresh],
   )
 
   const handleApproveRequest = useCallback(
@@ -465,505 +508,859 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     void Promise.all(approved.map((request) => redeemApprovedRequest(request))).catch(() => {})
   }, [currentDevice, redeemApprovedRequest, requests])
 
+  const accountLabel = account?.user.email ?? account?.user.id ?? "Not linked"
+  const deviceLabel = currentDevice?.name ?? account?.device.name ?? "n/a"
+
   return (
-    <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
-      <View style={themed($header)}>
-        <Text preset="heading" style={themed($title)}>
-          Vaults & Devices
-        </Text>
-        <Text preset="subheading" style={themed($subtitle)}>
-          Manage your vaults, linked devices, and same-user vault access approvals.
-        </Text>
-      </View>
+    <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
+      <VaultHubBackground reducedMotion dimmed />
 
-      {error ? <Text style={themed($errorText)}>{error}</Text> : null}
-      {status ? <Text style={themed($statusText)}>{status}</Text> : null}
-
-      <View style={themed($card)}>
-        <Text preset="bold" style={themed($sectionTitle)}>
-          Account
-        </Text>
-        <Text style={themed($metaText)}>User: {account?.user.email ?? account?.user.id ?? "Not linked"}</Text>
-        <Text style={themed($metaText)}>Current device: {currentDevice?.name ?? account?.device.name ?? "n/a"}</Text>
-        {loading ? <Text style={themed($metaText)}>Refreshing account state…</Text> : null}
-        {!account ? (
-          <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultLinkDevice")}>
-            <Text preset="bold" style={themed($primaryButtonText)}>
-              I Already Use Locker
-            </Text>
-          </Pressable>
-        ) : (
-          <>
-            <Pressable style={themed($primaryButton)} onPress={() => navigation.navigate("VaultPairDevice")}>
-              <Text preset="bold" style={themed($primaryButtonText)}>
-                Add Another Device
-              </Text>
-            </Pressable>
-            <Pressable style={themed($secondaryButton)} onPress={() => void refresh()}>
-              <Text preset="bold" style={themed($secondaryButtonText)}>
-                Refresh
-              </Text>
-            </Pressable>
-          </>
-        )}
-      </View>
-
-      {pendingApprovals.length > 0 ? (
-        <View style={themed($card)}>
-          <Text preset="bold" style={themed($sectionTitle)}>
-            Pending Approvals
-          </Text>
-          {pendingApprovals.map((request) => (
-            <View key={request.id} style={themed($rowCard)}>
-              <Text preset="bold" style={themed($rowTitle)}>
-                {request.vaultName ?? "Vault"} requested by {request.requestingDeviceName ?? "device"}
-              </Text>
-              <Text style={themed($metaText)}>
-                Expires: {new Date(request.expiresAt).toLocaleTimeString()}
-              </Text>
-              <Pressable style={themed($secondaryButton)} onPress={() => void handleApproveRequest(request)}>
-                <Text preset="bold" style={themed($secondaryButtonText)}>
-                  Approve request
-                </Text>
-              </Pressable>
-              <Pressable style={themed($secondaryButton)} onPress={() => void handleRejectRequest(request)}>
-                <Text preset="bold" style={themed($secondaryButtonText)}>
-                  Reject request
-                </Text>
-              </Pressable>
+      <ScrollView contentContainerStyle={themed($content)} showsVerticalScrollIndicator={false}>
+          <View style={themed($heroTopRow)}>
+            <View style={themed($heroBadge)}>
+              <Shield size={13} color="#FFD8FA" />
+              <Text style={themed($heroBadgeText)}>REMOTE CONTROL</Text>
             </View>
-          ))}
-        </View>
-      ) : null}
-
-      <View style={themed($card)}>
-        <Text preset="bold" style={themed($sectionTitle)}>
-          Vaults
-        </Text>
-        <Text style={themed($bodyText)}>
-          Personal is automatic. Additional vaults stay explicit per device and need real provisioning before they sync.
-        </Text>
-
-        {creatingVault ? (
-          <View style={themed($createVaultCard)}>
-            <TextInput
-              value={newVaultName}
-              onChangeText={setNewVaultName}
-              placeholder="Vault name"
-              placeholderTextColor="#9aa0a6"
-              style={themed($input)}
-            />
-            <Pressable style={themed($primaryButton)} onPress={() => void handleCreateVault()}>
-              <Text preset="bold" style={themed($primaryButtonText)}>
-                Create Vault
-              </Text>
-            </Pressable>
-            <Pressable
-              style={themed($secondaryButton)}
-              onPress={() => {
-                setCreatingVault(false)
-                setNewVaultName("")
-              }}
-            >
-              <Text preset="bold" style={themed($secondaryButtonText)}>
-                Cancel
-              </Text>
-            </Pressable>
+            <View style={themed($heroMetaRow)}>
+              <MetaChip themed={themed} label={loading ? "Refreshing" : "Ready"} />
+            </View>
           </View>
-        ) : (
-          <Pressable style={themed($primaryButton)} onPress={() => setCreatingVault(true)}>
-            <Text preset="bold" style={themed($primaryButtonText)}>
-              Create Additional Vault
-            </Text>
-          </Pressable>
-        )}
 
-        {vaults.map((vault) => {
-          const syncStatus = getSyncStatus(vault.id)
-          const enabled = listRemoteVaults().find((item) => item.id === vault.id)?.enabledOnDevice ?? !!vault.enabledOnDevice
-          const provisioned = vaultKeyPresence[vault.id] === true
-          const isPersonal = vault.name === PERSONAL_VAULT_NAME
-          const request = myVaultRequestsByVaultId.get(vault.id) ?? null
-          const accessDevices = vaultAccessDevices[vault.id] ?? []
-          const isEditing = editingVaultId === vault.id
+          <View style={themed($heroTitleRow)}>
+            {/* <View style={themed($heroIconWrap)}>
+              <HardDrive size={20} color="#FFF5FF" />
+            </View> */}
+            <View style={themed($heroTextWrap)}>
+              <Text style={themed($heroTitle)}>Vaults & Devices</Text>
+              <Text style={themed($heroSubtitle)}>
+                Vaults can stay on this device or sync securly between other devices that you approve.
+              </Text>
+            </View>
+          </View>
+        {/* <View style={themed($heroCard)}> */}
 
-          return (
-            <View key={vault.id} style={themed($rowCard)}>
-              <Text preset="bold" style={themed($rowTitle)}>
-                {vault.name}
-              </Text>
-              <Text style={themed($metaText)}>
-                {currentVaultId === vault.id && enabled && provisioned
-                  ? "Current vault"
-                  : enabled
-                    ? provisioned
-                      ? "Available on this device"
-                      : "Access code required"
-                    : "Not on this device"}
-              </Text>
-              <Text style={themed($metaText)}>
-                Last synced: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : "Not yet"}
-              </Text>
-              <Text style={themed($metaText)}>
-                {request?.status === "pending"
-                  ? "Awaiting approval"
-                  : request?.status === "approved"
-                    ? "Approval ready"
-                    : provisioned
-                      ? `Queue: ${syncStatus.queueSize}`
-                      : "This device does not have the vault key yet"}
-              </Text>
-              {syncStatus.lastError ? <Text style={themed($errorText)}>{syncStatus.lastError}</Text> : null}
+          {/* <View style={themed($heroDetails)}>
+            <MetaChip themed={themed} label={`Account ${accountLabel}`} />
+            <MetaChip themed={themed} label={`This device ${deviceLabel}`} />
+          </View> */}
 
-              {generatedAccess?.vaultId === vault.id ? (
-                <View style={themed($qrCard)}>
-                  <Text preset="bold" style={themed($rowTitle)}>
-                    One-time access ready
-                  </Text>
-                  <Text style={themed($metaText)}>{generatedAccess.code}</Text>
-                  <Text style={themed($metaText)}>
-                    Expires: {new Date(generatedAccess.expiresAt).toLocaleTimeString()}
-                  </Text>
-                  {generatedAccess.qrXml ? <SvgXml xml={generatedAccess.qrXml} width={220} height={220} /> : null}
+         
+        {/* </View> */}
+
+        {error ? (
+          <View style={themed($errorBanner)}>
+            <Ionicons name="alert-circle-outline" size={15} color="#FFB6C7" />
+            <Text style={themed($errorBannerText)}>{error}</Text>
+          </View>
+        ) : null}
+
+        {status ? (
+          <View style={themed($statusBanner)}>
+            <Ionicons name="sparkles-outline" size={15} color="#FFD4FF" />
+            <Text style={themed($statusBannerText)}>{status}</Text>
+          </View>
+        ) : null}
+
+        {pendingApprovals.length > 0 ? (
+          <GlassSection
+            themed={themed}
+            title="Pending Approvals"
+            subtitle="Approve requests from your other linked devices that still need vault access."
+            icon={<Shield size={14} color="#FFC8F3" />}
+          >
+            <View style={themed($stack)}>
+              {pendingApprovals.map((request) => (
+                <View key={request.id} style={themed($inlineCard)}>
+                  <View style={themed($cardHeader)}>
+                    <View style={themed($cardTitleBlock)}>
+                      <Text style={themed($cardTitle)}>{request.vaultName ?? "Vault"}</Text>
+                      <Text style={themed($cardSubtitle)}>
+                        Requested by {request.requestingDeviceName ?? "device"}
+                      </Text>
+                    </View>
+                    <MetaChip themed={themed} label={`Expires ${formatShortDate(request.expiresAt)}`} />
+                  </View>
+
+                  <View style={themed($buttonPair)}>
+                    <GhostButton
+                      themed={themed}
+                      label="Approve"
+                      icon={<Shield size={15} color="#F9E7FF" />}
+                      onPress={() => void handleApproveRequest(request)}
+                    />
+                    <GhostDangerButton
+                      themed={themed}
+                      label="Reject"
+                      icon={<Trash2 size={15} color="#FF9EB7" />}
+                      onPress={() => void handleRejectRequest(request)}
+                    />
+                  </View>
                 </View>
-              ) : null}
+              ))}
+            </View>
+          </GlassSection>
+        ) : null}
 
-              {isEditing ? (
-                <View style={themed($createVaultCard)}>
-                  <TextInput
-                    value={editingVaultName}
-                    onChangeText={setEditingVaultName}
-                    placeholder="Vault name"
-                    placeholderTextColor="#9aa0a6"
-                    style={themed($input)}
-                  />
-                  <Pressable style={themed($primaryButton)} onPress={() => void handleRenameVault(vault)}>
-                    <Text preset="bold" style={themed($primaryButtonText)}>
-                      Save name
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={themed($secondaryButton)}
-                    onPress={() => {
-                      setEditingVaultId(null)
-                      setEditingVaultName("")
-                    }}
-                  >
-                    <Text preset="bold" style={themed($secondaryButtonText)}>
-                      Cancel
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
+        <GlassSection
+          themed={themed}
+          title="Vaults"
+          // subtitle="Vaults can stay on this device or sync securly between other devices that you approve."
+          // icon={<HardDrive size={14} color="#FFC8F3" />}
+          rightSlot={
+            !creatingVault ? (
+              <Pressable onPress={() => setCreatingVault(true)} style={themed($headerActionPill)}>
+                <Plus size={14} color="#F8DEFF" />
+                <Text style={themed($headerActionText)}>Create</Text>
+                <HardDrive size={14} color="#FFC8F3" />
+              </Pressable>
+            ) : null
+          }
+        >
+          {creatingVault ? (
+            <View style={themed($editorCard)}>
+              <IconTextInput
+                themed={themed}
+                theme={theme}
+                placeholder="Vault name"
+                value={newVaultName}
+                onChangeText={setNewVaultName}
+                icon={<HardDrive size={15} color="rgba(255,255,255,0.75)" />}
+                multiline={false}
+                inputStyle={themed($titleInput)}
+              />
 
-              <View style={themed($buttonRow)}>
-                {enabled && provisioned ? (
-                  <Pressable
-                    style={themed($secondaryButton)}
-                    onPress={() => {
-                      setRemoteVaultId(vault.id, vault.name)
-                      setCurrentVaultId(vault.id)
-                    }}
-                  >
-                    <Text preset="bold" style={themed($secondaryButtonText)}>
-                      {currentVaultId === vault.id ? "Current vault" : "Switch to this vault"}
-                    </Text>
-                  </Pressable>
-                ) : null}
+              <View style={themed($buttonPair)}>
+                <GhostButton
+                  themed={themed}
+                  label="Cancel"
+                  containerStyle={{height: 20, borderRadius: 30}}
+                  icon={<Ionicons name="close-outline" size={16} color="#F9E7FF" />}
+                  onPress={() => {
+                    setCreatingVault(false)
+                    setNewVaultName("")
+                  }}
+                />
 
-                {enabled && provisioned ? (
-                  <Pressable style={themed($secondaryButton)} onPress={() => void handleSyncNow(vault.id)}>
-                    <Text preset="bold" style={themed($secondaryButtonText)}>
-                      Sync now
-                    </Text>
-                  </Pressable>
-                ) : null}
+                {/* <GlassChip themed={themed} label="Create Vault" />  */}
+                 {/* <GlassChip themed={themed} label="Create Vault" onPress={() => void handleCreateVault()}/> */}
 
-                <Pressable style={themed($secondaryButton)} onPress={() => void handleLoadVaultDevices(vault)}>
-                  <Text preset="bold" style={themed($secondaryButtonText)}>
-                    {vaultAccessDevices[vault.id] ? "Hide device access" : "View device access"}
-                  </Text>
-                </Pressable>
-
-                {!isPersonal && enabled && provisioned ? (
-                  <>
-                    <Pressable style={themed($secondaryButton)} onPress={() => void handleGenerateVaultAccess(vault)}>
-                      <Text preset="bold" style={themed($secondaryButtonText)}>
-                        Generate code / QR
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={themed($secondaryButton)}
-                      onPress={() => {
-                        setEditingVaultId(vault.id)
-                        setEditingVaultName(vault.name)
-                      }}
-                    >
-                      <Text preset="bold" style={themed($secondaryButtonText)}>
-                        Rename vault
-                      </Text>
-                    </Pressable>
-                    <Pressable style={themed($secondaryButton)} onPress={() => handleRemoveFromDevice(vault)}>
-                      <Text preset="bold" style={themed($secondaryButtonText)}>
-                        Remove from this device
-                      </Text>
-                    </Pressable>
-                    <Pressable style={themed($secondaryButton)} onPress={() => handleDeleteVault(vault)}>
-                      <Text preset="bold" style={themed($secondaryButtonText)}>
-                        Delete vault
-                      </Text>
-                    </Pressable>
-                  </>
-                ) : null}
-
-                {!enabled && !isPersonal ? (
-                  <>
-                    <Pressable
-                      style={themed($primaryButton)}
-                      onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
-                    >
-                      <Text preset="bold" style={themed($primaryButtonText)}>
-                        Add to this device
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={themed($secondaryButton)}
-                      onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
-                    >
-                      <Text preset="bold" style={themed($secondaryButtonText)}>
-                        Enter access code
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={themed($secondaryButton)}
-                      onPress={() => navigation.navigate("VaultQrScanner", { mode: "vault-access", vaultId: vault.id, vaultName: vault.name })}
-                    >
-                      <Text preset="bold" style={themed($secondaryButtonText)}>
-                        Scan QR
-                      </Text>
-                    </Pressable>
-                    <Pressable style={themed($secondaryButton)} onPress={() => void handleRequestAccess(vault)}>
-                      <Text preset="bold" style={themed($secondaryButtonText)}>
-                        Request access
-                      </Text>
-                    </Pressable>
-                  </>
-                ) : null}
-
-                {enabled && !provisioned && !isPersonal ? (
-                  <>
-                    <Pressable
-                      style={themed($primaryButton)}
-                      onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
-                    >
-                      <Text preset="bold" style={themed($primaryButtonText)}>
-                        Enter access code
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={themed($secondaryButton)}
-                      onPress={() => navigation.navigate("VaultQrScanner", { mode: "vault-access", vaultId: vault.id, vaultName: vault.name })}
-                    >
-                      <Text preset="bold" style={themed($secondaryButtonText)}>
-                        Scan QR
-                      </Text>
-                    </Pressable>
-                  </>
-                ) : null}
+                <GradientPrimaryButton
+                  themed={themed}
+                  label="Create Vault"
+                  containerStyle={{height: 40, borderRadius: 30, paddingHorizontal: 20,}}
+                  textStyle={{fontSize: 13, fontStyle: typography.primary.normal, marginTop:-10}}
+                  icon={<Plus size={15} color="#1D0820" />}
+                  onPress={() => void handleCreateVault()}
+                />
               </View>
+            </View>
+          ) : null}
 
-              {vaultAccessDevices[vault.id] ? (
-                <View style={themed($deviceList)}>
-                  {accessDevices.map((device) => (
-                    <View key={device.id} style={themed($deviceAccessRow)}>
-                      <View style={themed($deviceAccessMeta)}>
-                        <Text preset="bold" style={themed($metaStrong)}>
-                          {device.name} {device.id === account?.device.id ? "• This device" : ""}
-                        </Text>
-                        <Text style={themed($metaText)}>
-                          Last active: {device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "Unknown"}
+          <View style={themed($stack)}>
+            {vaults.map((vault) => {
+              const syncStatus = getSyncStatus(vault.id)
+              const enabled = listRemoteVaults().find((item) => item.id === vault.id)?.enabledOnDevice ?? !!vault.enabledOnDevice
+              const provisioned = vaultKeyPresence[vault.id] === true
+              const isPersonal = vault.name === PERSONAL_VAULT_NAME
+              const request = myVaultRequestsByVaultId.get(vault.id) ?? null
+              const accessDevices = vaultAccessDevices[vault.id] ?? []
+              const isEditing = editingVaultId === vault.id
+              const isExpanded = !!expandedVaultIds[vault.id]
+              const currentGeneratedAccess = generatedAccess?.vaultId === vault.id ? generatedAccess : null
+
+              return (
+                <View key={vault.id} style={themed($vaultCard)}>
+                  <Pressable style={themed($vaultHeader)} onPress={() => toggleVaultPanel(vault.id)}>
+                    <View style={themed($vaultHeaderTop)}>
+                      <View style={themed($cardTitleBlock)}>
+                        <Text style={themed($cardTitle)}>{vault.name}</Text>
+                        <Text style={themed($cardSubtitle)}>
+                          {enabled && provisioned
+                            ? currentVaultId === vault.id
+                              ? "Active and secured on this device"
+                              : "Available on this device"
+                            : enabled
+                              ? "Enabled here, waiting for key material"
+                              : "Not enabled on this device"}
                         </Text>
                       </View>
-                      {!isPersonal ? (
-                        <Pressable style={themed($miniButton)} onPress={() => handleRevokeVaultFromDevice(vault, device)}>
-                          <Text preset="bold" style={themed($secondaryButtonText)}>
-                            Revoke
+                      <View style={themed($expandPill)}>
+                        {isExpanded ? (
+                          <ChevronUp size={16} color="#FFE6FE" />
+                        ) : (
+                          <ChevronDown size={16} color="#FFE6FE" />
+                        )}
+                      </View>
+                    </View>
+
+                    <View style={themed($chipRow)}>
+                      {currentVaultId === vault.id ? <GlassChip themed={themed} label="Current vault" selected /> : null}
+                      {enabled ? null : <DescriptionChip themed={themed} label="Needs Access" />}
+                      {/* {provisioned ? <DescriptionChip themed={themed} label="Active" /> : <DescriptionChip themed={themed} label="Needs access" />} */}
+                      {/* {isPersonal ? <DescriptionChip themed={themed} label="Personal" /> : null} */}
+                      {request?.status === "pending" ? <DescriptionChip themed={themed} label="Request pending" /> : null}
+                      {request?.status === "approved" ? <DescriptionChip themed={themed} label="Approval ready" /> : null}
+                    </View>
+
+                    <View style={themed($metaGrid)}>
+                      <DescriptionChip
+                        themed={themed}
+                        label={`Last Synced: ${syncStatus.lastSyncAt ? formatShortDate(syncStatus.lastSyncAt) : "Not Synced"}`}
+                      />
+                      {/* <DescriptionChip themed={themed} label={syncStatus.queueSize === 0 ? `Synced`: `Pendign Sync${syncStatus.queueSize}`} /> */}
+                      {/* <DescriptionChip
+                        themed={themed}
+                        label={
+                          request?.status === "pending"
+                            ? "Awaiting approval"
+                            : request?.status === "approved"
+                              ? "Ready to redeem"
+                              : provisioned
+                                ? "Key present"
+                                : "Key missing"
+                        }
+                      /> */}
+                    </View>
+
+                    {syncStatus.lastError ? (
+                      <View style={themed($inlineInfoBanner)}>
+                        <Ionicons name="warning-outline" size={14} color="#FFB6C7" />
+                        <Text style={themed($inlineInfoText)}>{syncStatus.lastError}</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+
+                  {isExpanded ? (
+                    <View style={themed($vaultExpanded)}>
+                      <View style={themed($actionGrid)}>
+                        {enabled && provisioned && currentVaultId !== vault.id ? (
+                          <MiniIconButton
+                            themed={themed}
+                            label={"Use Vault"}
+                            icon={<Shield size={14} color="#FFE8FD" />}
+                            onPress={() => {
+                              setRemoteVaultId(vault.id, vault.name)
+                              setCurrentVaultId(vault.id)
+                            }}
+                            disabled={currentVaultId === vault.id}
+                          />
+                        ) :  null}
+
+                        {enabled && provisioned ? (
+                          <MiniIconButton
+                            themed={themed}
+                            label="Sync Now"
+                            icon={<RefreshCw size={14} color="#FFE8FD" />}
+                            onPress={() => void handleSyncNow(vault.id)}
+                          />
+                        ) : null}
+
+                        <MiniIconButton
+                          themed={themed}
+                          label={vaultAccessDevices[vault.id] ? "Hide Devices" : "Show Devices"}
+                          icon={<Smartphone size={14} color="#FFE8FD" />}
+                          onPress={() => {
+                            vaultAccessDevices[vault.id]?
+                            setVaultAccessDevices({})
+                            : void handleLoadVaultDevices(vault)}}
+                        />
+
+                        {!isPersonal && enabled && provisioned ? (
+                          <MiniIconButton
+                            themed={themed}
+                            label={currentGeneratedAccess?"Hide Generate Access" :"Generate Access"}
+                            icon={<QrCode size={14} color="#FFE8FD" />}
+                            onPress={() => {
+                              currentGeneratedAccess?
+                              setGeneratedAccess(null)
+                              : void handleGenerateVaultAccess(vault)
+                            }}
+                          />
+                        ) : null}
+
+                        {!enabled && !isPersonal ? (
+                          <MiniIconButton
+                            themed={themed}
+                            label="Add Device"
+                            icon={<Plus size={14} color="#FFE8FD" />}
+                            onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
+                          />
+                        ) : null}
+
+                        {(!enabled || !provisioned) && !isPersonal ? (
+                          <>
+                            <MiniIconButton
+                              themed={themed}
+                              label="Enter Code"
+                              icon={<KeyRound size={14} color="#FFE8FD" />}
+                              onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
+                            />
+                            <MiniIconButton
+                              themed={themed}
+                              label="Scan QR"
+                              icon={<QrCode size={14} color="#FFE8FD" />}
+                              onPress={() =>
+                                navigation.navigate("VaultQrScanner", {
+                                  mode: "vault-access",
+                                  vaultId: vault.id,
+                                  vaultName: vault.name,
+                                })
+                              }
+                            />
+                          </>
+                        ) : null}
+
+                        {!enabled && !isPersonal ? (
+                          <MiniIconButton
+                            themed={themed}
+                            label="Request Access"
+                            icon={<Shield size={14} color="#FFE8FD" />}
+                            onPress={() => void handleRequestAccess(vault)}
+                          />
+                        ) : null}
+
+                        {!isPersonal && enabled && provisioned ? (
+                          <MiniIconButton
+                            themed={themed}
+                            label="Rename"
+                            icon={<PencilLine size={14} color="#FFE8FD" />}
+                            onPress={() => {
+                              setEditingVaultId(vault.id)
+                              setEditingVaultName(vault.name)
+                              openVaultPanel(vault.id)
+                            }}
+                          />
+                        ) : null}
+                      </View>
+
+                      {currentGeneratedAccess ? (
+                        <View style={themed($editorCard)}>
+                          <View style={themed($cardHeader)}>
+                            <View style={themed($cardTitleBlock)}>
+                              <Text style={themed($cardTitle)}>One-time access ready</Text>
+                              <Text style={themed($cardSubtitle)}>
+                                Share the code or scan from another device before it expires.
+                              </Text>
+                            </View>
+                            <MetaChip themed={themed} label={`Expires ${formatShortDate(currentGeneratedAccess.expiresAt)}`} />
+                          </View>
+
+                          <View style={themed($metaGrid)}>
+                            <GlassChip themed={themed} label={currentGeneratedAccess.code} selected />
+                          </View>
+
+                          {currentGeneratedAccess.qrXml ? (
+                            <View style={themed($qrWrap)}>
+                              <SvgXml xml={currentGeneratedAccess.qrXml} width={220} height={220} />
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+
+                      {isEditing ? (
+                        <View style={themed($editorCard)}>
+                          <IconTextInput
+                            themed={themed}
+                            theme={theme}
+                            placeholder="Vault name"
+                            value={editingVaultName}
+                            onChangeText={setEditingVaultName}
+                            icon={<PencilLine size={15} color="rgba(255,255,255,0.75)" />}
+                            multiline={false}
+                            inputStyle={themed($titleInput)}
+                          />
+
+                          <View style={themed($buttonPair)}>
+                            <GhostButton
+                              themed={themed}
+                              label="Cancel"
+                              containerStyle={{height: 20, borderRadius: 30}}
+                              icon={<Ionicons name="close-outline" size={16} color="#F9E7FF" />}
+                              onPress={() => {
+                                setEditingVaultId(null)
+                                setEditingVaultName("")
+                              }}
+                            />
+
+                            <GradientPrimaryButton
+                              themed={themed}
+                              label="Save Name"
+                              containerStyle={{height: 40, borderRadius: 30, paddingHorizontal: 20,}}
+                              textStyle={{fontSize: 13, fontStyle: typography.primary.normal, marginTop:-10}}
+                              icon={<PencilLine size={15} color="#1D0820" />}
+                              onPress={() => void handleRenameVault(vault)}
+                            />
+                          </View>
+                        </View>
+                      ) : null}
+
+                      {request ? (
+                        <View style={themed($inlineCard)}>
+                          <Text style={themed($cardTitle)}>Request status</Text>
+                          <Text style={themed($cardSubtitle)}>
+                            {request.status === "pending"
+                              ? "Approval is pending on another linked device."
+                              : "Approval is available and will redeem automatically when possible."}
                           </Text>
-                        </Pressable>
+                          <View style={themed($metaGrid)}>
+                            <MetaChip themed={themed} label={request.status === "pending" ? "Pending" : "Approved"} />
+                          </View>
+                        </View>
+                      ) : null}
+
+                      {vaultAccessDevices[vault.id] ? (
+                        <View style={themed($deviceList)}>
+                          {accessDevices.map((device) => (
+                            <View key={device.id} style={themed($deviceRow)}>
+                              <View style={themed($deviceMeta)}>
+                                <Text style={themed($deviceTitle)}>{device.name}</Text>
+                                <View style={themed($deviceChipRow)}>
+                                  {device.id === account?.device.id ? <GlassChip themed={themed} label="This device" selected /> : null}
+                                  <MetaChip themed={themed} label={`Last active ${formatShortDate(device.lastSeenAt)}`} />
+                                </View>
+                              </View>
+
+                              {!isPersonal ? (
+                                <Pressable
+                                  style={themed($revokePill)}
+                                  onPress={() => handleRevokeVaultFromDevice(vault, device)}
+                                >
+                                  <Trash2 size={14} color="#FFB6CA" />
+                                  <Text style={themed($revokePillText)}>Revoke</Text>
+                                </Pressable>
+                              ) : null}
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+
+                      {!isPersonal && enabled && provisioned ? (
+                        <View style={themed($dangerGrid)}>
+                          <GhostButton
+                            themed={themed}
+                            label="Remove From Device"
+                            icon={<Ionicons name="remove-circle-outline" size={15} color="#F9E7FF" />}
+                            onPress={() => handleRemoveFromDevice(vault)}
+                          />
+                          <GhostDangerButton
+                            themed={themed}
+                            label="Delete Vault"
+                            icon={<Trash2 size={15} color="#FF9EB7" />}
+                            onPress={() => handleDeleteVault(vault)}
+                          />
+                        </View>
                       ) : null}
                     </View>
-                  ))}
+                  ) : null}
                 </View>
-              ) : null}
-            </View>
-          )
-        })}
-      </View>
-
-      <View style={themed($card)}>
-        <Text preset="bold" style={themed($sectionTitle)}>
-          Devices
-        </Text>
-        {devices.map((device) => (
-          <View key={device.id} style={themed($rowCard)}>
-            <Text preset="bold" style={themed($rowTitle)}>
-              {device.name} {device.current ? "• This device" : ""}
-            </Text>
-            <Text style={themed($metaText)}>
-              Last active: {device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "Unknown"}
-            </Text>
-            {!device.current ? (
-              <Pressable style={themed($secondaryButton)} onPress={() => handleRemoveDevice(device)}>
-                <Text preset="bold" style={themed($secondaryButtonText)}>
-                  Remove device
-                </Text>
-              </Pressable>
-            ) : null}
+              )
+            })}
           </View>
-        ))}
-      </View>
+        </GlassSection>
+
+        <GlassSection
+          themed={themed}
+          title="Devices"
+          subtitle="Devices linked to your Locker account."
+          icon={<Smartphone size={14} color="#FFC8F3" />}
+          rightSlot={
+             ( <Pressable onPress={() => setCreatingVault(true)} style={themed($headerActionPill)}>
+                <Plus size={14} color="#F8DEFF" />
+                <Text style={themed($headerActionText)}>Add Device</Text>
+                <Smartphone size={14} color="#FFC8F3" />
+              </Pressable>)
+          }
+        >
+          <View style={themed($stack)}>
+            {devices.map((device) => (
+              <View key={device.id} style={themed($deviceRow)}>
+                <View style={themed($deviceMeta)}>
+                  <Text style={themed($deviceTitle)}>{device.name}</Text>
+                  <View style={themed($deviceChipRow)}>
+                    {device.current ? <GlassChip themed={themed} label="Current device" selected /> : null}
+                    <MetaChip themed={themed} label={`Last active ${formatShortDate(device.lastSeenAt)}`} />
+                  </View>
+                </View>
+
+                {!device.current ? (
+                  <Pressable style={themed($revokePill)} onPress={() => handleRemoveDevice(device)}>
+                    <Trash2 size={14} color="#FFB6CA" />
+                    <Text style={themed($revokePillText)}>Remove</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+             {(
+            <View style={themed($heroActionStack)}>
+              {/* <GradientPrimaryButton
+                themed={themed}
+                label="Add Another Device"
+                icon={<Plus size={15} color="#1D0820" />}
+                onPress={() => navigation.navigate("VaultPairDevice")}
+              /> */}
+              <GhostButton
+                themed={themed}
+                label="Refresh"
+                icon={<RefreshCw size={15} color="#F9E7FF" />}
+                onPress={() => void refresh()}
+              />
+            </View>
+          )}
+          </View>
+
+        </GlassSection>
+      </ScrollView>
     </Screen>
   )
 }
 
-const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  flexGrow: 1,
-  backgroundColor: colors.palette.neutral900,
-  paddingHorizontal: spacing.xl,
+function formatShortDate(value?: string | null) {
+  if (!value) return "Unknown"
+  return new Date(value).toLocaleString()
+}
+
+const $screen: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+})
+
+const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingHorizontal: spacing.lg,
+  paddingTop: spacing.md,
+  paddingBottom: spacing.xl,
   gap: spacing.md,
 })
 
-const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingTop: spacing.xl,
-  gap: spacing.xs,
-})
-
-const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-})
-
-const $card: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.sm,
-  padding: spacing.md,
-  borderRadius: 18,
+const $heroCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginTop: spacing.sm,
+  padding: spacing.sm,
+  borderRadius: 24,
   backgroundColor: "rgba(255,255,255,0.06)",
   borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.12)",
-})
-
-const $rowCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.xs,
-  paddingVertical: spacing.sm,
-  borderTopWidth: 1,
-  borderTopColor: "rgba(255,255,255,0.08)",
-})
-
-const $sectionTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $rowTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $metaText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-})
-
-const $metaStrong: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $bodyText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral200,
-  lineHeight: 22,
-})
-
-const $createVaultCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  borderColor: "rgba(255,255,255,0.09)",
   gap: spacing.sm,
 })
 
-const $qrCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.xs,
+const $heroTopRow: ThemedStyle<ViewStyle> = () => ({
+  flexDirection: "row",
   alignItems: "center",
-  paddingVertical: spacing.sm,
+  justifyContent: "space-between",
+  gap: 10,
 })
 
-const $input: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
+const $heroBadge: ThemedStyle<ViewStyle> = () => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 5,
+  paddingHorizontal: 8,
+  paddingVertical: 5,
+  borderRadius: 999,
   backgroundColor: "rgba(255,255,255,0.08)",
-  borderRadius: 14,
-  paddingHorizontal: spacing.md,
-  paddingVertical: spacing.sm,
-  color: colors.palette.neutral100,
   borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.15)",
+  borderColor: "rgba(255,255,255,0.08)",
 })
 
-const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $heroBadgeText: ThemedStyle<TextStyle> = () => ({
+  color: "#F8DFFF",
+  fontSize: 10,
+  fontWeight: "700",
+})
+
+const $heroMetaRow: ThemedStyle<ViewStyle> = () => ({
+  alignItems: "flex-end",
+})
+
+const $heroTitleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
   gap: spacing.sm,
-  marginTop: spacing.xs,
+  
 })
 
-const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.palette.primary300,
-  borderRadius: 14,
-  paddingVertical: spacing.md,
+const $heroIconWrap: ThemedStyle<ViewStyle> = () => ({
+  width: 50,
+  height: 50,
+  borderRadius: 18,
   alignItems: "center",
-})
-
-const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral900,
-})
-
-const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  justifyContent: "center",
   backgroundColor: "rgba(255,255,255,0.08)",
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
   borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.12)",
+  borderColor: "rgba(255,255,255,0.08)",
 })
 
-const $miniButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  backgroundColor: "rgba(255,255,255,0.08)",
+const $heroTextWrap: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+})
+
+const $heroTitle: ThemedStyle<TextStyle> = ({typography}) => ({
+  color: "#FFF7FF",
+  fontFamily: typography.primary.medium,
+  fontSize: 25,
+  // fontWeight: "700",
+
+})
+
+const $heroSubtitle: ThemedStyle<TextStyle> = () => ({
+  marginTop: 4,
+  color: "rgba(255,235,255,0.72)",
+  fontSize: 12,
+  lineHeight: 18,
+})
+
+const $heroDetails: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $heroPrimaryAction: ThemedStyle<ViewStyle> = () => ({
+  marginTop: 2,
+})
+
+const $heroActionStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $errorBanner: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  borderRadius: 16,
+  backgroundColor: "rgba(255,73,123,0.10)",
+  borderWidth: 1,
+  borderColor: "rgba(255,115,155,0.18)",
+})
+
+const $errorBannerText: ThemedStyle<TextStyle> = () => ({
+  flex: 1,
+  color: "#FFD0DB",
+  fontSize: 12,
+  lineHeight: 17,
+})
+
+const $statusBanner: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  borderRadius: 16,
+  backgroundColor: "rgba(255,255,255,0.05)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+})
+
+const $statusBannerText: ThemedStyle<TextStyle> = () => ({
+  flex: 1,
+  color: "#FFF0FF",
+  fontSize: 12,
+  lineHeight: 17,
+})
+
+const $stack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $inlineCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  padding: spacing.sm,
+  borderRadius: 18,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+  gap: spacing.sm,
+})
+
+const $cardHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
+const $cardTitleBlock: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+})
+
+const $cardTitle: ThemedStyle<TextStyle> = () => ({
+  color: "#FFF3FF",
+  fontSize: 14,
+  fontWeight: "700",
+})
+
+const $cardSubtitle: ThemedStyle<TextStyle> = () => ({
+  marginTop: 3,
+  color: "rgba(255,235,255,0.70)",
+  fontSize: 11,
+  lineHeight: 16,
+})
+
+const $buttonPair: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.sm,
+})
+
+const $headerActionPill: ThemedStyle<ViewStyle> = () => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 6,
+  paddingHorizontal: 10,
+  paddingVertical: 8,
+  borderRadius: 999,
+  backgroundColor: "rgba(255,255,255,0.05)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+})
+
+const $headerActionText: ThemedStyle<TextStyle> = () => ({
+  color: "#F6E3FF",
+  fontSize: 11,
+  fontWeight: "600",
+})
+
+const $editorCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  padding: spacing.sm,
+  borderRadius: 18,
+  backgroundColor: "rgba(9,10,15,0.32)",
+  // borderWidth: 1,
+  // borderColor: "rgba(255,255,255,0.08)",
+  gap: spacing.sm,
+})
+
+const $titleInput: ThemedStyle<TextStyle> = () => ({
+  minHeight: 20,
+})
+
+const $vaultCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  borderRadius: 20,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+  overflow: "hidden",
+  gap: spacing.xs,
+})
+
+const $vaultHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  padding: spacing.sm,
+  gap: spacing.sm,
+})
+
+const $vaultHeaderTop: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
+const $expandPill: ThemedStyle<ViewStyle> = () => ({
+  width: 34,
+  height: 34,
   borderRadius: 12,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(255,255,255,0.06)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+})
+
+const $chipRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $metaGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $inlineInfoBanner: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
-  alignItems: "center",
-  borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.12)",
+  borderRadius: 14,
+  backgroundColor: "rgba(255,73,123,0.08)",
 })
 
-const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
+const $inlineInfoText: ThemedStyle<TextStyle> = () => ({
+  flex: 1,
+  color: "#FFD0DB",
+  fontSize: 11,
+  lineHeight: 16,
+})
+
+const $vaultExpanded: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingHorizontal: spacing.sm,
+  paddingBottom: spacing.sm,
+  gap: spacing.sm,
+})
+
+const $actionGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $qrWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  paddingTop: spacing.xs,
 })
 
 const $deviceList: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.sm,
-  marginTop: spacing.xs,
+  gap: spacing.xs,
 })
 
-const $deviceAccessRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $deviceRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
+  alignItems: 'flex-end',
   justifyContent: "space-between",
-  alignItems: "center",
   gap: spacing.sm,
-  paddingVertical: spacing.xs,
+  padding: spacing.sm,
+  borderRadius: 18,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
 })
 
-const $deviceAccessMeta: ThemedStyle<ViewStyle> = () => ({
+const $deviceMeta: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
-  gap: 4,
+  gap: 8,
 })
 
-const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.angry500,
+const $deviceTitle: ThemedStyle<TextStyle> = () => ({
+  color: "#FFF3FF",
+  fontSize: 13,
+  fontWeight: "700",
 })
 
-const $statusText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral200,
+const $deviceChipRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $revokePill: ThemedStyle<ViewStyle> = () => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 6,
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+  borderRadius: 14,
+  backgroundColor: "rgba(255,73,123,0.08)",
+  borderWidth: 1,
+  borderColor: "rgba(255,115,155,0.18)",
+})
+
+const $revokePillText: ThemedStyle<TextStyle> = () => ({
+  color: "#FFC8D5",
+  fontSize: 12,
+  fontWeight: "700",
+})
+
+const $dangerGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.sm,
 })
