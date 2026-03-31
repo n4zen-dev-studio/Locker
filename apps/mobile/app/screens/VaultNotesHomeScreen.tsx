@@ -378,6 +378,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
       preset="fixed"
       backgroundColor={theme.colors.vaultHub.vaultHubBg}
       contentContainerStyle={themed([$screen, $insets])}
+      keyboardAvoidingEnabled={false}
       systemBarStyle="light"
     >
       {/* <VaultLockBackground reducedMotion={reducedMotion} /> */}

@@ -138,6 +138,7 @@ export const VaultPasskeySetupScreen: FC<
     <Screen
       preset="fixed"
       contentContainerStyle={themed([$screen, $insets])}
+      keyboardAvoidingEnabled={false}
       systemBarStyle="light"
     >
       <VaultLockBackground reducedMotion={reducedMotion} />

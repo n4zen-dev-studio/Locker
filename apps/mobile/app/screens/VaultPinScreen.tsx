@@ -98,7 +98,7 @@ export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function Vaul
   }
 
   return (
-    <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
+    <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])} keyboardAvoidingEnabled={false}>
       <View style={themed($card)}>
         <Text preset="heading" style={themed($title)}>
           Locker

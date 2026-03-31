@@ -305,6 +305,8 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
     <Screen
       preset="scroll"
       backgroundColor={theme.colors.vaultHub.vaultHubBg}
+      keyboardAware={false}
+      keyboardAvoidingEnabled={false}
       style={themed($screen)}
       contentContainerStyle={themed([$content, $insets, { paddingBottom: spacing.xxxl + 30 }])}
       systemBarStyle="light"

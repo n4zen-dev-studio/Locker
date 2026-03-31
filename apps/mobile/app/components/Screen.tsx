@@ -61,6 +61,11 @@ interface BaseScreenProps {
    * Pass any additional props directly to the KeyboardAvoidingView component.
    */
   KeyboardAvoidingViewProps?: KeyboardAvoidingViewProps
+  /**
+   * Controls whether the outer KeyboardAvoidingView participates in layout.
+   * Defaults to true to preserve existing screen behavior.
+   */
+  keyboardAvoidingEnabled?: boolean
 }
 
 interface FixedScreenProps extends BaseScreenProps {
@@ -77,6 +82,11 @@ interface ScrollScreenProps extends BaseScreenProps {
    * Pass any additional props directly to the ScrollView component.
    */
   ScrollViewProps?: ScrollViewProps
+  /**
+   * Controls whether the scroll preset uses KeyboardAwareScrollView or a plain ScrollView.
+   * Defaults to true to preserve existing screen behavior.
+   */
+  keyboardAware?: boolean
 }
 
 interface AutoScreenProps extends Omit<ScrollScreenProps, "preset"> {
@@ -190,6 +200,7 @@ function ScreenWithoutScrolling(props: ScreenProps) {
 function ScreenWithScrolling(props: ScreenProps) {
   const {
     children,
+    keyboardAware = true,
     keyboardShouldPersistTaps = "handled",
     keyboardBottomOffset = DEFAULT_BOTTOM_OFFSET,
     contentContainerStyle,
@@ -205,25 +216,43 @@ function ScreenWithScrolling(props: ScreenProps) {
   // More info at: https://reactnavigation.org/docs/use-scroll-to-top/
   useScrollToTop(ref)
 
+  const sharedScrollProps = {
+    automaticallyAdjustContentInsets: false,
+    automaticallyAdjustKeyboardInsets: false,
+    automaticallyAdjustsScrollIndicatorInsets: false,
+    contentInsetAdjustmentBehavior: "never" as const,
+    keyboardShouldPersistTaps,
+    onContentSizeChange: (w: number, h: number) => {
+      onContentSizeChange(w, h)
+      ScrollViewProps?.onContentSizeChange?.(w, h)
+    },
+    onLayout: (e: LayoutChangeEvent) => {
+      onLayout(e)
+      ScrollViewProps?.onLayout?.(e)
+    },
+    scrollEnabled,
+    style: [$outerStyle, ScrollViewProps?.style, style],
+    contentContainerStyle: [
+      $innerStyle,
+      ScrollViewProps?.contentContainerStyle,
+      contentContainerStyle,
+    ],
+  }
+
+  if (!keyboardAware) {
+    return (
+      <ScrollView ref={ref} {...sharedScrollProps} {...ScrollViewProps}>
+        {children}
+      </ScrollView>
+    )
+  }
+
   return (
     <KeyboardAwareScrollView
       bottomOffset={keyboardBottomOffset}
-      {...{ keyboardShouldPersistTaps, scrollEnabled, ref }}
+      ref={ref}
+      {...sharedScrollProps}
       {...ScrollViewProps}
-      onLayout={(e) => {
-        onLayout(e)
-        ScrollViewProps?.onLayout?.(e)
-      }}
-      onContentSizeChange={(w: number, h: number) => {
-        onContentSizeChange(w, h)
-        ScrollViewProps?.onContentSizeChange?.(w, h)
-      }}
-      style={[$outerStyle, ScrollViewProps?.style, style]}
-      contentContainerStyle={[
-        $innerStyle,
-        ScrollViewProps?.contentContainerStyle,
-        contentContainerStyle,
-      ]}
     >
       {children}
     </KeyboardAwareScrollView>
@@ -246,6 +275,7 @@ export function Screen(props: ScreenProps) {
   const {
     backgroundColor,
     KeyboardAvoidingViewProps,
+    keyboardAvoidingEnabled = true,
     keyboardOffset = 0,
     safeAreaEdges,
     SystemBarsProps,
@@ -267,18 +297,24 @@ export function Screen(props: ScreenProps) {
         {...SystemBarsProps}
       />
 
-      <KeyboardAvoidingView
-        behavior={isIos ? "padding" : "height"}
-        keyboardVerticalOffset={keyboardOffset}
-        {...KeyboardAvoidingViewProps}
-        style={[$styles.flex1, KeyboardAvoidingViewProps?.style]}
-      >
-        {isNonScrolling(props.preset) ? (
-          <ScreenWithoutScrolling {...props} />
-        ) : (
-          <ScreenWithScrolling {...props} />
-        )}
-      </KeyboardAvoidingView>
+      {keyboardAvoidingEnabled ? (
+        <KeyboardAvoidingView
+          behavior={isIos ? "padding" : "height"}
+          keyboardVerticalOffset={keyboardOffset}
+          {...KeyboardAvoidingViewProps}
+          style={[$styles.flex1, KeyboardAvoidingViewProps?.style]}
+        >
+          {isNonScrolling(props.preset) ? (
+            <ScreenWithoutScrolling {...props} />
+          ) : (
+            <ScreenWithScrolling {...props} />
+          )}
+        </KeyboardAvoidingView>
+      ) : isNonScrolling(props.preset) ? (
+        <ScreenWithoutScrolling {...props} />
+      ) : (
+        <ScreenWithScrolling {...props} />
+      )}
     </View>
   )
 }
