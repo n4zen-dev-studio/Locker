@@ -187,6 +187,20 @@ export function runMigrations(db: Database.Database): void {
       redeemedAt TEXT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS vault_recovery_envelopes (
+      vaultId TEXT PRIMARY KEY,
+      recoveryId TEXT NOT NULL UNIQUE,
+      version INTEGER NOT NULL,
+      keyVersion TEXT NOT NULL,
+      alg TEXT NOT NULL,
+      kdf TEXT NOT NULL,
+      verifierB64 TEXT NOT NULL,
+      nonceB64 TEXT NOT NULL,
+      ciphertextB64 TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      rotatedAt TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_vault_id ON audit_events (vaultId, id);
@@ -198,6 +212,7 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_device_vaults_vault ON device_vaults (vaultId, enabledAt);
     CREATE INDEX IF NOT EXISTS idx_vault_access_requests_user ON vault_access_requests (userId, status, expiresAt);
     CREATE INDEX IF NOT EXISTS idx_vault_access_requests_vault ON vault_access_requests (vaultId, status, expiresAt);
+    CREATE INDEX IF NOT EXISTS idx_vault_recovery_envelopes_recovery_id ON vault_recovery_envelopes (recoveryId);
   `)
 
   try {

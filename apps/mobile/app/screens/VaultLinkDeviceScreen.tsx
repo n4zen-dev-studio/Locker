@@ -136,7 +136,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
       }
       completeVaultSelectionFlow()
       setStatus("Device linked. Choose which vaults belong on this device next.")
-      navigation.replace("RemoteVault")
+      navigation.replace("VaultTabs")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Link failed"
       setError(message)
