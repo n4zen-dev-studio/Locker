@@ -508,7 +508,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
     </Text>
   </AccordionSection>
 
-  <AccordionSection
+  {/* <AccordionSection
     title="Recovery & Backup"
     subtitle="Restore access if device keys are lost"
     icon={<Clock3 size={16} color={theme.colors.vaultHub.vaultHubTextPrimary} />}
@@ -539,7 +539,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
       <ActionButton label="Recover Keys" onPress={handleRecover} variant="secondary" />
       <ActionButton label="Remove" onPress={handleDeleteBackup} variant="danger" />
     </View>
-  </AccordionSection>
+  </AccordionSection> */}
 
   <AccordionSection
     title="Auto-lock & Privacy"

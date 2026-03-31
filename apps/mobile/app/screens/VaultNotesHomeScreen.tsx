@@ -119,18 +119,20 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
     }
   }, []);
 
-  const refreshSyncPrereqs = useCallback(async () => {
-    const token = await getToken();
-    setTokenPresent(!!token);
+const refreshSyncPrereqs = useCallback(async (vaultId?: string | null) => {
+  const token = await getToken()
+  setTokenPresent(!!token)
 
-    if (!activeVaultId) {
-      setRvkPresent(false);
-      return;
-    }
+  const targetVaultId = vaultId ?? activeVaultId
 
-    const rvk = await getRemoteVaultKey(activeVaultId);
-    setRvkPresent(!!rvk);
-  }, [activeVaultId]);
+  if (!targetVaultId) {
+    setRvkPresent(false)
+    return
+  }
+
+  const rvk = await getRemoteVaultKey(targetVaultId)
+  setRvkPresent(!!rvk)
+}, [activeVaultId])
 
   useFocusEffect(
     useCallback(() => {
@@ -359,7 +361,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
       setRemoteVaultId(vaultId, vaultName ?? undefined)
       refreshActiveVault()
       refreshNotes()
-      refreshSyncPrereqs().catch(() => undefined)
+      refreshSyncPrereqs(vaultId).catch(() => undefined)
       setSyncStatus(getSyncStatus(vaultId))
     },
     [refreshActiveVault, refreshNotes, refreshSyncPrereqs],
