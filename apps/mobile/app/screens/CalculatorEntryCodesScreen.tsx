@@ -1,12 +1,18 @@
-import { FC, useMemo, useState } from "react"
-import { Pressable, TextStyle, View, ViewStyle } from "react-native"
+import { FC, useMemo, useState } from "react";
+import { ScrollView, TextStyle, View, ViewStyle } from "react-native";
+import { KeyRound, Shield } from "lucide-react-native";
 
-import { Screen } from "@/components/Screen"
-import { Text } from "@/components/Text"
-import { TextField } from "@/components/TextField"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
-import { useAppTheme } from "@/theme/context"
-import type { ThemedStyle } from "@/theme/types"
+import { Screen } from "@/components/Screen";
+import { Text } from "@/components/Text";
+import { GhostButton } from "@/components/vault-note/GhostButton";
+import { GlassSection } from "@/components/vault-note/GlassSection";
+import { GradientPrimaryButton } from "@/components/vault-note/GradientPrimaryButton";
+import { IconTextInput } from "@/components/vault-note/IconTextInput";
+import {
+  VaultBanner,
+  VaultScreenBackground,
+  VaultScreenHero,
+} from "@/components/vault-note/VaultScreenChrome";
 import {
   clearRealVaultEntryCode,
   DEFAULT_DECOY_ENTRY_CODE,
@@ -16,256 +22,233 @@ import {
   resetDecoyVaultEntryCode,
   setDecoyVaultEntryCode,
   setRealVaultEntryCode,
-} from "@/locker/storage/stealthEntryRepo"
-import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
+} from "@/locker/storage/stealthEntryRepo";
+import type { AppStackScreenProps } from "@/navigators/navigationTypes";
+import { useAppTheme } from "@/theme/context";
+import type { ThemedStyle } from "@/theme/types";
+import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 
-export const CalculatorEntryCodesScreen: FC<AppStackScreenProps<"CalculatorEntryCodes">> =
-  function CalculatorEntryCodesScreen(props) {
-    const { navigation } = props
-    const { themed } = useAppTheme()
-    const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
+export const CalculatorEntryCodesScreen: FC<
+  AppStackScreenProps<"CalculatorEntryCodes">
+> = function CalculatorEntryCodesScreen(props) {
+  const { navigation } = props;
+  const { themed, theme } = useAppTheme();
+  const $insets = useSafeAreaInsetsStyle(["top", "bottom"]);
 
-    const [vaultEntryCode, setVaultEntryCodeInput] = useState("")
-    const [decoyEntryCode, setDecoyEntryCodeInput] = useState("")
-    const [error, setError] = useState<string | null>(null)
-    const [status, setStatus] = useState<string | null>(null)
-    const [realConfigured, setRealConfigured] = useState(() => hasRealVaultEntryCode())
-    const [customDecoyConfigured, setCustomDecoyConfigured] = useState(() => hasCustomDecoyVaultEntryCode())
+  const [vaultEntryCode, setVaultEntryCodeInput] = useState("");
+  const [decoyEntryCode, setDecoyEntryCodeInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [realConfigured, setRealConfigured] = useState(() =>
+    hasRealVaultEntryCode(),
+  );
+  const [customDecoyConfigured, setCustomDecoyConfigured] = useState(() =>
+    hasCustomDecoyVaultEntryCode(),
+  );
 
-    const decoySummary = useMemo(() => {
-      return customDecoyConfigured ? "Custom decoy code active." : `Default decoy code active: ${DEFAULT_DECOY_ENTRY_CODE}.`
-    }, [customDecoyConfigured])
+  const decoySummary = useMemo(() => {
+    return customDecoyConfigured
+      ? "Custom decoy code active."
+      : `Default decoy code active: ${DEFAULT_DECOY_ENTRY_CODE}.`;
+  }, [customDecoyConfigured]);
 
-    const validateCode = (code: string, label: string): string | null => {
-      if (!isValidStealthEntryCode(code)) {
-        return `${label} must be 4 to 8 digits`
-      }
-      return null
+  const validateCode = (code: string, label: string): string | null => {
+    if (!isValidStealthEntryCode(code)) {
+      return `${label} must be 4 to 8 digits`;
+    }
+    return null;
+  };
+
+  const handleSaveVaultCode = () => {
+    setError(null);
+    setStatus(null);
+    const trimmed = vaultEntryCode.trim();
+    const validationError = validateCode(trimmed, "Vault Entry Code");
+    if (validationError) {
+      setError(validationError);
+      return;
     }
 
-    const handleSaveVaultCode = () => {
-      setError(null)
-      setStatus(null)
-      const trimmed = vaultEntryCode.trim()
-      const validationError = validateCode(trimmed, "Vault Entry Code")
-      if (validationError) {
-        setError(validationError)
-        return
-      }
+    setRealVaultEntryCode(trimmed);
+    setRealConfigured(true);
+    setVaultEntryCodeInput("");
+    setStatus("Vault Entry Code updated.");
+  };
 
-      setRealVaultEntryCode(trimmed)
-      setRealConfigured(true)
-      setVaultEntryCodeInput("")
-      setStatus("Vault Entry Code updated.")
+  const handleRemoveVaultCode = () => {
+    setError(null);
+    setStatus(null);
+    clearRealVaultEntryCode();
+    setRealConfigured(false);
+    setVaultEntryCodeInput("");
+    setStatus(
+      "Vault Entry Code removed. Long-press '=' still opens the vault.",
+    );
+  };
+
+  const handleSaveDecoyCode = () => {
+    setError(null);
+    setStatus(null);
+    const trimmed = decoyEntryCode.trim();
+    const validationError = validateCode(trimmed, "Decoy Entry Code");
+    if (validationError) {
+      setError(validationError);
+      return;
     }
 
-    const handleRemoveVaultCode = () => {
-      setError(null)
-      setStatus(null)
-      clearRealVaultEntryCode()
-      setRealConfigured(false)
-      setVaultEntryCodeInput("")
-      setStatus("Vault Entry Code removed. Long-press '=' still opens the vault.")
-    }
+    setDecoyVaultEntryCode(trimmed);
+    setCustomDecoyConfigured(true);
+    setDecoyEntryCodeInput("");
+    setStatus("Decoy Entry Code updated.");
+  };
 
-    const handleSaveDecoyCode = () => {
-      setError(null)
-      setStatus(null)
-      const trimmed = decoyEntryCode.trim()
-      const validationError = validateCode(trimmed, "Decoy Entry Code")
-      if (validationError) {
-        setError(validationError)
-        return
-      }
+  const handleResetDecoyCode = () => {
+    setError(null);
+    setStatus(null);
+    resetDecoyVaultEntryCode();
+    setCustomDecoyConfigured(false);
+    setDecoyEntryCodeInput("");
+    setStatus(
+      `Decoy Entry Code reset to the default ${DEFAULT_DECOY_ENTRY_CODE}.`,
+    );
+  };
 
-      setDecoyVaultEntryCode(trimmed)
-      setCustomDecoyConfigured(true)
-      setDecoyEntryCodeInput("")
-      setStatus("Decoy Entry Code updated.")
-    }
+  return (
+    <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
+      <VaultScreenBackground />
+      <ScrollView
+        contentContainerStyle={themed($content)}
+        showsVerticalScrollIndicator={false}
+      >
+        <VaultScreenHero
+          themed={themed}
+          badge="ENTRY CODES"
+          title="Calculator Entry Codes"
+          subtitle="Shortcut codes open the vault from the calculator when entered exactly and followed by '='."
+          icon={<KeyRound size={13} color="#FFD8FA" />}
+          metaLabel="Stealth access"
+        />
 
-    const handleResetDecoyCode = () => {
-      setError(null)
-      setStatus(null)
-      resetDecoyVaultEntryCode()
-      setCustomDecoyConfigured(false)
-      setDecoyEntryCodeInput("")
-      setStatus(`Decoy Entry Code reset to the default ${DEFAULT_DECOY_ENTRY_CODE}.`)
-    }
-
-    return (
-      <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
-        <View style={themed($header)}>
-          <Text preset="heading" style={themed($title)}>
-            Calculator Entry Codes
-          </Text>
-          <Text preset="subheading" style={themed($subtitle)}>
-            Shortcut codes open the vault from the calculator when entered exactly and followed by "=".
-          </Text>
-          <Text style={themed($metaText)}>
-            These codes do not replace passkey protection and are not your vault encryption secret.
-          </Text>
-        </View>
-
-        <View style={themed($card)}>
-          <Text preset="bold" style={themed($sectionTitle)}>
-            Vault Entry Code
-          </Text>
+        <GlassSection
+          themed={themed}
+          title="Vault Entry Code"
+          subtitle="This code opens the normal vault access path from the calculator."
+          icon={<Shield size={14} color="#FFC8F3" />}
+        >
           <Text style={themed($metaText)}>
             Status: {realConfigured ? "Configured" : "Not configured"}
           </Text>
           <Text style={themed($metaText)}>
-            Exact digits only. Entering the code in the calculator opens the normal vault access path.
+            Exact digits only. These codes do not replace passkey protection and
+            are not your vault encryption secret.
           </Text>
-          <TextField
-            label="New Vault Entry Code"
-            placeholder="4 to 8 digits"
-            keyboardType="number-pad"
-            secureTextEntry
-            maxLength={8}
-            value={vaultEntryCode}
-            onChangeText={setVaultEntryCodeInput}
+          <View style={themed($fieldGroup)}>
+            <Text style={themed($label)}>New Vault Entry Code</Text>
+            <IconTextInput
+              themed={themed}
+              theme={theme}
+              icon={<KeyRound size={16} color="#FFD8FA" />}
+              placeholder="4 to 8 digits"
+              keyboardType="number-pad"
+              secureTextEntry
+              maxLength={8}
+              value={vaultEntryCode}
+              onChangeText={setVaultEntryCodeInput}
+            />
+          </View>
+          <GradientPrimaryButton
+            themed={themed}
+            label={
+              realConfigured
+                ? "Update Vault Entry Code"
+                : "Set Vault Entry Code"
+            }
+            onPress={handleSaveVaultCode}
           />
-          <Pressable style={themed($primaryButton)} onPress={handleSaveVaultCode}>
-            <Text preset="bold" style={themed($primaryButtonText)}>
-              {realConfigured ? "Update Vault Entry Code" : "Set Vault Entry Code"}
-            </Text>
-          </Pressable>
           {realConfigured ? (
-            <Pressable style={themed($secondaryButton)} onPress={handleRemoveVaultCode}>
-              <Text preset="bold" style={themed($secondaryButtonText)}>
-                Remove Vault Entry Code
-              </Text>
-            </Pressable>
+            <GhostButton
+              themed={themed}
+              label="Remove Vault Entry Code"
+              onPress={handleRemoveVaultCode}
+            />
           ) : null}
-        </View>
+        </GlassSection>
 
-        <View style={themed($card)}>
-          <Text preset="bold" style={themed($sectionTitle)}>
-            Decoy Entry Code
-          </Text>
+        <GlassSection
+          themed={themed}
+          title="Decoy Entry Code"
+          subtitle="This code opens the isolated decoy vault from the calculator."
+          icon={<Shield size={14} color="#FFC8F3" />}
+        >
           <Text style={themed($metaText)}>{decoySummary}</Text>
-          <Text style={themed($metaText)}>
-            Exact digits only. Entering the decoy code in the calculator opens the isolated decoy vault.
-          </Text>
-          <TextField
-            label="New Decoy Entry Code"
-            placeholder="4 to 8 digits"
-            keyboardType="number-pad"
-            secureTextEntry
-            maxLength={8}
-            value={decoyEntryCode}
-            onChangeText={setDecoyEntryCodeInput}
+          <View style={themed($fieldGroup)}>
+            <Text style={themed($label)}>New Decoy Entry Code</Text>
+            <IconTextInput
+              themed={themed}
+              theme={theme}
+              icon={<KeyRound size={16} color="#FFD8FA" />}
+              placeholder="4 to 8 digits"
+              keyboardType="number-pad"
+              secureTextEntry
+              maxLength={8}
+              value={decoyEntryCode}
+              onChangeText={setDecoyEntryCodeInput}
+            />
+          </View>
+          <GradientPrimaryButton
+            themed={themed}
+            label="Update Decoy Entry Code"
+            onPress={handleSaveDecoyCode}
           />
-          <Pressable style={themed($primaryButton)} onPress={handleSaveDecoyCode}>
-            <Text preset="bold" style={themed($primaryButtonText)}>
-              Update Decoy Entry Code
-            </Text>
-          </Pressable>
           {customDecoyConfigured ? (
-            <Pressable style={themed($secondaryButton)} onPress={handleResetDecoyCode}>
-              <Text preset="bold" style={themed($secondaryButtonText)}>
-                Reset Decoy Code to Default
-              </Text>
-            </Pressable>
+            <GhostButton
+              themed={themed}
+              label="Reset Decoy Code to Default"
+              onPress={handleResetDecoyCode}
+            />
           ) : null}
-        </View>
+        </GlassSection>
 
-        {error ? <Text style={themed($errorText)}>{error}</Text> : null}
-        {status ? <Text style={themed($statusText)}>{status}</Text> : null}
+        {error ? (
+          <VaultBanner themed={themed} tone="error" text={error} />
+        ) : null}
+        {status ? (
+          <VaultBanner themed={themed} tone="status" text={status} />
+        ) : null}
 
-        <Pressable style={themed($linkButton)} onPress={() => navigation.goBack()}>
-          <Text preset="bold" style={themed($linkText)}>
-            Back
-          </Text>
-        </Pressable>
-      </Screen>
-    )
-  }
+        <GhostButton
+          themed={themed}
+          label="Back"
+          onPress={() => navigation.goBack()}
+        />
+      </ScrollView>
+    </Screen>
+  );
+};
 
-const $screen: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  backgroundColor: colors.background,
-})
-
-const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexGrow: 1,
   paddingHorizontal: spacing.lg,
+});
+
+const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.md,
   paddingTop: spacing.lg,
-  marginBottom: spacing.md,
-})
+  paddingBottom: spacing.xl,
+});
 
-const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textStrong,
-})
+const $fieldGroup: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+});
 
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textMuted,
-  marginBottom: 8,
-})
+const $label: ThemedStyle<TextStyle> = () => ({
+  color: "rgba(255,236,255,0.74)",
+  fontSize: 12,
+  fontWeight: "600",
+});
 
-const $card: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.glass,
-  borderRadius: 18,
-  borderWidth: 1,
-  borderColor: colors.glassBorder,
-  padding: spacing.lg,
-  marginHorizontal: spacing.lg,
-  marginBottom: spacing.lg,
-})
-
-const $sectionTitle: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.textStrong,
-  marginBottom: spacing.sm,
-})
-
-const $metaText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.textMuted,
-  marginBottom: spacing.sm,
+const $metaText: ThemedStyle<TextStyle> = () => ({
+  color: "#F3E7F8",
   lineHeight: 20,
-})
-
-const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.accentPink,
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  marginTop: spacing.sm,
-  marginBottom: spacing.sm,
-})
-
-const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $secondaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.glassHeavy,
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  borderWidth: 1,
-  borderColor: colors.glassBorder,
-})
-
-const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textStrong,
-})
-
-const $errorText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.error,
-  marginHorizontal: spacing.lg,
-  marginBottom: spacing.sm,
-})
-
-const $statusText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.textMuted,
-  marginHorizontal: spacing.lg,
-  marginBottom: spacing.sm,
-})
-
-const $linkButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  alignItems: "center",
-  marginBottom: spacing.xl,
-})
-
-const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textMuted,
-})
+  fontSize: 13,
+});

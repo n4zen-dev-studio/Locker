@@ -1,306 +1,311 @@
-import { FC, useCallback, useEffect, useState } from "react"
-import { Alert, Pressable, ScrollView, Share, TextStyle, View, ViewStyle } from "react-native"
-import { useFocusEffect } from "@react-navigation/native"
+import { FC, useCallback, useEffect, useState } from "react";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { KeyRound, ShieldAlert } from "lucide-react-native";
 
-import { Screen } from "@/components/Screen"
-import { Text } from "@/components/Text"
-import { vaultSession } from "@/locker/session"
-import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
-import { getRemoteVaultId, getRemoteVaultName } from "@/locker/storage/remoteVaultRepo"
-import { createRecoveryEnvelope, generateRecoveryKey } from "@/locker/recovery/recoveryKey"
-import { getRecoveryEnvelopeStatus, upsertRecoveryEnvelope } from "@/locker/recovery/recoveryApi"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
-import { useAppTheme } from "@/theme/context"
-import type { ThemedStyle } from "@/theme/types"
-import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
+import { Screen } from "@/components/Screen";
+import { Text } from "@/components/Text";
+import { GlassSection } from "@/components/vault-note/GlassSection";
+import { GhostButton } from "@/components/vault-note/GhostButton";
+import { GradientPrimaryButton } from "@/components/vault-note/GradientPrimaryButton";
+import { MetaChip } from "@/components/vault-note/MetaChip";
+import {
+  VaultBanner,
+  VaultGlassPanel,
+  VaultScreenBackground,
+  VaultScreenHero,
+} from "@/components/vault-note/VaultScreenChrome";
+import {
+  createRecoveryEnvelope,
+  generateRecoveryKey,
+} from "@/locker/recovery/recoveryKey";
+import {
+  getRecoveryEnvelopeStatus,
+  upsertRecoveryEnvelope,
+} from "@/locker/recovery/recoveryApi";
+import { vaultSession } from "@/locker/session";
+import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
+import {
+  getRemoteVaultId,
+  getRemoteVaultName,
+} from "@/locker/storage/remoteVaultRepo";
+import type { AppStackScreenProps } from "@/navigators/navigationTypes";
+import { useAppTheme } from "@/theme/context";
+import { typography } from "@/theme/typography";
+import type { ThemedStyle } from "@/theme/types";
+import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 
 type RecoveryStatus = {
-  configured: boolean
-  rotatedAt?: string
-}
+  configured: boolean;
+  rotatedAt?: string;
+};
 
-export const VaultRecoverySetupScreen: FC<AppStackScreenProps<"VaultRecoverySetup">> =
-  function VaultRecoverySetupScreen(props) {
-    const { navigation } = props
-    const { themed } = useAppTheme()
-    const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
-    const vaultId = getRemoteVaultId()
-    const vaultName = getRemoteVaultName() ?? "Current vault"
+export const VaultRecoverySetupScreen: FC<
+  AppStackScreenProps<"VaultRecoverySetup">
+> = function VaultRecoverySetupScreen(props) {
+  const { navigation } = props;
+  const { themed } = useAppTheme();
+  const $insets = useSafeAreaInsetsStyle(["top", "bottom"]);
+  const vaultId = getRemoteVaultId();
+  const vaultName = getRemoteVaultName() ?? "Current vault";
 
-    const [status, setStatus] = useState<RecoveryStatus>({ configured: false })
-    const [generatedKey, setGeneratedKey] = useState<string | null>(null)
-    const [saved, setSaved] = useState(false)
-    const [busy, setBusy] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [message, setMessage] = useState<string | null>(null)
+  const [status, setStatus] = useState<RecoveryStatus>({ configured: false });
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
-    const refresh = useCallback(async () => {
-      if (!vaultId) {
-        setError("No vault is selected on this device.")
-        return
+  const refresh = useCallback(async () => {
+    if (!vaultId) {
+      setError("No vault is selected on this device.");
+      return;
+    }
+    try {
+      const data = await getRecoveryEnvelopeStatus(vaultId);
+      setStatus({
+        configured: data.configured,
+        rotatedAt: data.envelope?.rotatedAt,
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load recovery status",
+      );
+    }
+  }, [vaultId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!vaultSession.isUnlocked()) {
+        navigation.replace("VaultLocked");
+        return;
       }
+      void refresh();
+    }, [navigation, refresh]),
+  );
+
+  useEffect(() => {
+    if (generatedKey) {
+      setSaved(false);
+    }
+  }, [generatedKey]);
+
+  const handleGenerate = useCallback(async () => {
+    if (!vaultId) {
+      setError("No vault is selected on this device.");
+      return;
+    }
+
+    const run = async () => {
+      setBusy(true);
+      setError(null);
+      setMessage(null);
       try {
-        const data = await getRecoveryEnvelopeStatus(vaultId)
-        setStatus({
-          configured: data.configured,
-          rotatedAt: data.envelope?.rotatedAt,
-        })
+        const vaultKey = await getRemoteVaultKey(vaultId);
+        if (!vaultKey) throw new Error("Vault key unavailable on this device.");
+        const recovery = generateRecoveryKey();
+        const envelope = createRecoveryEnvelope(
+          vaultKey,
+          recovery.canonicalKey,
+        );
+        await upsertRecoveryEnvelope(vaultId, envelope);
+        setGeneratedKey(recovery.displayKey);
+        setStatus({ configured: true, rotatedAt: new Date().toISOString() });
+        setMessage(
+          status.configured
+            ? "Recovery key rotated. Previous key no longer works."
+            : "Recovery key created.",
+        );
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load recovery status")
+        setError(
+          err instanceof Error ? err.message : "Failed to create recovery key",
+        );
+      } finally {
+        setBusy(false);
       }
-    }, [vaultId])
+    };
 
-    useFocusEffect(
-      useCallback(() => {
-        if (!vaultSession.isUnlocked()) {
-          navigation.replace("VaultLocked")
-          return
-        }
-        void refresh()
-      }, [navigation, refresh]),
-    )
+    if (status.configured) {
+      Alert.alert(
+        "Regenerate recovery key?",
+        "Generating a new recovery key will invalidate the previous one immediately.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Regenerate",
+            style: "destructive",
+            onPress: () => void run(),
+          },
+        ],
+      );
+      return;
+    }
 
-    useEffect(() => {
-      if (generatedKey) {
-        setSaved(false)
-      }
-    }, [generatedKey])
+    await run();
+  }, [status.configured, vaultId]);
 
-    const handleGenerate = useCallback(async () => {
-      if (!vaultId) {
-        setError("No vault is selected on this device.")
-        return
-      }
+  const handleDismiss = useCallback(() => {
+    setGeneratedKey(null);
+    setSaved(false);
+    navigation.goBack();
+  }, [navigation]);
 
-      const run = async () => {
-        setBusy(true)
-        setError(null)
-        setMessage(null)
-        try {
-          const vaultKey = await getRemoteVaultKey(vaultId)
-          if (!vaultKey) throw new Error("Vault key unavailable on this device.")
-          const recovery = generateRecoveryKey()
-          const envelope = createRecoveryEnvelope(vaultKey, recovery.canonicalKey)
-          await upsertRecoveryEnvelope(vaultId, envelope)
-          setGeneratedKey(recovery.displayKey)
-          setStatus({ configured: true, rotatedAt: new Date().toISOString() })
-          setMessage(status.configured ? "Recovery key rotated. Previous key no longer works." : "Recovery key created.")
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed to create recovery key")
-        } finally {
-          setBusy(false)
-        }
-      }
+  return (
+    <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
+      <VaultScreenBackground />
+      <ScrollView
+        contentContainerStyle={themed($content)}
+        showsVerticalScrollIndicator={false}
+      >
+        <VaultScreenHero
+          themed={themed}
+          badge="RECOVERY"
+          title="Recovery Key"
+          subtitle={`Create a one-time recovery key for ${vaultName}. It wraps this vault’s key without exposing the vault key itself.`}
+          icon={<ShieldAlert size={13} color="#FFD8FA" />}
+          metaLabel={status.configured ? "Configured" : "Not configured"}
+        />
 
-      if (status.configured) {
-        Alert.alert(
-          "Regenerate recovery key?",
-          "Generating a new recovery key will invalidate the previous one immediately.",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Regenerate", style: "destructive", onPress: () => void run() },
-          ],
-        )
-        return
-      }
+        <GlassSection
+          themed={themed}
+          title="Status"
+          subtitle="Generate or rotate the one-time recovery secret for this vault."
+          icon={<KeyRound size={14} color="#FFC8F3" />}
+          rightSlot={
+            <MetaChip
+              themed={themed}
+              label={
+                status.rotatedAt
+                  ? `Updated ${new Date(status.rotatedAt).toLocaleDateString()}`
+                  : "Awaiting setup"
+              }
+            />
+          }
+        >
+          <Text style={themed($bodyText)}>
+            {status.configured
+              ? `Configured${status.rotatedAt ? ` on ${new Date(status.rotatedAt).toLocaleString()}` : ""}.`
+              : "No recovery key is configured for this vault."}
+          </Text>
+          <GradientPrimaryButton
+            themed={themed}
+            label={
+              busy
+                ? "Working..."
+                : status.configured
+                  ? "Regenerate Recovery Key"
+                  : "Generate Recovery Key"
+            }
+            onPress={() => void handleGenerate()}
+            disabled={busy}
+          />
+        </GlassSection>
 
-      await run()
-    }, [status.configured, vaultId])
-
-    const handleShare = useCallback(async () => {
-      if (!generatedKey) return
-      await Share.share({
-        message: `${vaultName} recovery key\n\n${generatedKey}\n\nSave this now. Locker will not show it again.`,
-      })
-    }, [generatedKey, vaultName])
-
-    const handleDismiss = useCallback(() => {
-      setGeneratedKey(null)
-      setSaved(false)
-      navigation.goBack()
-    }, [navigation])
-
-    return (
-      <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
-        <ScrollView contentContainerStyle={themed($content)} showsVerticalScrollIndicator={false}>
-          <View style={themed($header)}>
-            <Text preset="heading" style={themed($title)}>
-              Recovery Key
+        {generatedKey ? (
+          <GlassSection
+            themed={themed}
+            title="Save This Now"
+            subtitle="Locker shows this key once. Save it before leaving this screen."
+            icon={<ShieldAlert size={14} color="#FFC8F3" />}
+          >
+            <Text style={themed($warningText)}>
+              Locker will show this recovery key only once. If you dismiss this
+              screen without saving it, you must generate a new one.
             </Text>
-            <Text style={themed($subtitle)}>
-              Create a one-time recovery key for {vaultName}. It wraps this vault’s key without exposing the vault key itself.
-            </Text>
-          </View>
-
-          <View style={themed($panel)}>
-            <Text preset="bold" style={themed($sectionTitle)}>
-              Status
-            </Text>
-            <Text style={themed($bodyText)}>
-              {status.configured
-                ? `Configured${status.rotatedAt ? ` on ${new Date(status.rotatedAt).toLocaleString()}` : ""}.`
-                : "No recovery key is configured for this vault."}
-            </Text>
-            <Pressable style={themed($primaryButton)} onPress={() => void handleGenerate()} disabled={busy}>
-              <Text preset="bold" style={themed($primaryButtonText)}>
-                {busy ? "Working..." : status.configured ? "Regenerate Recovery Key" : "Generate Recovery Key"}
+            <VaultGlassPanel themed={themed}>
+              <Text selectable style={themed($keyText)}>
+                {generatedKey}
               </Text>
+            </VaultGlassPanel>
+
+            <Pressable
+              style={themed($checkboxRow)}
+              onPress={() => setSaved((current) => !current)}
+            >
+              <View style={themed([$checkbox, saved && $checkboxChecked])} />
+              <Text style={themed($bodyText)}>I saved this recovery key.</Text>
             </Pressable>
-          </View>
 
-          {generatedKey ? (
-            <View style={themed($panel)}>
-              <Text preset="bold" style={themed($sectionTitle)}>
-                Save This Now
-              </Text>
-              <Text style={themed($warningText)}>
-                Locker will show this recovery key only once. If you dismiss this screen without saving it, you must generate a new one.
-              </Text>
-              <View style={themed($keyShell)}>
-                <Text selectable style={themed($keyText)}>
-                  {generatedKey}
-                </Text>
-              </View>
+            <GradientPrimaryButton
+              themed={themed}
+              label="I Saved This"
+              onPress={handleDismiss}
+              disabled={!saved}
+            />
+          </GlassSection>
+        ) : null}
 
-              <Pressable style={themed($secondaryButton)} onPress={() => void handleShare()}>
-                <Text preset="bold" style={themed($secondaryButtonText)}>
-                  Export Key
-                </Text>
-              </Pressable>
+        {error ? (
+          <VaultBanner themed={themed} tone="error" text={error} />
+        ) : null}
+        {message ? (
+          <VaultBanner themed={themed} tone="status" text={message} />
+        ) : null}
 
-              <Pressable style={themed($checkboxRow)} onPress={() => setSaved((current) => !current)}>
-                <View style={themed([ $checkbox, saved && $checkboxChecked ])} />
-                <Text style={themed($bodyText)}>I saved this recovery key.</Text>
-              </Pressable>
+        <GhostButton
+          themed={themed}
+          label="Back"
+          onPress={() => navigation.goBack()}
+        />
+      </ScrollView>
+    </Screen>
+  );
+};
 
-              <Pressable
-                style={themed([ $primaryButton, !saved && $buttonDisabled ])}
-                onPress={handleDismiss}
-                disabled={!saved}
-              >
-                <Text preset="bold" style={themed($primaryButtonText)}>
-                  I Saved This
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          {error ? <Text style={themed($errorText)}>{error}</Text> : null}
-          {message ? <Text style={themed($statusText)}>{message}</Text> : null}
-        </ScrollView>
-      </Screen>
-    )
-  }
-
-const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexGrow: 1,
-  backgroundColor: colors.palette.neutral900,
-  paddingHorizontal: spacing.xl,
-})
+  paddingHorizontal: spacing.lg,
+});
 
 const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.lg,
-  paddingTop: spacing.xl,
-  paddingBottom: spacing.xl,
-})
-
-const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.sm,
-})
-
-const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-  lineHeight: 21,
-})
-
-const $panel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
-  borderRadius: 16,
-  padding: spacing.lg,
-  backgroundColor: "rgba(255, 255, 255, 0.06)",
-  borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.12)",
-})
+  paddingTop: spacing.lg,
+  paddingBottom: spacing.xl,
+});
 
-const $sectionTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $bodyText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral200,
+const $bodyText: ThemedStyle<TextStyle> = () => ({
+  color: "#F3E7F8",
   lineHeight: 20,
-})
+  fontSize: 13,
+});
 
-const $warningText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.accent300,
+const $warningText: ThemedStyle<TextStyle> = () => ({
+  color: "#FFD3F2",
   lineHeight: 20,
-})
+  fontSize: 13,
+});
 
-const $keyShell: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  borderRadius: 14,
-  padding: spacing.md,
-  backgroundColor: "rgba(255, 255, 255, 0.08)",
-})
-
-const $keyText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
+const $keyText: ThemedStyle<TextStyle> = () => ({
+  color: "#FFF6FF",
   letterSpacing: 1.2,
   lineHeight: 24,
-})
-
-const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  backgroundColor: colors.palette.primary300,
-})
-
-const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral900,
-})
-
-const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  backgroundColor: "rgba(255, 255, 255, 0.10)",
-})
-
-const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
+  fontFamily: typography.primary.semiBold,
+});
 
 const $checkboxRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
   gap: spacing.sm,
-})
+  paddingTop: spacing.xs,
+});
 
 const $checkbox: ThemedStyle<ViewStyle> = () => ({
-  width: 20,
-  height: 20,
-  borderRadius: 6,
+  width: 22,
+  height: 22,
+  borderRadius: 8,
   borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.35)",
-})
+  borderColor: "rgba(255,255,255,0.24)",
+  backgroundColor: "rgba(255,255,255,0.03)",
+});
 
 const $checkboxChecked: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: colors.palette.primary300,
   borderColor: colors.palette.primary300,
-})
-
-const $buttonDisabled: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.45,
-})
-
-const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.angry500,
-})
-
-const $statusText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-})
+});

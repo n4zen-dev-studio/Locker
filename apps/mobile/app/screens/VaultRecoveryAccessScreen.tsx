@@ -1,178 +1,184 @@
-import { FC, useCallback, useState } from "react"
-import { Platform, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
+import { FC, useCallback, useState } from "react";
+import { Platform, ScrollView, TextStyle, View, ViewStyle } from "react-native";
+import { KeyRound, Smartphone } from "lucide-react-native";
 
-import { Screen } from "@/components/Screen"
-import { Text } from "@/components/Text"
-import { fetchPublicRecoveryEnvelope, redeemRecoveryEnvelope } from "@/locker/recovery/recoveryApi"
-import { createRecoveryProof, formatRecoveryKey, openRecoveryEnvelope, parseRecoveryKey } from "@/locker/recovery/recoveryKey"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
-import { useAppTheme } from "@/theme/context"
-import type { ThemedStyle } from "@/theme/types"
-import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
+import { Screen } from "@/components/Screen";
+import { Text } from "@/components/Text";
+import { GhostButton } from "@/components/vault-note/GhostButton";
+import { GlassSection } from "@/components/vault-note/GlassSection";
+import { GradientPrimaryButton } from "@/components/vault-note/GradientPrimaryButton";
+import { IconTextInput } from "@/components/vault-note/IconTextInput";
+import {
+  VaultBanner,
+  VaultScreenBackground,
+  VaultScreenHero,
+} from "@/components/vault-note/VaultScreenChrome";
+import {
+  fetchPublicRecoveryEnvelope,
+  redeemRecoveryEnvelope,
+} from "@/locker/recovery/recoveryApi";
+import {
+  createRecoveryProof,
+  formatRecoveryKey,
+  openRecoveryEnvelope,
+  parseRecoveryKey,
+} from "@/locker/recovery/recoveryKey";
+import type { AppStackScreenProps } from "@/navigators/navigationTypes";
+import { useAppTheme } from "@/theme/context";
+import type { ThemedStyle } from "@/theme/types";
+import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 
-export const VaultRecoveryAccessScreen: FC<AppStackScreenProps<"VaultRecoveryAccess">> =
-  function VaultRecoveryAccessScreen(props) {
-    const { navigation } = props
-    const { themed } = useAppTheme()
-    const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
+export const VaultRecoveryAccessScreen: FC<
+  AppStackScreenProps<"VaultRecoveryAccess">
+> = function VaultRecoveryAccessScreen(props) {
+  const { navigation } = props;
+  const { themed, theme } = useAppTheme();
+  const $insets = useSafeAreaInsetsStyle(["top", "bottom"]);
 
-    const [recoveryKey, setRecoveryKey] = useState("")
-    const [deviceName, setDeviceName] = useState(Platform.OS === "ios" ? "Locker iPhone" : "Locker Android")
-    const [error, setError] = useState<string | null>(null)
-    const [status, setStatus] = useState<string | null>(null)
-    const [busy, setBusy] = useState(false)
+  const [recoveryKey, setRecoveryKey] = useState("");
+  const [deviceName, setDeviceName] = useState(
+    Platform.OS === "ios" ? "Locker iPhone" : "Locker Android",
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-    const handleRecover = useCallback(async () => {
-      setError(null)
-      setStatus(null)
+  const handleRecover = useCallback(async () => {
+    setError(null);
+    setStatus(null);
 
-      let parsed
-      try {
-        parsed = parseRecoveryKey(recoveryKey)
-      } catch {
-        setError("Enter a valid recovery key.")
-        return
-      }
+    let parsed;
+    try {
+      parsed = parseRecoveryKey(recoveryKey);
+    } catch {
+      setError("Enter a valid recovery key.");
+      return;
+    }
 
-      setBusy(true)
-      try {
-        setStatus("Validating recovery key...")
-        const envelope = await fetchPublicRecoveryEnvelope(parsed.recoveryId)
-        const vaultKey = openRecoveryEnvelope(envelope, parsed.canonicalKey)
-        if (vaultKey.length !== 32) throw new Error("RECOVERY_FAILED")
-        const proofB64 = createRecoveryProof(parsed.canonicalKey, envelope)
-        setStatus("Linking this device...")
-        await redeemRecoveryEnvelope({
-          proofB64,
-          vaultKey,
-          envelope,
-          deviceName,
-        })
-        navigation.replace("VaultTabs")
-      } catch {
-        setError("Recovery failed. Check the key and try again.")
-      } finally {
-        setBusy(false)
-      }
-    }, [deviceName, navigation, recoveryKey])
+    setBusy(true);
+    try {
+      setStatus("Validating recovery key...");
+      const envelope = await fetchPublicRecoveryEnvelope(parsed.recoveryId);
+      const vaultKey = openRecoveryEnvelope(envelope, parsed.canonicalKey);
+      if (vaultKey.length !== 32) throw new Error("RECOVERY_FAILED");
+      const proofB64 = createRecoveryProof(parsed.canonicalKey, envelope);
+      setStatus("Linking this device...");
+      await redeemRecoveryEnvelope({
+        proofB64,
+        vaultKey,
+        envelope,
+        deviceName,
+      });
+      (navigation.replace as (...args: unknown[]) => void)("VaultTabs");
+    } catch {
+      setError("Recovery failed. Check the key and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }, [deviceName, navigation, recoveryKey]);
 
-    return (
-      <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
-        <View style={themed($header)}>
-          <Text preset="heading" style={themed($title)}>
-            Use Recovery Key
-          </Text>
-          <Text preset="subheading" style={themed($subtitle)}>
-            Recover vault access on this device and continue through the normal device-link flow.
-          </Text>
-        </View>
-
-        <Text style={themed($label)}>Device name</Text>
-        <TextInput
-          value={deviceName}
-          onChangeText={setDeviceName}
-          placeholder="Device name"
-          placeholderTextColor="#9aa0a6"
-          style={themed($input)}
+  return (
+    <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
+      <VaultScreenBackground />
+      <ScrollView
+        contentContainerStyle={themed($content)}
+        showsVerticalScrollIndicator={false}
+      >
+        <VaultScreenHero
+          themed={themed}
+          badge="RECOVERY"
+          title="Use Recovery Key"
+          subtitle="Recover vault access on this device and continue through the normal device-link flow."
+          icon={<KeyRound size={13} color="#FFD8FA" />}
+          metaLabel={busy ? "Working" : "Ready"}
         />
 
-        <Text style={themed($label)}>Recovery key</Text>
-        <TextInput
-          value={formatRecoveryKey(recoveryKey)}
-          onChangeText={setRecoveryKey}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          placeholder="RK1-...."
-          placeholderTextColor="#9aa0a6"
-          style={themed([$input, $payloadInput])}
-          multiline
+        <GlassSection
+          themed={themed}
+          title="Recovery Access"
+          subtitle="Enter the device label and the one-time recovery key exactly as saved."
+          icon={<Smartphone size={14} color="#FFC8F3" />}
+        >
+          <View style={themed($fieldStack)}>
+            <View style={themed($fieldGroup)}>
+              <Text style={themed($label)}>Device name</Text>
+              <IconTextInput
+                themed={themed}
+                theme={theme}
+                icon={<Smartphone size={16} color="#FFD8FA" />}
+                placeholder="Device name"
+                value={deviceName}
+                onChangeText={setDeviceName}
+              />
+            </View>
+
+            <View style={themed($fieldGroup)}>
+              <Text style={themed($label)}>Recovery key</Text>
+              <IconTextInput
+                themed={themed}
+                theme={theme}
+                icon={<KeyRound size={16} color="#FFD8FA" />}
+                placeholder="RK1-...."
+                value={formatRecoveryKey(recoveryKey)}
+                onChangeText={setRecoveryKey}
+                multiline
+                inputStyle={themed($recoveryInput)}
+              />
+            </View>
+          </View>
+
+          <GradientPrimaryButton
+            themed={themed}
+            label={busy ? "Recovering..." : "Use Recovery Key"}
+            onPress={() => void handleRecover()}
+            disabled={busy}
+          />
+        </GlassSection>
+
+        {error ? (
+          <VaultBanner themed={themed} tone="error" text={error} />
+        ) : null}
+        {status ? (
+          <VaultBanner themed={themed} tone="status" text={status} />
+        ) : null}
+
+        <GhostButton
+          themed={themed}
+          label="Back"
+          onPress={() => navigation.goBack()}
         />
+      </ScrollView>
+    </Screen>
+  );
+};
 
-        {error ? <Text style={themed($errorText)}>{error}</Text> : null}
-        {status ? <Text style={themed($statusText)}>{status}</Text> : null}
+const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexGrow: 1,
+  paddingHorizontal: spacing.lg,
+});
 
-        <Pressable style={themed($primaryButton)} onPress={() => void handleRecover()} disabled={busy}>
-          <Text preset="bold" style={themed($primaryButtonText)}>
-            {busy ? "Recovering..." : "Use Recovery Key"}
-          </Text>
-        </Pressable>
+const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.md,
+  paddingTop: spacing.lg,
+  paddingBottom: spacing.xl,
+});
 
-        <Pressable style={themed($linkButton)} onPress={() => navigation.goBack()}>
-          <Text preset="bold" style={themed($linkText)}>
-            Back
-          </Text>
-        </Pressable>
-      </Screen>
-    )
-  }
+const $fieldStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.md,
+});
 
-const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  flex: 1,
-  backgroundColor: colors.palette.neutral900,
-  paddingHorizontal: spacing.xl,
-})
+const $fieldGroup: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+});
 
-const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingTop: spacing.xl,
-  marginBottom: spacing.lg,
-})
+const $label: ThemedStyle<TextStyle> = () => ({
+  color: "rgba(255,236,255,0.74)",
+  fontSize: 12,
+  fontWeight: "600",
+});
 
-const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-})
-
-const $label: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.palette.neutral300,
-  marginBottom: spacing.xs,
-})
-
-const $input: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  backgroundColor: "rgba(255, 255, 255, 0.08)",
-  borderRadius: 14,
-  paddingHorizontal: spacing.md,
-  paddingVertical: spacing.sm,
-  color: colors.palette.neutral100,
-  borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.15)",
-  marginBottom: spacing.md,
-})
-
-const $payloadInput: ThemedStyle<TextStyle> = () => ({
-  minHeight: 140,
-  textAlignVertical: "top",
-})
-
-const $errorText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.palette.angry500,
-  marginBottom: spacing.md,
-})
-
-const $statusText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.palette.neutral300,
-  marginBottom: spacing.md,
-})
-
-const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.palette.primary300,
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  marginBottom: spacing.md,
-})
-
-const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral900,
-})
-
-const $linkButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  alignItems: "center",
-  marginBottom: spacing.lg,
-})
-
-const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-})
+const $recoveryInput: ThemedStyle<TextStyle> = () => ({
+  minHeight: 128,
+  paddingTop: 2,
+  letterSpacing: 1,
+});

@@ -1,283 +1,292 @@
-import { FC, useCallback, useEffect, useState } from "react"
-import { Platform, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
-import { useFocusEffect } from "@react-navigation/native"
+import { FC, useCallback, useEffect, useState } from "react";
+import { Platform, ScrollView, TextStyle, View, ViewStyle } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { QrCode, Smartphone, Unplug } from "lucide-react-native";
 
-import { Screen } from "@/components/Screen"
-import { Text } from "@/components/Text"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
-import { useAppTheme } from "@/theme/context"
-import type { ThemedStyle } from "@/theme/types"
-import { vaultSession } from "@/locker/session"
-import { fetchJson } from "@/locker/net/apiClient"
-import { DEFAULT_API_BASE_URL } from "@/locker/config"
-import { getServerUrl, setServerUrl } from "@/locker/storage/serverConfigRepo"
-import { normalizeApiBaseUrl } from "@/locker/net/apiClient"
-import { setToken } from "@/locker/auth/tokenStore"
-import { AccountState, setAccount } from "@/locker/storage/accountRepo"
-import { ensureBootstrapState } from "@/locker/bootstrap/bootstrapRepo"
-import { completeVaultSelectionFlow } from "@/locker/storage/onboardingRepo"
-import { setRemoteVaultId, setVaultEnabledOnDevice } from "@/locker/storage/remoteVaultRepo"
-import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
-import { unwrapProvisioningPayload, formatDeviceLinkCode, normalizeDeviceLinkCode } from "@/locker/linking/deviceLinkPayload"
-import { parseLockerQrPayload } from "@/locker/linking/qrPayload"
-import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
-import { DeviceDTO, UserDTO } from "@locker/types"
+import { Screen } from "@/components/Screen";
+import { Text } from "@/components/Text";
+import { GhostButton } from "@/components/vault-note/GhostButton";
+import { GlassSection } from "@/components/vault-note/GlassSection";
+import { GradientPrimaryButton } from "@/components/vault-note/GradientPrimaryButton";
+import { IconTextInput } from "@/components/vault-note/IconTextInput";
+import {
+  VaultBanner,
+  VaultScreenBackground,
+  VaultScreenHero,
+} from "@/components/vault-note/VaultScreenChrome";
+import { DEFAULT_API_BASE_URL } from "@/locker/config";
+import { setToken } from "@/locker/auth/tokenStore";
+import { ensureBootstrapState } from "@/locker/bootstrap/bootstrapRepo";
+import { completeVaultSelectionFlow } from "@/locker/storage/onboardingRepo";
+import { fetchJson, normalizeApiBaseUrl } from "@/locker/net/apiClient";
+import { parseLockerQrPayload } from "@/locker/linking/qrPayload";
+import {
+  unwrapProvisioningPayload,
+  formatDeviceLinkCode,
+  normalizeDeviceLinkCode,
+} from "@/locker/linking/deviceLinkPayload";
+import { vaultSession } from "@/locker/session";
+import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
+import { getServerUrl, setServerUrl } from "@/locker/storage/serverConfigRepo";
+import { AccountState, setAccount } from "@/locker/storage/accountRepo";
+import {
+  setRemoteVaultId,
+  setVaultEnabledOnDevice,
+} from "@/locker/storage/remoteVaultRepo";
+import type { AppStackScreenProps } from "@/navigators/navigationTypes";
+import { useAppTheme } from "@/theme/context";
+import type { ThemedStyle } from "@/theme/types";
+import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
+import { DeviceDTO, UserDTO } from "@locker/types";
 
 type LinkPayload = {
-  t?: string
-  apiBase?: string
-  linkCode?: string
-}
+  t?: string;
+  apiBase?: string;
+  linkCode?: string;
+};
 
-export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> = function VaultLinkDeviceScreen(
-  props,
-) {
-  const { navigation } = props
-  const initialPayload = props.route.params?.initialPayload ?? ""
-  const { themed } = useAppTheme()
-  const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
+export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
+  function VaultLinkDeviceScreen(props) {
+    const { navigation } = props;
+    const initialPayload = props.route.params?.initialPayload ?? "";
+    const { themed, theme } = useAppTheme();
+    const $insets = useSafeAreaInsetsStyle(["top", "bottom"]);
 
-  const [payload, setPayload] = useState("")
-  const [deviceName, setDeviceName] = useState(
-    Platform.OS === "ios" ? "Locker iPhone" : "Locker Android",
-  )
-  const [error, setError] = useState<string | null>(null)
-  const [status, setStatus] = useState<string | null>(null)
+    const [payload, setPayload] = useState("");
+    const [deviceName, setDeviceName] = useState(
+      Platform.OS === "ios" ? "Locker iPhone" : "Locker Android",
+    );
+    const [error, setError] = useState<string | null>(null);
+    const [status, setStatus] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (initialPayload) {
-      setPayload(initialPayload)
-    }
-  }, [initialPayload])
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked")
+    useEffect(() => {
+      if (initialPayload) {
+        setPayload(initialPayload);
       }
-    }, [navigation]),
-  )
+    }, [initialPayload]);
 
-  const handleRedeem = async () => {
-    setError(null)
-    setStatus(null)
-    const trimmed = payload.trim()
-    if (!trimmed) {
-      setError("Paste your one-time device code")
-      return
-    }
+    useFocusEffect(
+      useCallback(() => {
+        if (!vaultSession.isUnlocked()) {
+          navigation.replace("VaultLocked");
+        }
+      }, [navigation]),
+    );
 
-    let linkCode = ""
-    let apiBase = getServerUrl() || DEFAULT_API_BASE_URL
+    const handleRedeem = async () => {
+      setError(null);
+      setStatus(null);
+      const trimmed = payload.trim();
+      if (!trimmed) {
+        setError("Paste your one-time device code");
+        return;
+      }
 
-    if (trimmed.startsWith("{")) {
-      const qrPayload = parseLockerQrPayload(trimmed)
-      if (qrPayload?.t === "locker-device-link") {
-        linkCode = qrPayload.linkCode
-        if (qrPayload.apiBase) apiBase = qrPayload.apiBase
+      let linkCode = "";
+      let apiBase = getServerUrl() || DEFAULT_API_BASE_URL;
+
+      if (trimmed.startsWith("{")) {
+        const qrPayload = parseLockerQrPayload(trimmed);
+        if (qrPayload?.t === "locker-device-link") {
+          linkCode = qrPayload.linkCode;
+          if (qrPayload.apiBase) apiBase = qrPayload.apiBase;
+        } else {
+          try {
+            const parsed = JSON.parse(trimmed) as LinkPayload;
+            if (parsed.linkCode) linkCode = parsed.linkCode;
+            if (parsed.apiBase) apiBase = parsed.apiBase;
+          } catch {
+            setError("Invalid device code");
+            return;
+          }
+        }
       } else {
-        try {
-          const parsed = JSON.parse(trimmed) as LinkPayload
-          if (parsed.linkCode) linkCode = parsed.linkCode
-          if (parsed.apiBase) apiBase = parsed.apiBase
-        } catch {
-          setError("Invalid device code")
-          return
-        }
+        linkCode = normalizeDeviceLinkCode(trimmed);
       }
-    } else {
-      linkCode = normalizeDeviceLinkCode(trimmed)
-    }
 
-    if (!linkCode) {
-      setError("Missing device code")
-      return
-    }
+      if (!linkCode) {
+        setError("Missing device code");
+        return;
+      }
 
-    try {
-      setStatus("Linking this device...")
-      apiBase = normalizeApiBaseUrl(apiBase)
-      const bootstrap = ensureBootstrapState()
-      const data = await fetchJson<{ token: string; user: UserDTO; device: DeviceDTO; provisioningPayload?: string | null }>(
-        "/v1/devices/link-code/redeem",
-        {
-          method: "POST",
-          body: JSON.stringify({
+      try {
+        setStatus("Linking this device...");
+        apiBase = normalizeApiBaseUrl(apiBase);
+        const bootstrap = ensureBootstrapState();
+        const data = await fetchJson<{
+          token: string;
+          user: UserDTO;
+          device: DeviceDTO;
+          provisioningPayload?: string | null;
+        }>(
+          "/v1/devices/link-code/redeem",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              linkCode,
+              deviceId: bootstrap.deviceId,
+              deviceName: deviceName.trim() || "Locker Mobile",
+              platform: Platform.OS === "ios" ? "ios" : "android",
+            }),
+          },
+          { baseUrl: apiBase, auth: "none" },
+        );
+
+        await setToken(data.token);
+        setServerUrl(apiBase);
+
+        const account: AccountState = {
+          user: data.user,
+          device: data.device,
+          apiBase,
+          linkedAt: new Date().toISOString(),
+        };
+        setAccount(account);
+
+        const me = await fetchJson<{ user: UserDTO }>(
+          "/v1/me",
+          {},
+          { baseUrl: apiBase, token: data.token },
+        );
+        setAccount({ ...account, user: me.user });
+        if (data.provisioningPayload) {
+          const provisionedVaults = unwrapProvisioningPayload({
             linkCode,
-            deviceId: bootstrap.deviceId,
-            deviceName: deviceName.trim() || "Locker Mobile",
-            platform: Platform.OS === "ios" ? "ios" : "android",
-          }),
-        },
-        { baseUrl: apiBase, auth: "none" },
-      )
-
-      await setToken(data.token)
-      setServerUrl(apiBase)
-
-      const account: AccountState = {
-        user: data.user,
-        device: data.device,
-        apiBase,
-        linkedAt: new Date().toISOString(),
-      }
-      setAccount(account)
-
-      const me = await fetchJson<{ user: UserDTO }>("/v1/me", {}, { baseUrl: apiBase, token: data.token })
-      setAccount({ ...account, user: me.user })
-      if (data.provisioningPayload) {
-        const provisionedVaults = unwrapProvisioningPayload({ linkCode, provisioningPayload: data.provisioningPayload })
-        for (const vault of provisionedVaults) {
-          await setRemoteVaultKey(vault.vaultId, vault.rvk)
-          setVaultEnabledOnDevice(vault.vaultId, true, { name: vault.name })
+            provisioningPayload: data.provisioningPayload,
+          });
+          for (const vault of provisionedVaults) {
+            await setRemoteVaultKey(vault.vaultId, vault.rvk);
+            setVaultEnabledOnDevice(vault.vaultId, true, { name: vault.name });
+          }
+          const personal =
+            provisionedVaults.find((vault) => vault.name === "Personal") ??
+            provisionedVaults[0];
+          if (personal) setRemoteVaultId(personal.vaultId, personal.name);
         }
-        const personal = provisionedVaults.find((vault) => vault.name === "Personal") ?? provisionedVaults[0]
-        if (personal) setRemoteVaultId(personal.vaultId, personal.name)
+        completeVaultSelectionFlow();
+        setStatus(
+          "Device linked. Choose which vaults belong on this device next.",
+        );
+        (navigation.replace as (...args: unknown[]) => void)("VaultTabs");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Link failed";
+        setError(message);
       }
-      completeVaultSelectionFlow()
-      setStatus("Device linked. Choose which vaults belong on this device next.")
-      navigation.replace("VaultTabs")
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Link failed"
-      setError(message)
-    }
-  }
+    };
 
-  return (
-    <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
-      <View style={themed($header)}>
-        <Text preset="heading" style={themed($title)}>
-          Set Up This Device
-        </Text>
-        <Text preset="subheading" style={themed($subtitle)}>
-          Add this phone to your existing Locker account
-        </Text>
-      </View>
+    return (
+      <Screen
+        preset="scroll"
+        contentContainerStyle={themed([$screen, $insets])}
+      >
+        <VaultScreenBackground />
+        <ScrollView
+          contentContainerStyle={themed($content)}
+          showsVerticalScrollIndicator={false}
+        >
+          <VaultScreenHero
+            themed={themed}
+            badge="DEVICE LINK"
+            title="Set Up This Device"
+            subtitle="Add this phone to your existing Locker account."
+            icon={<Unplug size={13} color="#FFD8FA" />}
+            metaLabel={status ? "Linking" : "Awaiting code"}
+          />
 
-      <Text style={themed($label)}>Device name</Text>
-      <TextInput
-        value={deviceName}
-        onChangeText={setDeviceName}
-        placeholder="Device name"
-        placeholderTextColor="#9aa0a6"
-        style={themed($input)}
-      />
+          <GlassSection
+            themed={themed}
+            title="Add This Device"
+            subtitle="Use the one-time setup code from one of your already linked devices."
+            icon={<Smartphone size={14} color="#FFC8F3" />}
+          >
+            <View style={themed($fieldStack)}>
+              <View style={themed($fieldGroup)}>
+                <Text style={themed($label)}>Device name</Text>
+                <IconTextInput
+                  themed={themed}
+                  theme={theme}
+                  icon={<Smartphone size={16} color="#FFD8FA" />}
+                  placeholder="Device name"
+                  value={deviceName}
+                  onChangeText={setDeviceName}
+                />
+              </View>
 
-      <Text style={themed($label)}>One-time device code</Text>
-      <TextInput
-        value={formatDeviceLinkCode(payload)}
-        onChangeText={setPayload}
-        placeholder="Paste the code from one of your linked devices"
-        placeholderTextColor="#9aa0a6"
-        style={themed([$input, $payloadInput])}
-        multiline
-      />
+              <View style={themed($fieldGroup)}>
+                <Text style={themed($label)}>One-time device code</Text>
+                <IconTextInput
+                  themed={themed}
+                  theme={theme}
+                  icon={<Unplug size={16} color="#FFD8FA" />}
+                  placeholder="Paste the code from one of your linked devices"
+                  value={formatDeviceLinkCode(payload)}
+                  onChangeText={setPayload}
+                  multiline
+                  inputStyle={themed($payloadInput)}
+                />
+              </View>
+            </View>
 
-      <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultQrScanner", { mode: "device-link" })}>
-        <Text preset="bold" style={themed($secondaryButtonText)}>
-          Scan QR Instead
-        </Text>
-      </Pressable>
+            <GhostButton
+              themed={themed}
+              label="Scan QR Instead"
+              icon={<QrCode size={15} color="#F9E7FF" />}
+              onPress={() =>
+                navigation.navigate("VaultQrScanner", { mode: "device-link" })
+              }
+            />
 
-      {error ? <Text style={themed($errorText)}>{error}</Text> : null}
-      {status ? <Text style={themed($statusText)}>{status}</Text> : null}
+            <GradientPrimaryButton
+              themed={themed}
+              label="Add My Device"
+              onPress={handleRedeem}
+            />
+          </GlassSection>
 
-      <Pressable style={themed($primaryButton)} onPress={handleRedeem}>
-        <Text preset="bold" style={themed($primaryButtonText)}>
-          Add My Device
-        </Text>
-      </Pressable>
+          {error ? (
+            <VaultBanner themed={themed} tone="error" text={error} />
+          ) : null}
+          {status ? (
+            <VaultBanner themed={themed} tone="status" text={status} />
+          ) : null}
 
-      <Pressable style={themed($linkButton)} onPress={() => navigation.goBack()}>
-        <Text preset="bold" style={themed($linkText)}>
-          Back
-        </Text>
-      </Pressable>
-    </Screen>
-  )
-}
+          <GhostButton
+            themed={themed}
+            label="Back"
+            onPress={() => navigation.goBack()}
+          />
+        </ScrollView>
+      </Screen>
+    );
+  };
 
-const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  flex: 1,
-  backgroundColor: colors.palette.neutral900,
-  paddingHorizontal: spacing.xl,
-})
+const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexGrow: 1,
+  paddingHorizontal: spacing.lg,
+});
 
-const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingTop: spacing.xl,
-  marginBottom: spacing.lg,
-})
+const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.md,
+  paddingTop: spacing.lg,
+  paddingBottom: spacing.xl,
+});
 
-const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
+const $fieldStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.md,
+});
 
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-})
+const $fieldGroup: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+});
 
-const $label: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.palette.neutral300,
-  marginBottom: spacing.xs,
-})
-
-const $input: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  backgroundColor: "rgba(255, 255, 255, 0.08)",
-  borderRadius: 14,
-  paddingHorizontal: spacing.md,
-  paddingVertical: spacing.sm,
-  color: colors.palette.neutral100,
-  borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.15)",
-  marginBottom: spacing.md,
-})
+const $label: ThemedStyle<TextStyle> = () => ({
+  color: "rgba(255,236,255,0.74)",
+  fontSize: 12,
+  fontWeight: "600",
+});
 
 const $payloadInput: ThemedStyle<TextStyle> = () => ({
-  minHeight: 140,
-  textAlignVertical: "top",
-})
-
-const $errorText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.palette.angry500,
-  marginBottom: spacing.md,
-})
-
-const $statusText: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.palette.neutral300,
-  marginBottom: spacing.md,
-})
-
-const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.palette.primary300,
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  marginBottom: spacing.md,
-})
-
-const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral900,
-})
-
-const $linkButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  marginTop: spacing.sm,
-  alignItems: "center",
-})
-
-const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  backgroundColor: "rgba(255, 255, 255, 0.08)",
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.15)",
-  marginBottom: spacing.md,
-})
-
-const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-})
+  minHeight: 128,
+  paddingTop: 2,
+  letterSpacing: 1.2,
+});
