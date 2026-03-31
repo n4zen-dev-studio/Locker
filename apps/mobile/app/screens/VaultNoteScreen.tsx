@@ -108,6 +108,7 @@ import {
   VaultItemType,
 } from "@/locker/vault/types"
 import { ensureElevatedSession } from "@/locker/security/stepUp"
+import { useBackgroundLockSuppression } from "@/locker/security/backgroundLockSuppression"
 import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
 import { MAX_BLOB_BYTES } from "@/locker/constants"
 
@@ -145,6 +146,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const { navigation, route } = props
   const { themed, theme } = useAppTheme()
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
+  useBackgroundLockSuppression("VaultNoteScreen")
 
   const noteId = route.params?.noteId
   const importType = route.params?.importType
