@@ -25,10 +25,11 @@ type Props = {
 export function AttachmentRow(props: Props) {
   const { themed, att, state, selected, onSelect, onOpen, onDownload, onRemove, canEdit } = props
   const itemType = getVaultItemTypeFromMime(att.mime)
+  const canRenderPreviewImage = itemType === "image" && !!state.dataUri
 
   return (
     <Pressable onPress={onSelect} style={themed([$attachmentCard, selected && $attachmentCardSelected])}>
-      {state.dataUri ? (
+      {canRenderPreviewImage ? (
         <Image source={{ uri: state.dataUri }} style={themed($attachmentImage)} />
       ) : (
         <View style={themed($attachmentPlaceholder)}>
@@ -58,7 +59,13 @@ export function AttachmentRow(props: Props) {
 
       <Pressable style={themed($attachmentButton)} onPress={state.status === "ready" ? onOpen : onDownload}>
         <Text style={themed($attachmentButtonText)}>
-          {state.status === "downloading" ? "Loading..." : state.status === "ready" ? "Open" : "Get"}
+          {state.status === "downloading"
+            ? "Loading..."
+            : state.status === "ready"
+              ? itemType === "voice"
+                ? "Play"
+                : "Open"
+              : "Get"}
         </Text>
       </Pressable>
       {canEdit ? (

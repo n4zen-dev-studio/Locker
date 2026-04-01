@@ -138,6 +138,37 @@ type ViewerState = {
 const LOCAL_ATTACHMENT_SCOPE = "__local__"
 const VOICE_MIME = "audio/m4a"
 
+function debugVoiceFlow(event: string, payload: Record<string, unknown>) {
+  if (!__DEV__) return
+  console.log(`[voice-flow] ${event}`, payload)
+}
+
+function resolveExistingAttachmentId(
+  attachments: NoteAttachment[],
+  ...preferredIds: Array<string | null | undefined>
+): string | null {
+  for (const candidate of preferredIds) {
+    if (candidate && attachments.some((attachment) => attachment.id === candidate)) return candidate
+  }
+  return attachments[0]?.id ?? null
+}
+
+function isVoiceMimeAttachmentList(attachments: NoteAttachment[]): boolean {
+  return attachments.length > 0 && attachments.every((attachment) => getVaultItemTypeFromMime(attachment.mime) === "voice")
+}
+
+function shouldPrepareVoiceAttachment(
+  attachment: NoteAttachment | null,
+  state: AttachmentUiState | undefined,
+): boolean {
+  if (!attachment) return false
+  if (getVaultItemTypeFromMime(attachment.mime) !== "voice") return false
+  if (!state) return true
+  if (state.status === "ready" && state.localUri) return false
+  if (state.status === "downloading") return false
+  return true
+}
+
 const fileSystemCompat = FileSystem as any
 
 export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function VaultNoteScreen(
@@ -176,23 +207,44 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const [isRecording, setIsRecording] = useState(false)
   const [isRecordingPaused, setIsRecordingPaused] = useState(false)
   const [recordingDurationMs, setRecordingDurationMs] = useState(0)
+  const [isSavingVoice, setIsSavingVoice] = useState(false)
   const [isPlayingVoice, setIsPlayingVoice] = useState(false)
   const [playbackPositionMs, setPlaybackPositionMs] = useState(0)
 
   const recordingRef = useRef<Audio.Recording | null>(null)
   const soundRef = useRef<Audio.Sound | null>(null)
+  const soundAttachmentIdRef = useRef<string | null>(null)
   const pulse = useSharedValue(1)
 
   const attachmentScope = vaultId ?? LOCAL_ATTACHMENT_SCOPE
   const canEdit = true
-  const selectedAttachmentId = activeAttachmentId ?? route.params?.attachmentId ?? primaryAttachmentId
+  const selectedAttachmentId = resolveExistingAttachmentId(
+    attachments,
+    activeAttachmentId,
+    route.params?.attachmentId ?? null,
+    primaryAttachmentId,
+  )
 
   const selectedAttachment = useMemo(() => {
-    if (selectedAttachmentId) {
-      return attachments.find((attachment) => attachment.id === selectedAttachmentId) ?? null
-    }
-    return attachments[0] ?? null
+    return selectedAttachmentId
+      ? attachments.find((attachment) => attachment.id === selectedAttachmentId) ?? null
+      : null
   }, [attachments, selectedAttachmentId])
+  const selectedVoiceAttachment = useMemo(() => {
+    if (!isVoiceMimeAttachmentList(attachments)) return null
+    return (
+      selectedAttachment ??
+      (primaryAttachmentId
+        ? attachments.find((attachment) => attachment.id === primaryAttachmentId) ?? null
+        : null) ??
+      attachments[0] ??
+      null
+    )
+  }, [attachments, primaryAttachmentId, selectedAttachment])
+  const selectedVoiceDurationMs = selectedVoiceAttachment?.durationMs ?? voiceDurationMs
+  const selectedVoiceState = selectedVoiceAttachment
+    ? attachmentStates[selectedVoiceAttachment.id]
+    : undefined
 
   const lockedAttachmentType = useMemo<VaultItemType | null>(() => {
     if (attachments.length > 0) return getVaultItemTypeFromMime(attachments[0].mime)
@@ -243,17 +295,24 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const hydrateFromNote = useCallback(
     (note: Note) => {
       const inferredItemType = inferItemTypeFromNote(note)
+      const nextAttachments = note.attachments ?? []
+      const nextPrimaryAttachmentId = resolveExistingAttachmentId(
+        nextAttachments,
+        note.primaryAttachmentId ?? null,
+      )
       setTitle(note.title)
       setBody(note.body)
       setVaultId(note.vaultId ?? null)
       setClassification(note.classification ?? DEFAULT_VAULT_CLASSIFICATION)
       setDeletedAt(note.deletedAt ?? null)
-      setAttachments(note.attachments ?? [])
+      setAttachments(nextAttachments)
       setItemType(inferredItemType)
-      setPrimaryAttachmentId(note.primaryAttachmentId ?? note.attachments?.[0]?.id ?? null)
+      setPrimaryAttachmentId(nextPrimaryAttachmentId)
       setVoiceDurationMs(note.voiceDurationMs ?? null)
       const routeAttachmentId = route.params?.attachmentId ?? null
-      setActiveAttachmentId(routeAttachmentId ?? note.primaryAttachmentId ?? note.attachments?.[0]?.id ?? null)
+      setActiveAttachmentId(
+        resolveExistingAttachmentId(nextAttachments, routeAttachmentId, nextPrimaryAttachmentId),
+      )
     },
     [route.params?.attachmentId],
   )
@@ -291,14 +350,6 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     await requestSync("note_change", saved.vaultId)
   }, [])
 
-  const upsertAttachment = useCallback((list: NoteAttachment[], next: NoteAttachment) => {
-    const existingIndex = list.findIndex((attachment) => attachment.id === next.id)
-    if (existingIndex === -1) return [next, ...list]
-    const copy = [...list]
-    copy[existingIndex] = next
-    return copy
-  }, [])
-
   const writeTempFile = useCallback(async (filename: string, bytes: Uint8Array) => {
     const dir = `${fileSystemCompat.cacheDirectory ?? fileSystemCompat.documentDirectory ?? ""}locker/open`
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true })
@@ -308,6 +359,17 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       encoding: fileSystemCompat.EncodingType.Base64,
     })
     return path
+  }, [])
+
+  const unloadVoiceSound = useCallback(async () => {
+    const sound = soundRef.current
+    soundRef.current = null
+    soundAttachmentIdRef.current = null
+    if (sound) {
+      await sound.unloadAsync().catch(() => undefined)
+    }
+    setPlaybackPositionMs(0)
+    setIsPlayingVoice(false)
   }, [])
 
   const resolveAttachmentKeyContext = useCallback(
@@ -341,6 +403,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     async (att: NoteAttachment, options?: { silent?: boolean }) => {
       const existingState = attachmentStates[att.id]
       if (existingState?.status === "ready" && existingState.localUri) return existingState
+      if (existingState?.status === "downloading") return existingState
 
       const context = await resolveAttachmentKeyContext(vaultId, {
         preferRemote: Boolean(noteId && isExisting && vaultId),
@@ -353,13 +416,40 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       setAttachmentStates((prev) => ({ ...prev, [att.id]: { status: "downloading" } }))
 
       try {
+        const isVoiceAttachment = getVaultItemTypeFromMime(att.mime) === "voice"
+        if (isVoiceAttachment) {
+          debugVoiceFlow("resolve:start", {
+            noteId,
+            vaultId,
+            attId: att.id,
+            blobId: att.blobId,
+            mime: att.mime,
+            scope: context.scope,
+            mode: context.mode,
+          })
+        }
+
         let encryptedBytes = await readEncryptedAttachment(context.scope, att.id)
+        if (isVoiceAttachment) {
+          debugVoiceFlow("resolve:cache-read", {
+            attId: att.id,
+            scope: context.scope,
+            cacheHit: !!encryptedBytes,
+          })
+        }
         if (!encryptedBytes) {
           if (!vaultId || !context.syncKey) throw new Error("Attachment not cached on this device")
           const token = await getToken()
           if (!token) throw new Error("Link device first")
           encryptedBytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${att.blobId}`, {}, { token })
           await writeEncryptedAttachment(context.scope, att.id, encryptedBytes)
+          if (isVoiceAttachment) {
+            debugVoiceFlow("resolve:fetched-remote", {
+              attId: att.id,
+              scope: context.scope,
+              bytes: encryptedBytes.length,
+            })
+          }
         }
 
         if (att.sha256 && sha256Hex(encryptedBytes) !== att.sha256) {
@@ -370,6 +460,14 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
         const payload = parseAttachmentBlobBytes(encryptedBytes, context.key)
         if (payload.attId !== att.id) throw new Error("Attachment mismatch")
+        if (isVoiceAttachment) {
+          debugVoiceFlow("resolve:parsed", {
+            attId: att.id,
+            payloadAttId: payload.attId,
+            payloadMime: payload.mime,
+            payloadNoteId: payload.noteId,
+          })
+        }
 
         const filename = payload.filename ?? att.filename ?? `${effectiveItemType}-${att.id}`
         const localUri = await writeTempFile(filename, payload.fileBytes)
@@ -378,19 +476,33 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           filename,
           localUri,
           mime: payload.mime,
-          dataUri:
-            payload.mime.startsWith("image/") || payload.mime.startsWith("audio/")
-              ? `data:${payload.mime};base64,${bytesToBase64(payload.fileBytes)}`
-              : undefined,
+          dataUri: payload.mime.startsWith("image/")
+            ? `data:${payload.mime};base64,${bytesToBase64(payload.fileBytes)}`
+            : undefined,
           previewText: isTextMime(payload.mime) ? bytesToUtf8(payload.fileBytes).slice(0, 4000) : undefined,
         }
 
         setAttachmentStates((prev) => ({ ...prev, [att.id]: state }))
+        if (isVoiceAttachment) {
+          debugVoiceFlow("resolve:ready", {
+            attId: att.id,
+            localUri,
+            filename,
+          })
+        }
         return state
       } catch (err) {
         const message = err instanceof Error ? err.message : "Attachment download failed"
         const nextState: AttachmentUiState = { status: "error", error: message }
         setAttachmentStates((prev) => ({ ...prev, [att.id]: nextState }))
+        if (getVaultItemTypeFromMime(att.mime) === "voice") {
+          debugVoiceFlow("resolve:error", {
+            attId: att.id,
+            blobId: att.blobId,
+            vaultId,
+            message,
+          })
+        }
         if (!options?.silent) setError(message)
         return null
       }
@@ -413,16 +525,25 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         return
       }
 
-      if (!selectedAttachment) throw new Error("No attachment available to export")
-      const prepared = await resolveAttachment(selectedAttachment)
+      const exportAttachment = isVoiceItem ? selectedVoiceAttachment : selectedAttachment
+      if (isVoiceItem) {
+        debugVoiceFlow("export:start", {
+          selectedAttachmentId,
+          resolvedAttId: exportAttachment?.id ?? null,
+          blobId: exportAttachment?.blobId ?? null,
+          mime: exportAttachment?.mime ?? null,
+        })
+      }
+      if (!exportAttachment) throw new Error("No attachment available to export")
+      const prepared = await resolveAttachment(exportAttachment)
       if (!prepared || !prepared.localUri) throw new Error("Export file unavailable")
-      await Sharing.shareAsync(prepared.localUri, { mimeType: prepared.mime ?? selectedAttachment.mime })
+      await Sharing.shareAsync(prepared.localUri, { mimeType: prepared.mime ?? exportAttachment.mime })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed")
     } finally {
       setIsExporting(false)
     }
-  }, [body, effectiveItemType, resolveAttachment, selectedAttachment, title, writeTempFile])
+  }, [body, effectiveItemType, isVoiceItem, resolveAttachment, selectedAttachment, selectedVoiceAttachment, title, writeTempFile])
 
   const openAttachmentViewer = useCallback(
     async (attachment: NoteAttachment) => {
@@ -493,6 +614,10 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       setError(validationMessage)
       return
     }
+    const persistedPrimaryAttachmentId = resolveExistingAttachmentId(attachments, primaryAttachmentId)
+    const persistedVoiceDurationMs = isVoiceItem
+      ? attachments.find((attachment) => attachment.id === persistedPrimaryAttachmentId)?.durationMs ?? null
+      : voiceDurationMs
     const saved = saveNote(
       {
         id: noteId,
@@ -500,8 +625,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         body,
         classification,
         itemType,
-        primaryAttachmentId,
-        voiceDurationMs,
+        primaryAttachmentId: persistedPrimaryAttachmentId,
+        voiceDurationMs: persistedVoiceDurationMs,
         deletedAt,
         vaultId,
         attachments,
@@ -526,6 +651,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     validationMessage,
     vaultId,
     voiceDurationMs,
+    isVoiceItem,
   ])
 
   const handleMoveToTrash = useCallback(() => {
@@ -767,54 +893,34 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   const persistVoiceRecording = useCallback(
     async (uri: string, durationMs: number) => {
+      setIsSavingVoice(true)
       try {
         const vmk = vaultSession.getKey()
         if (!vmk) return
 
-        const fileBase64 = await FileSystem.readAsStringAsync(uri, {
+        const fileBytes = base64ToBytes(await FileSystem.readAsStringAsync(uri, {
           encoding: fileSystemCompat.EncodingType.Base64,
-        })
-        const fileBytes = base64ToBytes(fileBase64)
+        }))
         if (fileBytes.length > MAX_BLOB_BYTES) {
           setError(`Recording exceeds ${formatBytes(MAX_BLOB_BYTES)} limit`)
           return
         }
 
-        let activeNoteId = noteId
-        if (!activeNoteId) {
-          const draft = saveNote(
-            {
-              title: title.trim() || "Voice recording",
-              body: "",
-              classification,
-              itemType: "voice",
-              deletedAt,
-              vaultId,
-              attachments: [],
-              primaryAttachmentId: null,
-              voiceDurationMs: durationMs,
-            },
-            vmk,
-          )
-          activeNoteId = draft.id
-          setIsExisting(true)
-          hydrateFromNote(draft)
-          navigation.replace("VaultNote", { noteId: draft.id, createType: "voice" })
-        }
-
-        const keyContext = await resolveAttachmentKeyContext(vaultId, {
-          preferRemote: Boolean(noteId && isExisting && vaultId),
+        const nextVaultId = noteId ? vaultId : (vaultId ?? getRemoteVaultId())
+        const nextNoteId = noteId ?? generateVaultNoteId()
+        const keyContext = await resolveAttachmentKeyContext(nextVaultId, {
+          preferRemote: Boolean(nextVaultId),
         })
         if (!keyContext?.key) {
           setError("Missing attachment key for voice item")
           return
         }
 
-        const attId = primaryAttachmentId ?? generateAttachmentId()
+        const attId = generateAttachmentId()
         const filename = `${(title.trim() || "voice-recording").replace(/[\\/]/g, "_")}.m4a`
         const blobBytes = buildAttachmentBlobBytes({
           rvk: keyContext.key,
-          noteId: activeNoteId,
+          noteId: nextNoteId,
           attId,
           fileBytes,
           filename,
@@ -827,31 +933,50 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           mime: VOICE_MIME,
           sizeBytes: fileBytes.length,
           sha256: sha256Hex(blobBytes),
-          blobId: buildAttachmentBlobId(activeNoteId, attId),
+          blobId: buildAttachmentBlobId(nextNoteId, attId),
           createdAt: new Date().toISOString(),
           durationMs,
         }
 
+        debugVoiceFlow("persist:before-write", {
+          noteId: nextNoteId,
+          vaultId: nextVaultId,
+          attId,
+          blobId: record.blobId,
+          scope: keyContext.scope,
+          mode: keyContext.mode,
+          durationMs,
+        })
         await writeEncryptedAttachment(keyContext.scope, attId, blobBytes)
+        const nextAttachments = [...attachments, record]
+        const nextPrimaryAttachmentId = resolveExistingAttachmentId(
+          nextAttachments,
+          primaryAttachmentId,
+          attachments[0]?.id ?? null,
+          record.id,
+        )
 
         const saved = saveNote(
           {
-            id: activeNoteId,
+            id: nextNoteId,
             title: title.trim() || "Voice recording",
             body: "",
             classification,
             itemType: "voice",
-            primaryAttachmentId: attId,
-            voiceDurationMs: durationMs,
+            primaryAttachmentId: nextPrimaryAttachmentId,
+            voiceDurationMs:
+              nextAttachments.find((attachment) => attachment.id === nextPrimaryAttachmentId)?.durationMs ?? null,
             deletedAt,
-            vaultId,
-            attachments: upsertAttachment(attachments, record),
+            vaultId: nextVaultId,
+            attachments: nextAttachments,
           },
           vmk,
           { suppressSync: true },
         )
 
         hydrateFromNote(saved)
+        setActiveAttachmentId(attId)
+        setVoiceDurationMs(durationMs)
         setAttachmentStates((prev) => ({
           ...prev,
           [attId]: {
@@ -859,12 +984,34 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
             localUri: uri,
             mime: VOICE_MIME,
             filename,
-            dataUri: `data:${VOICE_MIME};base64,${fileBase64}`,
           },
         }))
+        debugVoiceFlow("persist:after-save", {
+          savedNoteId: saved.id,
+          savedVaultId: saved.vaultId ?? null,
+          attId,
+          blobId: record.blobId,
+          primaryAttachmentId: saved.primaryAttachmentId ?? null,
+          activeAttachmentId: attId,
+          attachments: (saved.attachments ?? []).map((attachment) => ({
+            id: attachment.id,
+            blobId: attachment.blobId,
+            mime: attachment.mime,
+          })),
+        })
+        setIsExisting(true)
+        setError(null)
 
         if (saved.vaultId && keyContext.syncKey) {
           await syncSavedAttachmentNote(saved, [{ attachmentId: attId, bytes: blobBytes }], keyContext.syncKey)
+        }
+
+        if (!noteId) {
+          navigation.replace("VaultNote", {
+            noteId: saved.id,
+            createType: "voice",
+            attachmentId: attId,
+          })
         }
       } catch (err) {
         const message =
@@ -874,6 +1021,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
               ? err.message
               : "Voice attachment storage failed"
         setError(message)
+      } finally {
+        setIsSavingVoice(false)
       }
     },
     [
@@ -888,7 +1037,6 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       resolveAttachmentKeyContext,
       syncSavedAttachmentNote,
       title,
-      upsertAttachment,
       vaultId,
     ],
   )
@@ -943,6 +1091,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     const recording = recordingRef.current
     if (!recording) return
     try {
+      setIsSavingVoice(true)
       const status = await recording.stopAndUnloadAsync()
       const uri = recording.getURI()
       recordingRef.current = null
@@ -957,9 +1106,12 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       })
       if (uri) {
         await persistVoiceRecording(uri, status.durationMillis ?? recordingDurationMs)
+      } else {
+        setIsSavingVoice(false)
       }
       setRecordingDurationMs(0)
     } catch (err) {
+      setIsSavingVoice(false)
       setError(err instanceof Error ? err.message : "Unable to finish recording")
     }
   }, [persistVoiceRecording, pulse, recordingDurationMs])
@@ -972,13 +1124,41 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     setIsPlayingVoice(false)
   }, [])
 
-  const playOrPauseVoice = useCallback(async () => {
+  const playOrPauseVoice = useCallback(async (targetAttachment?: NoteAttachment) => {
     try {
-      if (!selectedAttachment) throw new Error("No voice recording available")
-      const prepared = await resolveAttachment(selectedAttachment)
+      const attachment =
+        targetAttachment ??
+        selectedVoiceAttachment ??
+        (selectedAttachmentId
+          ? attachments.find((item) => item.id === selectedAttachmentId) ?? null
+          : null) ??
+        (primaryAttachmentId
+          ? attachments.find((item) => item.id === primaryAttachmentId) ?? null
+          : null) ??
+        attachments[0] ??
+        null
+      debugVoiceFlow("play:start", {
+        requestedAttId: targetAttachment?.id ?? null,
+        selectedAttachmentId,
+        primaryAttachmentId,
+        resolvedAttId: attachment?.id ?? null,
+        resolvedBlobId: attachment?.blobId ?? null,
+      })
+      if (!attachment) throw new Error("No voice recording available")
+
+      if (targetAttachment && activeAttachmentId !== targetAttachment.id) {
+        setActiveAttachmentId(targetAttachment.id)
+      }
+
+      const prepared = await resolveAttachment(attachment)
       if (!prepared || !prepared.localUri) throw new Error("Voice recording unavailable")
 
       let sound = soundRef.current
+      if (sound && soundAttachmentIdRef.current && soundAttachmentIdRef.current !== attachment.id) {
+        await unloadVoiceSound()
+        sound = null
+      }
+
       if (!sound) {
         const created = await Audio.Sound.createAsync(
           { uri: prepared.localUri },
@@ -986,11 +1166,11 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           (status: AVPlaybackStatus) => {
             if (!status.isLoaded) return
             setPlaybackPositionMs(status.positionMillis)
-            setVoiceDurationMs(status.durationMillis ?? voiceDurationMs ?? selectedAttachment.durationMs ?? null)
             setIsPlayingVoice(status.isPlaying)
           },
         )
         soundRef.current = created.sound
+        soundAttachmentIdRef.current = attachment.id
         setIsPlayingVoice(true)
         return
       }
@@ -1007,7 +1187,15 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to play voice item")
     }
-  }, [resolveAttachment, selectedAttachment, voiceDurationMs])
+  }, [
+    activeAttachmentId,
+    attachments,
+    primaryAttachmentId,
+    resolveAttachment,
+    selectedAttachmentId,
+    selectedVoiceAttachment,
+    unloadVoiceSound,
+  ])
 
   const removeAttachment = useCallback(
     async (attachment: NoteAttachment) => {
@@ -1020,10 +1208,22 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       if (!vmk) return
 
       const nextAttachments = attachments.filter((item) => item.id !== attachment.id)
-      const nextPrimaryAttachmentId =
-        primaryAttachmentId === attachment.id ? nextAttachments[0]?.id ?? null : primaryAttachmentId
-      const nextActiveAttachmentId =
-        activeAttachmentId === attachment.id ? nextAttachments[0]?.id ?? null : activeAttachmentId
+      const nextPrimaryAttachmentId = resolveExistingAttachmentId(
+        nextAttachments,
+        primaryAttachmentId === attachment.id ? null : primaryAttachmentId,
+      )
+      const nextActiveAttachmentId = resolveExistingAttachmentId(
+        nextAttachments,
+        activeAttachmentId === attachment.id ? null : activeAttachmentId,
+        nextPrimaryAttachmentId,
+      )
+      const nextSelectedAttachment =
+        nextAttachments.find((item) => item.id === nextActiveAttachmentId) ??
+        nextAttachments.find((item) => item.id === nextPrimaryAttachmentId) ??
+        nextAttachments[0] ??
+        null
+      const nextPrimaryAttachment =
+        nextAttachments.find((item) => item.id === nextPrimaryAttachmentId) ?? nextAttachments[0] ?? null
 
       await deleteEncryptedAttachment(attachmentScope, attachment.id)
       setAttachmentStates((prev) => {
@@ -1031,6 +1231,10 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         delete copy[attachment.id]
         return copy
       })
+
+      if (soundAttachmentIdRef.current === attachment.id) {
+        await unloadVoiceSound()
+      }
 
       if (viewer.visible && selectedAttachment?.id === attachment.id) {
         setViewer((prev) => ({ ...prev, visible: false }))
@@ -1040,7 +1244,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       setPrimaryAttachmentId(nextPrimaryAttachmentId)
       setActiveAttachmentId(nextActiveAttachmentId)
       if (isVoiceItem) {
-        setVoiceDurationMs(nextAttachments[0]?.durationMs ?? null)
+        setVoiceDurationMs(nextSelectedAttachment?.durationMs ?? null)
       }
 
       if (!noteId) return
@@ -1056,7 +1260,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           vaultId,
           attachments: nextAttachments,
           primaryAttachmentId: nextPrimaryAttachmentId,
-          voiceDurationMs: nextAttachments[0]?.durationMs ?? null,
+          voiceDurationMs: nextPrimaryAttachment?.durationMs ?? null,
         },
         vmk,
         { suppressSync: true },
@@ -1081,6 +1285,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       noteId,
       primaryAttachmentId,
       selectedAttachment?.id,
+      unloadVoiceSound,
       syncSavedNoteOnly,
       titleTrimmed,
       vaultId,
@@ -1108,8 +1313,9 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         setItemType(requestedType)
         setPrimaryAttachmentId(null)
         setVoiceDurationMs(null)
+        setActiveAttachmentId(route.params?.attachmentId ?? null)
       }
-    }, [loadNote, navigation, noteId, requestedType]),
+    }, [loadNote, navigation, noteId, requestedType, route.params?.attachmentId]),
   )
 
   useFocusEffect(
@@ -1124,10 +1330,28 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   )
 
   useEffect(() => {
+    if (isVoiceItem) {
+      if (shouldPrepareVoiceAttachment(selectedVoiceAttachment, selectedVoiceState)) {
+        void resolveAttachment(selectedVoiceAttachment!, { silent: true })
+      }
+      return
+    }
     if (selectedAttachment) {
       void resolveAttachment(selectedAttachment, { silent: true })
     }
-  }, [resolveAttachment, selectedAttachment])
+  }, [isVoiceItem, resolveAttachment, selectedAttachment, selectedVoiceAttachment, selectedVoiceState])
+
+  useEffect(() => {
+    if (activeAttachmentId !== selectedAttachmentId) {
+      setActiveAttachmentId(selectedAttachmentId)
+    }
+  }, [activeAttachmentId, selectedAttachmentId])
+
+  useEffect(() => {
+    if (soundAttachmentIdRef.current && soundAttachmentIdRef.current !== selectedAttachment?.id) {
+      void unloadVoiceSound()
+    }
+  }, [selectedAttachment?.id, unloadVoiceSound])
 
   useEffect(() => {
     if (!importType || !vaultSession.isUnlocked() || deletedAt) return
@@ -1169,10 +1393,14 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   const heroSubtitle = useMemo(() => {
     if (deletedAt) return "Item is currently in trash"
-    if (isVoiceItem) return voiceDurationMs ? `${formatDuration(voiceDurationMs)} recorded` : "Record and secure audio in-app"
+    if (isVoiceItem) {
+      return selectedVoiceDurationMs
+        ? `${formatDuration(selectedVoiceDurationMs)} recorded`
+        : "Record and secure audio in-app"
+    }
     if (isFileFirstItem) return selectedAttachment?.filename ?? "Secure file preview"
     return noteId ? "Edit encrypted content" : "Create a protected note"
-  }, [deletedAt, isFileFirstItem, isVoiceItem, noteId, selectedAttachment?.filename, voiceDurationMs])
+  }, [deletedAt, isFileFirstItem, isVoiceItem, noteId, selectedAttachment?.filename, selectedVoiceDurationMs])
 
   return (
     <Screen preset="fixed" contentContainerStyle={themed([$insets, $screen])}>
@@ -1269,11 +1497,13 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
               pulseStyle={pulseStyle}
               isRecording={isRecording}
               isRecordingPaused={isRecordingPaused}
+              isProcessing={isSavingVoice}
+              processingLabel="Saving recording..."
               isPlaying={isPlayingVoice}
-              durationLabel={formatDuration(recordingDurationMs || voiceDurationMs || 0)}
+              durationLabel={formatDuration(recordingDurationMs || selectedVoiceDurationMs || 0)}
               playbackLabel={formatDuration(playbackPositionMs)}
               canRecord={canEdit}
-              hasVoice={!!selectedAttachment}
+              hasVoice={attachments.length > 0}
               onStartRecord={() => void startRecording()}
               onPauseRecord={() => void pauseOrResumeRecording()}
               onStopRecord={() => void stopRecording()}
@@ -1281,6 +1511,38 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
               onStopPlayback={() => void stopVoicePlayback()}
               onExport={() => void exportCurrentItem()}
             />
+
+            {attachments.length === 0 ? (
+              <EmptyAttachmentState themed={themed} label="Record a secure clip to store it inside this voice item." />
+            ) : (
+              <GlassSection
+                themed={themed}
+                title="Recordings"
+                subtitle={attachmentSectionSubtitle}
+                icon={<Mic size={14} color="#FFC8F3" />}
+                rightSlot={<Text style={themed($tinyMetaText)}>{canEdit ? "Select a clip" : "Read-only"}</Text>}
+              >
+                {isSavingVoice ? (
+                  <Text style={themed($tinyMetaText)}>Saving recording...</Text>
+                ) : null}
+                <View style={themed($attachmentList)}>
+                  {attachments.map((attachment) => (
+                    <AttachmentRow
+                      key={attachment.id}
+                      themed={themed}
+                      att={attachment}
+                      state={attachmentStates[attachment.id] ?? { status: "idle" }}
+                      selected={attachment.id === selectedVoiceAttachment?.id}
+                      onSelect={() => setActiveAttachmentId(attachment.id)}
+                      onOpen={() => void playOrPauseVoice(attachment)}
+                      onDownload={() => void resolveAttachment(attachment)}
+                      onRemove={() => void removeAttachment(attachment)}
+                      canEdit={canEdit}
+                    />
+                  ))}
+                </View>
+              </GlassSection>
+            )}
           </>
         ) : null}
 
@@ -1405,8 +1667,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
               <MetaChip themed={themed} label={`Type ${effectiveItemType.toUpperCase()}`} />
               <MetaChip themed={themed} label={formatBytes(selectedAttachment.sizeBytes)} />
               <MetaChip themed={themed} label={selectedAttachment.mime} />
-              {isVoiceItem && voiceDurationMs ? (
-                <MetaChip themed={themed} label={formatDuration(voiceDurationMs)} />
+              {isVoiceItem && selectedVoiceDurationMs ? (
+                <MetaChip themed={themed} label={formatDuration(selectedVoiceDurationMs)} />
               ) : null}
             </View>
           ) : null}
