@@ -197,6 +197,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const [itemType, setItemType] = useState<VaultItemType>(requestedType)
   const [primaryAttachmentId, setPrimaryAttachmentId] = useState<string | null>(null)
   const [voiceDurationMs, setVoiceDurationMs] = useState<number | null>(null)
+  const [importingAttachmentCount, setImportingAttachmentCount] = useState(0)
   const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(route.params?.attachmentId ?? null)
   const [viewer, setViewer] = useState<ViewerState>({
     visible: false,
@@ -274,6 +275,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     return null
   }, [attachments.length, bodyTrimmed, isFileFirstItem, isVoiceItem, titleTrimmed])
   const canSaveItem = !validationMessage
+  const isImportingAttachment = importingAttachmentCount > 0
 
   const pulseStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }],
@@ -735,6 +737,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
         const pickedAssets = picked.assets?.filter((asset) => !!asset.uri) ?? []
         if (pickedAssets.length === 0) return
+        setImportingAttachmentCount(pickedAssets.length)
 
         const firstType = getVaultItemTypeFromMime(
           pickedAssets[0]?.mimeType ?? "application/octet-stream",
@@ -871,6 +874,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
               ? err.message
               : "Attachment import failed"
         setError(message)
+      } finally {
+        setImportingAttachmentCount(0)
       }
     },
     [
@@ -1556,7 +1561,15 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
               </Text>
             </View>
 
-            {attachments.length === 0 ? (
+            {isImportingAttachment ? (
+              <Text style={themed($tinyMetaText)}>
+                {importingAttachmentCount > 1
+                  ? `Saving ${importingAttachmentCount} attachments...`
+                  : "Saving attachment..."}
+              </Text>
+            ) : null}
+
+            {!isImportingAttachment? attachments.length === 0 ? (
               <EmptyAttachmentState themed={themed} label="Import an image, PDF, or document to secure it inside the vault." />
             ) : effectiveItemType === "image" ? (
               <View style={themed($imageGrid)}>
@@ -1592,7 +1605,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
                   />
                 ))}
               </View>
-            )}
+            ) : null}
 
             <View style={themed($quickActionGrid)}>
               <MiniIconButton
@@ -1616,7 +1629,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
                         : "file",
                   )
                 }
-                disabled={!canEdit}
+                disabled={!canEdit || isImportingAttachment}
               />
             </View>
           </GlassSection>
