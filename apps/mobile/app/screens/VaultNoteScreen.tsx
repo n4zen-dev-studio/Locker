@@ -1295,10 +1295,6 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   useFocusEffect(
     useCallback(() => {
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked")
-        return
-      }
       if (noteId) loadNote()
       else {
         setIsExisting(false)
@@ -1315,18 +1311,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         setVoiceDurationMs(null)
         setActiveAttachmentId(route.params?.attachmentId ?? null)
       }
-    }, [loadNote, navigation, noteId, requestedType, route.params?.attachmentId]),
-  )
-
-  useFocusEffect(
-    useCallback(() => {
-      const sub = AppState.addEventListener("change", (state) => {
-        if (state === "active" && !vaultSession.isUnlocked()) {
-          navigation.replace("VaultLocked")
-        }
-      })
-      return () => sub.remove()
-    }, [navigation]),
+    }, [loadNote, noteId, requestedType, route.params?.attachmentId]),
   )
 
   useEffect(() => {

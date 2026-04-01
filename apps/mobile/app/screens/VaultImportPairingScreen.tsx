@@ -1,6 +1,5 @@
 import { FC, useCallback, useEffect, useState } from "react";
 import { ScrollView, TextStyle, View, ViewStyle } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { Link2, QrCode, Shield } from "lucide-react-native";
 
 import { Screen } from "@/components/Screen";
@@ -23,7 +22,6 @@ import {
   unwrapVaultKeyPayload,
 } from "@/locker/pairing/pairingCode";
 import { fetchJson } from "@/locker/net/apiClient";
-import { vaultSession } from "@/locker/session";
 import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
 import { getAccount } from "@/locker/storage/accountRepo";
 import {
@@ -67,15 +65,9 @@ export const VaultImportPairingScreen: FC<
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked");
-        return;
-      }
-      void refreshLinked();
-    }, [navigation, refreshLinked]),
-  );
+  useEffect(() => {
+    void refreshLinked();
+  }, [refreshLinked]);
 
   const handleGoLink = useCallback(() => {
     navigation.navigate("VaultLinkDevice");

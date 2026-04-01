@@ -30,7 +30,6 @@ import {
   getRecoveryEnvelopeStatus,
   upsertRecoveryEnvelope,
 } from "@/locker/recovery/recoveryApi";
-import { vaultSession } from "@/locker/session";
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
 import {
   getRemoteVaultId,
@@ -83,12 +82,8 @@ export const VaultRecoverySetupScreen: FC<
 
   useFocusEffect(
     useCallback(() => {
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked");
-        return;
-      }
       void refresh();
-    }, [navigation, refresh]),
+    }, [refresh]),
   );
 
   useEffect(() => {

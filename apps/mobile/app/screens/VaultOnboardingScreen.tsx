@@ -99,11 +99,6 @@ export const VaultOnboardingScreen: FC<AppStackScreenProps<"VaultOnboarding">> =
         return;
       }
 
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked");
-        return;
-      }
-
       const next = getPostUnlockRoute();
       if (next.name === "VaultTabs") {
         navigation.replace("VaultTabs", next.params);

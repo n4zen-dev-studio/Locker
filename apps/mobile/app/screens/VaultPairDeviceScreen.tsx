@@ -1,6 +1,5 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, TextStyle, View, ViewStyle } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { QrCode, Smartphone } from "lucide-react-native";
 import { SvgXml } from "react-native-svg";
 import QRCode from "qrcode";
@@ -24,7 +23,6 @@ import {
   generateDeviceLinkCode,
 } from "@/locker/linking/deviceLinkPayload";
 import { encodeDeviceLinkQrPayload } from "@/locker/linking/qrPayload";
-import { vaultSession } from "@/locker/session";
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
 import { listRemoteVaults } from "@/locker/storage/remoteVaultRepo";
 import { getServerUrl } from "@/locker/storage/serverConfigRepo";
@@ -126,15 +124,9 @@ export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> =
       }
     }, []);
 
-    useFocusEffect(
-      useCallback(() => {
-        if (!vaultSession.isUnlocked()) {
-          navigation.replace("VaultLocked");
-          return;
-        }
-        void buildCode();
-      }, [buildCode, navigation]),
-    );
+    useEffect(() => {
+      void buildCode();
+    }, [buildCode]);
 
     return (
       <Screen

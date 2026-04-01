@@ -139,12 +139,8 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
 
   useFocusEffect(
     useCallback(() => {
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked")
-        return
-      }
       void refresh()
-    }, [navigation, refresh]),
+    }, [refresh]),
   )
 
   const currentDevice = useMemo(

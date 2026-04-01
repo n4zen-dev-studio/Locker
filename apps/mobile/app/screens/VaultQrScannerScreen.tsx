@@ -7,7 +7,6 @@ import {
   ViewStyle,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useFocusEffect } from "@react-navigation/native";
 import { Camera, QrCode } from "lucide-react-native";
 
 import { Screen } from "@/components/Screen";
@@ -21,7 +20,6 @@ import {
   VaultScreenHero,
 } from "@/components/vault-note/VaultScreenChrome";
 import { parseLockerQrPayload } from "@/locker/linking/qrPayload";
-import { vaultSession } from "@/locker/session";
 import type { AppStackScreenProps } from "@/navigators/navigationTypes";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
@@ -40,14 +38,6 @@ export const VaultQrScannerScreen: FC<AppStackScreenProps<"VaultQrScanner">> =
     const title = useMemo(
       () => (mode === "device-link" ? "Scan Device-Link QR" : "Scan Vault QR"),
       [mode],
-    );
-
-    useFocusEffect(
-      useCallback(() => {
-        if (!vaultSession.isUnlocked()) {
-          navigation.replace("VaultLocked");
-        }
-      }, [navigation]),
     );
 
     const handleBarcode = useCallback(

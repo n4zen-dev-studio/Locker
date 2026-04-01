@@ -4,10 +4,15 @@
  * Generally speaking, it will contain an auth flow (registration, login, forgot password)
  * and a "main" flow which the user will use once logged in.
  */
+import { useCallback, useEffect } from "react"
+import { AppState, AppStateStatus } from "react-native"
 import { NavigationContainer } from "@react-navigation/native"
+import { StackActions } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 
 import Config from "@/config"
+import { vaultSession } from "@/locker/session"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
 import { CalculatorScreen } from "@/screens/CalculatorScreen"
 import { VaultTabsNavigator } from "@/navigators/VaultTabsNavigator"
@@ -31,7 +36,6 @@ import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
 import { navigationRef, useBackButtonHandler } from "./navigationUtilities"
-import { GestureHandlerRootView } from "react-native-gesture-handler"
 
 /**
  * This is a list of all the route names that will exit the app if the back button
@@ -41,6 +45,63 @@ const exitRoutes = Config.exitRoutes
 
 // Documentation: https://reactnavigation.org/docs/stack-navigator/
 const Stack = createNativeStackNavigator<AppStackParamList>()
+const protectedRoutes = new Set<keyof AppStackParamList>([
+  "VaultSelection",
+  "VaultTabs",
+  "VaultLinkDevice",
+  "RemoteVault",
+  "VaultPairDevice",
+  "VaultImportPairing",
+  "VaultRecoverySetup",
+  "VaultRecoveryAccess",
+  "VaultQrScanner",
+  "VaultDiagnostics",
+  "ThreatModel",
+  "ServerUrl",
+])
+
+function getActiveRootRouteName(): keyof AppStackParamList | undefined {
+  if (!navigationRef.isReady()) return undefined
+  const state = navigationRef.getRootState()
+  const route = state.routes[state.index ?? 0]
+  return route?.name as keyof AppStackParamList | undefined
+}
+
+function VaultSessionNavigationGate() {
+  const redirectToCalculatorIfLocked = useCallback(() => {
+    if (!navigationRef.isReady() || vaultSession.isUnlocked()) return
+
+    const rootRouteName = getActiveRootRouteName()
+    if (!rootRouteName || !protectedRoutes.has(rootRouteName)) return
+
+    navigationRef.dispatch(StackActions.replace("Calculator"))
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = vaultSession.subscribe((unlocked) => {
+      if (!unlocked) {
+        redirectToCalculatorIfLocked()
+      }
+    })
+
+    return () => {
+      unsubscribe()
+    }
+  }, [redirectToCalculatorIfLocked])
+
+  useEffect(() => {
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === "active") {
+        redirectToCalculatorIfLocked()
+      }
+    }
+
+    const sub = AppState.addEventListener("change", handleAppStateChange)
+    return () => sub.remove()
+  }, [redirectToCalculatorIfLocked])
+
+  return null
+}
 
 const AppStack = () => {
   const {
@@ -81,16 +142,46 @@ const AppStack = () => {
 
 export const AppNavigator = (props: NavigationProps) => {
   const { navigationTheme } = useAppTheme()
+  const { onReady, onStateChange, ...restProps } = props
 
   useBackButtonHandler((routeName) => exitRoutes.includes(routeName))
 
+  const redirectToCalculatorIfLocked = useCallback(() => {
+    if (!vaultSession.isUnlocked()) {
+      const rootRouteName = getActiveRootRouteName()
+      if (rootRouteName && protectedRoutes.has(rootRouteName)) {
+        navigationRef.dispatch(StackActions.replace("Calculator"))
+      }
+    }
+  }, [])
+
+  const handleReady = useCallback(() => {
+    onReady?.()
+    redirectToCalculatorIfLocked()
+  }, [onReady, redirectToCalculatorIfLocked])
+
+  const handleStateChange = useCallback(
+    (state: Parameters<NonNullable<NavigationProps["onStateChange"]>>[0]) => {
+      onStateChange?.(state)
+      redirectToCalculatorIfLocked()
+    },
+    [onStateChange, redirectToCalculatorIfLocked],
+  )
+
   return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-    <NavigationContainer ref={navigationRef} theme={navigationTheme} {...props}>
-      <ErrorBoundary catchErrors={Config.catchErrors}>
-        <AppStack />
-      </ErrorBoundary>
-    </NavigationContainer>
-       </GestureHandlerRootView>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <NavigationContainer
+        ref={navigationRef}
+        theme={navigationTheme}
+        onReady={handleReady}
+        onStateChange={handleStateChange}
+        {...restProps}
+      >
+        <ErrorBoundary catchErrors={Config.catchErrors}>
+          <VaultSessionNavigationGate />
+          <AppStack />
+        </ErrorBoundary>
+      </NavigationContainer>
+    </GestureHandlerRootView>
   )
 }

@@ -21,7 +21,6 @@ import {
   exportEncryptedVaultBackup,
 } from "@/locker/diagnostics/diagnostics";
 import { rebuildSearchIndex } from "@/locker/search/searchRepo";
-import { vaultSession } from "@/locker/session";
 import type { AppStackScreenProps } from "@/navigators/navigationTypes";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
@@ -47,12 +46,8 @@ export const VaultDiagnosticsScreen: FC<
 
   useFocusEffect(
     useCallback(() => {
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked");
-        return;
-      }
       void refresh();
-    }, [navigation, refresh]),
+    }, [refresh]),
   );
 
   const handleExport = async () => {
