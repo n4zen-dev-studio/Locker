@@ -53,6 +53,8 @@ import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 import { useSessionIntroAnimation } from "@/utils/useSessionIntroAnimation";
 import { Ionicons } from "@expo/vector-icons"
 import { GlowFab } from "@/components/GlowFab";
+import { spacing } from "@/theme/spacing";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = function VaultNotesHomeScreen(props) {
   const { navigation } = props;
@@ -366,7 +368,6 @@ const refreshSyncPrereqs = useCallback(async (vaultId?: string | null) => {
       keyboardAvoidingEnabled={false}
       systemBarStyle="light"
     >
-      {/* <VaultLockBackground reducedMotion={reducedMotion} /> */}
       <VaultHubBackground reducedMotion={reducedMotion} />
 
       <ScrollView
@@ -387,7 +388,7 @@ refreshControl={
               ? undefined
               : FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
           }
-          // style={themed($header)}
+          style={themed($header)}
         >
                  <View style={themed($heroTopRow)}>
                                 <Text size="xs" style={themed($heroEyebrow)}>
@@ -443,8 +444,6 @@ refreshControl={
             <MetaPill label={`Sync ${syncStatus.state} · Queue ${syncStatus.queueSize}`} />
             {__DEV__ && metaVersion ? <MetaPill label={`Meta v${metaVersion}`} /> : null}
           </View> */}
-        </Animated.View>
-
         {availableVaults.length > 1 ? (
           <View style={themed($vaultSwitcher)}>
             {availableVaults.map((vault) => (
@@ -460,6 +459,8 @@ refreshControl={
             ))}
           </View>
         ) : null}
+        </Animated.View>
+
 
         <Animated.View
           entering={
@@ -487,7 +488,7 @@ refreshControl={
           <View style={themed($toolbarHeader)}>
              <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={handleScrollToVault}>
               <Ionicons
-              name={"wallet"}
+              name={"arrow-down"}
               size={18}
               color={'#fff'}
               style={{ paddingVertical: 5 }}
@@ -496,7 +497,7 @@ refreshControl={
             </Pressable>
             <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={handleScrollToVault}>
               <Ionicons
-              name={"arrow-down"}
+              name={"wallet"}
               size={18}
               color={'#fff'}
               style={{ paddingVertical: 5 }}
@@ -509,12 +510,6 @@ refreshControl={
 
         </Animated.View>
 
-
-        {/* {syncReason ? (
-          <View style={themed($syncHint)}>
-            <Text style={themed($metaText)}>Sync disabled: {syncReason}</Text>
-          </View>
-        ) : null} */}
 
         {error ? (
           <View style={themed($errorCard)}>
@@ -535,7 +530,7 @@ refreshControl={
           onChangeViewMode={setViewMode}
           onSortCycle={() => setSort(nextVaultSort(sort))}
           onOpenItem={handleOpenVaultItem}
-        />
+        >
          <View style={themed($searchSurface)}>
             <SearchGlyph />
             <TextInput
@@ -556,7 +551,9 @@ refreshControl={
             }
 
           </View>
-         <GlowFab onPress={() => handleScrollToTop()} style={{position: 'absolute', right: 20, bottom: 125}}/>
+        </VaultSection>
+        
+         <GlowFab onPress={() => handleScrollToTop()} style={{position: 'absolute', left: 20, bottom: spacing.lg + useSafeAreaInsets().bottom +spacing.xl * 3,}}/>
       </ScrollView>
     </Screen>
   );
@@ -620,12 +617,13 @@ const $screen: ThemedStyle<ViewStyle> = ({ colors }) => ({
 const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.md,
   // paddingTop: spacing.md,
-  paddingBottom: spacing.xl * 3,
+  paddingBottom: spacing.xl * 3+ useSafeAreaInsets().bottom,
   gap: spacing.lg,
 });
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
+  // gap: spacing.md,
+  height: Dimensions.get('screen').height*0.21
 });
 
 const $headerTopRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -767,18 +765,19 @@ const $heroSection: ThemedStyle<ViewStyle> = () => ({
   alignItems: "center",
   justifyContent: "center",
   marginTop: 40,
-  height: Dimensions.get('screen').height* 0.55 ,
+  height: Dimensions.get('screen').height* 0.45 ,
 });
 
 const $toolbarSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
+height: Dimensions.get('screen').height*0.1
 });
 
 const $vaultSwitcher: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
   gap: spacing.sm,
-  marginTop: -10,
+  marginTop: 10,
 });
 
 const $vaultChip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
@@ -846,7 +845,7 @@ const $searchSurface: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
   marginBottom: spacing.lg,
-  marginRight: spacing.xxxl,
+  // marginRight: spacing.xxxl,
 });
 
 const $searchIconWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({

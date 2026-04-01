@@ -2113,9 +2113,9 @@ const $activityCellV2: ThemedStyle<ViewStyle> = () => ({
 })
 
 const $activityCellActiveV2: ThemedStyle<ViewStyle> = () => ({
-  backgroundColor: "#F5B435",
-  borderColor: "#f5b5357e",
-  shadowColor: "#c1a161",
+  backgroundColor: "#f535cfa2",
+  borderColor: "#f535927e",
+  shadowColor: "#c161a4",
   shadowOpacity: 0.35,
   shadowRadius: 8,
   shadowOffset: { width: 0, height: 0 },

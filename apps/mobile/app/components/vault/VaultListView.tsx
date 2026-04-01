@@ -1,4 +1,4 @@
-import { Dimensions, Pressable, TextStyle, View, ViewStyle } from "react-native";
+import { Dimensions, Pressable, TextStyle, View, ViewStyle, ScrollView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { Easing, FadeInUp } from "react-native-reanimated";
 
@@ -7,7 +7,7 @@ import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 
 import { formatVaultDate, VaultListItem } from "./vaultUi";
-import { ScrollView } from "react-native-gesture-handler";
+// import { ScrollView } from "react-native-gesture-handler";
 
 type VaultListViewProps = {
   items: VaultListItem[];
@@ -70,9 +70,9 @@ export function VaultListView(props: VaultListViewProps) {
                 </View>
               </View>
 
-              <Text numberOfLines={2} style={themed($preview)}>
+              {/* <Text numberOfLines={2} style={themed($preview)}>
                 {item.preview || "No preview available"}
-              </Text>
+              </Text> */}
             </LinearGradient>
           </Pressable>
         </Animated.View>

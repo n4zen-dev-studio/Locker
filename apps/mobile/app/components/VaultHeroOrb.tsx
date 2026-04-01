@@ -1018,6 +1018,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
 
 
   return (
+    <GestureHandlerRootView>
       <View style={styles.root}>
         <GestureDetector gesture={orbitPanGesture}>
           <View ref={canvasRef} style={styles.canvas} onLayout={onCanvasLayout} collapsable={false}>
@@ -1246,15 +1247,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
                                   rx={INNER_CORE_SIZE / 2}
                                   fill={`url(#${coreGradientId + "-inner"})`}
                                 />
-                                {/* <Circle
-                                  cx={INNER_CORE_SIZE / 2}
-                                  cy={INNER_CORE_SIZE / 2}
-                                  r={INNER_CORE_SIZE / 2 - 1.5}
-                                  stroke={theme.colors.vault.vaultAccentPinkSoft}
-                                  strokeOpacity="0.7"
-                                  strokeWidth="1.5"
-                                  fill="none"
-                                /> */}
+                             
                               </Svg>
 
                               <View style={themed($iconWrap)}>
@@ -1266,6 +1259,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
           </View>
         </GestureDetector>
       </View>
+      </GestureHandlerRootView>
   )
 }
 

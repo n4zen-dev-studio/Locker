@@ -42,8 +42,8 @@ export const FILTER_OPTIONS: Array<{
   { label: "PDFs", shortLabel: "PDF", value: "pdfs" },
   { label: "Files", shortLabel: "FILE", value: "files" },
   { label: "Voice", shortLabel: "VOICE", value: "voices" },
-  { label: "Sensitive", shortLabel: "SAFE", value: "sensitive" },
-  { label: "Recent", shortLabel: "NEW", value: "recent" },
+  // { label: "Sensitive", shortLabel: "SAFE", value: "sensitive" },
+  // { label: "Recent", shortLabel: "÷NEW", value: "recent" },
   { label: "Trash", shortLabel: "BIN", value: "deleted" },
 ];
 

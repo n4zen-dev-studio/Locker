@@ -327,7 +327,7 @@ const VaultHubBackgroundComponent: FC<VaultHubBackgroundProps> = ({
         </Svg>
       </AnimatedView>}
 
-      <AnimatedView style={[StyleSheet.absoluteFillObject, secondaryDotsStyle]}>
+      {/* <AnimatedView style={[StyleSheet.absoluteFillObject, secondaryDotsStyle]}>
         <Svg
           width={SCREEN_WIDTH}
           height={SCREEN_HEIGHT}
@@ -360,7 +360,7 @@ const VaultHubBackgroundComponent: FC<VaultHubBackgroundProps> = ({
             fill={`url(#${secondaryPatternId})`}
           />
         </Svg>
-      </AnimatedView>
+      </AnimatedView> */}
 
       <AnimatedView style={[styles.topGlow, topGlowStyle]}>
         <Svg
@@ -441,9 +441,9 @@ const VaultHubBackgroundComponent: FC<VaultHubBackgroundProps> = ({
               fy="50%"
             >
               <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="1" />
-              <Stop offset="24%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="0.8" />
-              <Stop offset="52%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="0.1" />
-              <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="0" />
+              <Stop offset="24%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0.8" />
+              <Stop offset="52%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0.1" />
+              <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0" />
             </RadialGradient>
           </Defs>
           <Circle
