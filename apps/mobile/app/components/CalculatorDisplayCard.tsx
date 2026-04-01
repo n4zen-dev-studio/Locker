@@ -1,9 +1,7 @@
 import { FC } from "react";
-import { StyleProp, StyleSheet, TextStyle, View, ViewStyle } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { StyleProp, TextStyle, View, ViewStyle } from "react-native";
 
 import { Text } from "@/components/Text";
-import { createMoldedSurface, createSoftShadow } from "@/theme/calculatorStyling";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 
@@ -20,43 +18,29 @@ export const CalculatorDisplayCard: FC<CalculatorDisplayCardProps> = ({
   resultText,
   style,
 }) => {
-  const { themed, theme } = useAppTheme();
+  const { themed } = useAppTheme();
 
   return (
     <View style={[themed($card), style]}>
-      <LinearGradient
-        colors={theme.colors.calculator.surfaceGradient}
-        start={{ x: 0.08, y: 0.02 }}
-        end={{ x: 0.92, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
-      />
-      <LinearGradient
-        colors={theme.colors.calculator.shellGradient}
-        start={{ x: 0.14, y: 0 }}
-        end={{ x: 0.86, y: 1 }}
-        style={[StyleSheet.absoluteFillObject, themed($shellGloss)]}
-      />
-      <View pointerEvents="none" style={themed($topLine)} />
-      <View pointerEvents="none" style={themed($edgeGlow)} />
-      <View pointerEvents="none" style={themed($innerGlow)} />
+      <View pointerEvents="none" style={themed($resultAura)} />
+      <View pointerEvents="none" style={themed($resultAuraSoft)} />
 
       <View style={themed($statusRow)}>
-        <Text size="xxs" style={themed($eyebrow)}>
+        <Text size="xxs" style={themed($statusLabel)}>
           Secure Calculator
         </Text>
-        <View style={themed($statusPill)}>
-          <View style={themed($statusDot)} />
-          <Text size="xxs" style={themed($statusLabel)}>
+        <View style={themed($livePill)}>
+          <View style={themed($liveDot)} />
+          <Text size="xxs" style={themed($liveLabel)}>
             Live
           </Text>
         </View>
       </View>
 
-      <View style={themed($labelRow)}>
+      <View style={themed($expressionMetaRow)}>
         <Text size="xxs" style={themed($expressionLabel)}>
           {expressionLabel}
         </Text>
-        <View style={themed($accentDivider)} />
       </View>
 
       {completedExpression ? (
@@ -69,7 +53,7 @@ export const CalculatorDisplayCard: FC<CalculatorDisplayCardProps> = ({
           {completedExpression}
         </Text>
       ) : (
-        <Text size="sm" style={themed($expressionPlaceholder)}>
+        <Text size="sm" style={themed($expressionPlaceholder)} numberOfLines={1}>
           Ready for input
         </Text>
       )}
@@ -87,92 +71,65 @@ export const CalculatorDisplayCard: FC<CalculatorDisplayCardProps> = ({
   );
 };
 
-const $card: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  ...createMoldedSurface({
-    backgroundColor: colors.calculator.surface,
-    radius: 34,
-  }),
-  minHeight: 198,
+const $card: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  minHeight: 232,
   justifyContent: "flex-end",
-  paddingHorizontal: spacing.xl,
-  paddingTop: spacing.lg,
-  paddingBottom: spacing.xl,
-  borderWidth: 1,
-  borderColor: colors.calculator.borderSubtle,
-  ...createSoftShadow({
-    color: colors.calculator.shadowLg,
-    opacity: 0.42,
-    radius: 28,
-    offsetY: 20,
-    elevation: 10,
-  }),
+  paddingTop: spacing.md,
+  paddingBottom: spacing.lg,
 });
 
-const $shellGloss: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.68,
-});
-
-const $topLine: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $resultAura: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  top: 0,
-  left: 22,
-  right: 22,
-  height: 1,
-  backgroundColor: colors.calculator.accentPinkSoft,
-  opacity: 0.54,
-});
-
-const $edgeGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  right: -28,
-  top: -18,
-  width: 220,
-  height: 220,
+  right: 6,
+  bottom: 8,
+  width: 256,
+  height: 128,
   borderRadius: 999,
   backgroundColor: colors.calculator.accentGlow,
-  opacity: 0.24,
+  opacity: 0.3,
 });
 
-const $innerGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $resultAuraSoft: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  left: 18,
-  right: 18,
-  bottom: 18,
-  height: 94,
-  borderRadius: 28,
-  backgroundColor: colors.calculator.surfaceGlow,
-  opacity: 0.14,
+  right: 54,
+  bottom: 30,
+  width: 168,
+  height: 88,
+  borderRadius: 999,
+  backgroundColor: colors.calculator.accentPinkSoft,
+  opacity: 0.16,
 });
 
 const $statusRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: spacing.lg,
+  marginBottom: spacing.xl + spacing.xs,
 });
 
-const $eyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+const $statusLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.calculator.textMuted,
   fontFamily: typography.primary.medium,
   textTransform: "uppercase",
-  letterSpacing: 1.5,
+  letterSpacing: 1.7,
+  opacity: 0.84,
 });
 
-const $statusPill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $livePill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
   gap: spacing.xs,
   paddingHorizontal: spacing.sm,
-  paddingVertical: 7,
+  paddingVertical: 6,
   borderRadius: 999,
-  backgroundColor: colors.calculator.surfaceElevated,
+  backgroundColor: "rgba(20, 12, 26, 0.34)",
   borderWidth: 1,
-  borderColor: colors.calculator.borderSubtle,
+  borderColor: "rgba(255, 154, 219, 0.18)",
 });
 
-const $statusDot: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  width: 7,
-  height: 7,
+const $liveDot: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 6,
+  height: 6,
   borderRadius: 999,
   backgroundColor: colors.calculator.accentPink,
   shadowColor: colors.calculator.accentPink,
@@ -181,55 +138,54 @@ const $statusDot: ThemedStyle<ViewStyle> = ({ colors }) => ({
   shadowOffset: { width: 0, height: 0 },
 });
 
-const $statusLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+const $liveLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.calculator.textSecondary,
   fontFamily: typography.primary.medium,
-  letterSpacing: 0.4,
+  letterSpacing: 0.3,
 });
 
-const $labelRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.md,
+const $expressionMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginBottom: spacing.xs,
 });
 
 const $expressionLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.calculator.textMuted,
   fontFamily: typography.primary.medium,
   textTransform: "uppercase",
-  letterSpacing: 1.1,
-});
-
-const $accentDivider: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  flex: 1,
-  height: 1,
-  backgroundColor: colors.calculator.borderSubtle,
+  letterSpacing: 1.25,
+  textAlign: "right",
+  opacity: 0.82,
 });
 
 const $expressionPreview: ThemedStyle<TextStyle> = ({ colors, spacing, typography }) => ({
-  color: colors.calculator.textSecondary,
+  color: colors.calculator.accentPinkSoft,
   textAlign: "right",
-  marginTop: spacing.sm,
-  marginBottom: spacing.md,
+  marginBottom: spacing.xs,
   fontFamily: typography.primary.normal,
+  fontSize: 28,
+  lineHeight: 34,
+  letterSpacing: -1.1,
+  opacity: 0.96,
 });
 
 const $expressionPlaceholder: ThemedStyle<TextStyle> = ({ colors, spacing, typography }) => ({
   color: colors.calculator.textMuted,
   textAlign: "right",
-  marginTop: spacing.sm,
-  marginBottom: spacing.md,
+  marginBottom: spacing.xs,
   fontFamily: typography.primary.normal,
+  fontSize: 18,
+  lineHeight: 24,
+  opacity: 0.64,
 });
 
 const $resultText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.textPrimary,
+  color: colors.calculator.accentPinkSoft,
   textAlign: "right",
   fontFamily: typography.primary.light,
-  fontSize: 64,
-  lineHeight: 70,
-  letterSpacing: -3,
+  fontSize: 92,
+  lineHeight: 100,
+  letterSpacing: -5.5,
   textShadowColor: colors.calculator.accentGlow,
-  textShadowRadius: 24,
+  textShadowRadius: 38,
   textShadowOffset: { width: 0, height: 0 },
 });
