@@ -577,7 +577,7 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
         return;
       }
       if (next.name === "VaultTabs") {
-        navigation.navigate("VaultTabs", next.params);
+        navigation.navigate("VaultLocked");
         return;
       }
       navigation.navigate(next.name);
