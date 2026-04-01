@@ -22,7 +22,7 @@ export type VaultStackParamList = {
 
 export type SecurityStackParamList = {
   SecurityDashboard: undefined
-  DecoyVault: undefined
+  
 }
 
 export type SettingsStackParamList = {
@@ -71,6 +71,7 @@ export type AppStackParamList = {
   ServerUrl: undefined
   Welcome: undefined
   Login: undefined
+  DecoyVault: undefined
   Demo: NavigatorScreenParams<DemoTabParamList>
   // 🔥 Your screens go here
   // IGNITE_GENERATOR_ANCHOR_APP_STACK_PARAM_LIST

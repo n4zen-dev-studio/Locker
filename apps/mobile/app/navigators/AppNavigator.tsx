@@ -36,6 +36,7 @@ import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
 import { navigationRef, useBackButtonHandler } from "./navigationUtilities"
+import { DecoyVaultScreen } from "@/screens/DecoyVaultScreen"
 
 /**
  * This is a list of all the route names that will exit the app if the back button
@@ -136,6 +137,7 @@ const AppStack = () => {
       <Stack.Screen name="VaultDiagnostics" component={VaultDiagnosticsScreen} />
       <Stack.Screen name="ThreatModel" component={ThreatModelScreen} />
       <Stack.Screen name="ServerUrl" component={ServerUrlScreen} />
+      <Stack.Screen name="DecoyVault" component={DecoyVaultScreen} />
     </Stack.Navigator>
   )
 }

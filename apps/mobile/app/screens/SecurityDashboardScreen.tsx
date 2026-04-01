@@ -614,7 +614,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
     <ActionButton label="Panic Relock" onPress={handlePanic} variant="danger" />
   </SecurityTileCard>
 
-  <SecurityTileCard
+  {/* <SecurityTileCard
     title="Decoy Vault"
     subtitle="Open a believable decoy content path that does not use real vault state."
     tone="accent"
@@ -632,7 +632,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
       }}
       variant="secondary"
     />
-  </SecurityTileCard>
+  </SecurityTileCard> */}
 
   <SecurityTileCard
     title="Tamper Indicators"
