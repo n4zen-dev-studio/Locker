@@ -90,11 +90,9 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
           // style={themed($hero)}
         >
           <View style={themed($heroTopRow)}>
-            {/* <View style={themed($heroBadge)}> */}
-              <Text size="xxs" style={themed($heroEyebrow)}>
+              <Text size="xs" style={themed($heroEyebrow)}>
                 Settings
               </Text>
-            {/* </View> */}
 
             <View style={themed($heroStatusPill)}>
               <Text style={themed($heroStatusText)}>Vault Control</Text>
@@ -416,8 +414,9 @@ const $heroEyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
 const $heroTitle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontFamily: typography.primary.medium,
-  fontSize: 28,
-  lineHeight: 32,
+  fontSize: 32,
+  marginTop: -5,
+  // lineHeight: 4,
 })
 
 const $heroSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({

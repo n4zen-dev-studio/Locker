@@ -404,22 +404,43 @@ refreshControl={
               ? undefined
               : FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
           }
-          style={themed($header)}
+          // style={themed($header)}
         >
-          <View style={themed($headerTopRow)}>
+                 <View style={themed($heroTopRow)}>
+                                <Text size="xs" style={themed($heroEyebrow)}>
+                                 {activeVaultName ?`${activeVaultName} Vault` : "Personal Vault"}
+                                </Text>
+                  
+                              <Pressable onPress={handleLock} style={themed($heroStatusPill)}>
+                                <Ionicons
+              name={"lock-closed"}
+              size={12}
+              color={'#fff'}
+              style={{ paddingRight: 5 }}
+            />
+                                <Text style={themed($heroStatusText)}>Lock Vault</Text>
+                              </Pressable>
+                            </View>
+                  {/* <Text preset="heading" style={themed($heroTitle)}>
+                    Security Center
+                  </Text> */}
+          
+                    <Text preset="heading" style={themed($heroTitle)}>
+                              Home
+                            </Text>
+                  
+                            <Text style={themed($heroSubtitle)}>
+                              Add items to your {activeVaultName} vault
+                            </Text>
+          
+          {/* <View style={themed($headerTopRow)}>
             <View style={themed($headerCopy)}>
-              {/* <Text size="xxs" style={themed($eyebrow)}>
-                Locker
-              </Text> */}
                <Text size="xxs" style={themed($eyebrow)}>
                  {activeVaultId ? "Synced vault" : "Local-only vault"}
               </Text>
               <Text preset="heading" style={themed($vaultNameText)}>
                 {activeVaultName ?? "Personal Vault"}
               </Text>
-              {/* <Text style={themed($metaText)}>
-                {activeVaultId ? "Personal cloud vault" : "Local-only vault"}
-              </Text> */}
             </View>
 
             <View style={themed($headerActions)}>
@@ -430,10 +451,9 @@ refreshControl={
               color={'#fff'}
               style={{ padding: 5 }}
             />
-                {/* <Lock fill={theme.colors.vaultHub.vaultHubBg} size={18} color={theme.colors.vaultHub.vaultHubTextPrimary}  /> */}
               </Pressable>
             </View>
-          </View>
+          </View> */}
 
           {/* <View style={themed($headerMetaRow)}>
             {unlockMethod ? <MetaPill label={`Unlock ${unlockMethod}`} /> : null}
@@ -441,6 +461,22 @@ refreshControl={
             {__DEV__ && metaVersion ? <MetaPill label={`Meta v${metaVersion}`} /> : null}
           </View> */}
         </Animated.View>
+
+        {availableVaults.length > 1 ? (
+          <View style={themed($vaultSwitcher)}>
+            {availableVaults.map((vault) => (
+              <Pressable
+                key={vault.id}
+                style={themed([$vaultChip, activeVaultId === vault.id && $vaultChipActive])}
+                onPress={() => handleSwitchVault(vault.id, vault.name)}
+              >
+                <Text style={themed([$vaultChipText, activeVaultId === vault.id && $vaultChipTextActive])}>
+                  {vault.name ?? "Vault"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         <Animated.View
           entering={
@@ -468,7 +504,7 @@ refreshControl={
           <View style={themed($toolbarHeader)}>
              <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={handleScrollToVault}>
               <Ionicons
-              name={"arrow-down"}
+              name={"wallet"}
               size={18}
               color={'#fff'}
               style={{ paddingVertical: 5 }}
@@ -477,7 +513,7 @@ refreshControl={
             </Pressable>
             <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={handleScrollToVault}>
               <Ionicons
-              name={"wallet"}
+              name={"arrow-down"}
               size={18}
               color={'#fff'}
               style={{ paddingVertical: 5 }}
@@ -490,21 +526,6 @@ refreshControl={
 
         </Animated.View>
 
-        {availableVaults.length > 1 ? (
-          <View style={themed($vaultSwitcher)}>
-            {availableVaults.map((vault) => (
-              <Pressable
-                key={vault.id}
-                style={themed([$vaultChip, activeVaultId === vault.id && $vaultChipActive])}
-                onPress={() => handleSwitchVault(vault.id, vault.name)}
-              >
-                <Text style={themed([$vaultChipText, activeVaultId === vault.id && $vaultChipTextActive])}>
-                  {vault.name ?? "Vault"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
 
         {/* {syncReason ? (
           <View style={themed($syncHint)}>
@@ -552,7 +573,7 @@ refreshControl={
             }
 
           </View>
-         <GlowFab onPress={() => handleScrollToTop()} style={{position: 'absolute', right: 20, bottom: 90}}/>
+         <GlowFab onPress={() => handleScrollToTop()} style={{position: 'absolute', right: 20, bottom: 125}}/>
       </ScrollView>
     </Screen>
   );
@@ -614,9 +635,9 @@ const $screen: ThemedStyle<ViewStyle> = ({ colors }) => ({
 });
 
 const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
-  paddingTop: spacing.md,
-  paddingBottom: spacing.xl * 2,
+  paddingHorizontal: spacing.md,
+  // paddingTop: spacing.md,
+  paddingBottom: spacing.xl * 3,
   gap: spacing.lg,
 });
 
@@ -634,6 +655,60 @@ const $headerTopRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 const $headerCopy: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
 });
+
+const $heroTopRow: ThemedStyle<ViewStyle> = () => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+})
+
+const $heroBadge: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  paddingHorizontal: spacing.sm,
+  paddingVertical: 6,
+  borderRadius: 999,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+})
+
+const $heroStatusPill: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: 'row',
+  paddingHorizontal: spacing.sm,
+  paddingVertical: 6,
+  borderRadius: 999,
+  backgroundColor: "rgba(255, 77, 186, 0.12)",
+  borderWidth: 1,
+  borderColor: "rgba(255, 154, 219, 0.28)",
+  alignItems: 'center',
+})
+
+const $heroStatusText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 11,
+  fontWeight: "600",
+})
+
+const $heroEyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vaultHub.vaultHubTextSecondary,
+  fontFamily: typography.primary.medium,
+  textTransform: "uppercase",
+  letterSpacing: 1.2,
+})
+
+const $heroTitle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontFamily: typography.primary.medium,
+  fontSize: 32,
+  marginTop: -5,
+  // lineHeight: 4,
+})
+
+const $heroSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 12,
+  lineHeight: 22,
+})
+
 
 const $eyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
@@ -709,7 +784,7 @@ const $heroSection: ThemedStyle<ViewStyle> = () => ({
   alignItems: "center",
   justifyContent: "center",
   marginTop: 40,
-  height: Dimensions.get('screen').height* 0.6 ,
+  height: Dimensions.get('screen').height* 0.55 ,
 });
 
 const $toolbarSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -720,11 +795,12 @@ const $vaultSwitcher: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
   gap: spacing.sm,
+  marginTop: -10,
 });
 
 const $vaultChip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  paddingHorizontal: spacing.md,
-  paddingVertical: spacing.xs,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xxs,
   borderRadius: 999,
   backgroundColor: colors.vaultHub.vaultHubChipInactive,
   borderWidth: 1,
@@ -732,7 +808,7 @@ const $vaultChip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 });
 
 const $vaultChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  backgroundColor: colors.vaultHub.vaultHubAccentPink,
+  backgroundColor: '#e63db675',
   borderColor: colors.vaultHub.vaultHubAccentPink,
 });
 

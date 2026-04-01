@@ -8,9 +8,10 @@ import {
   View,
   ViewStyle,
   StyleSheet,
+  Dimensions,
 } from "react-native";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
-import Animated, { Easing, FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated";
+import Animated, { Easing, FadeIn, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { Clock3, KeyRound, Shield, Siren, TriangleAlert } from "lucide-react-native";
 
 import { Screen } from "@/components/Screen";
@@ -320,12 +321,32 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
         }
         style={themed($hero)}
       >
-        <Text size="xxs" style={themed($heroEyebrow)}>
+        {/* <Text size="xs" style={themed($heroEyebrow)}>
           Security
-        </Text>
-        <Text preset="heading" style={themed($heroTitle)}>
+        </Text> */}
+
+        <View style={themed($heroTopRow)}>
+                      <Text size="xs" style={themed($heroEyebrow)}>
+                        Settings
+                      </Text>
+        
+                    <View style={themed($heroStatusPill)}>
+                      <Text style={themed($heroStatusText)}>Vault Security</Text>
+                    </View>
+                  </View>
+        {/* <Text preset="heading" style={themed($heroTitle)}>
           Security Center
-        </Text>
+        </Text> */}
+
+          <Text preset="heading" style={themed($heroTitle)}>
+                    Security Center
+                  </Text>
+        
+                  <Text style={themed($heroSubtitle)}>
+                    Activity and Security Overview.
+                  </Text>
+
+        
         {/* <Text style={themed($heroSubtitle)}>
           Trust state, recovery health, recent security activity, and protective controls for the vault.
         </Text> */}
@@ -336,7 +357,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
           ))}
         </View> */}
 
-        <View style={themed($metricRow)}>
+        {/* <View style={themed($metricRow)}>
           <MetricTile icon={<Shield size={18} color={theme.colors.vaultHub.vaultHubTextPrimary} />} label="Trust" value={trust.state} tone={"neutral"}/>
           <MetricTile
             icon={<KeyRound size={18} color={theme.colors.vaultHub.vaultHubTextPrimary} />}
@@ -350,7 +371,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
             value={privacyPrefs.lockOnBackground ? "Background" : `${privacyPrefs.inactivityLockSeconds}s`}
             tone={"neutral"}
           />
-        </View>
+        </View> */}
       </Animated.View>
 
       <Animated.View
@@ -375,33 +396,31 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
       </View>
     </View> */}
 
-    <View style={themed($activityChartFrameV2)}>
-      <View style={themed($activityGridWrapV2)}>
-        {activityGrid.map((row, rowIndex) => (
-          <View key={`row-${rowIndex}`} style={themed($activityRowV2)}>
-            {row.map((cell, cellIndex) => (
-              <View
-                key={`cell-${rowIndex}-${cellIndex}`}
-                style={themed([
-                  $activityCellV2,
-                  cell.active && $activityCellActiveV2,
-                  cell.tone === "warning" && $activityCellWarningV2,
-                  cell.tone === "critical" && $activityCellCriticalV2,
-                ])}
-              />
-            ))}
-          </View>
-        ))}
-      </View>
-    </View>
-  </View>
-
-  <View style={themed($activitySummaryRowV2)}>
+    <View style={themed($activitySummaryRowV2)}>
     <SummaryStatV2 label="Unlocks" value={String(activitySummary.unlocks)} />
     <SummaryStatV2 label="Auto-locks" value={String(activitySummary.autoLocks)} />
     <SummaryStatV2 label="Step-up / Trust" value={String(activitySummary.elevated)} />
     <SummaryStatV2 label="Alerts" value={String(activitySummary.alerts)} accent />
   </View>
+
+    <View style={themed($activityChartFrameV2)}>
+  <View style={themed($activityGridWrapV2)}>
+    {activityGrid.map((row, rowIndex) => (
+      <View key={`row-${rowIndex}`} style={themed($activityRowV2)}>
+        {row.map((cell, cellIndex) => (
+          <GlassActivityCell
+            key={`cell-${rowIndex}-${cellIndex}`}
+            cell={cell}
+            themed={themed}
+          />
+        ))}
+      </View>
+    ))}
+  </View>
+</View>
+  </View>
+
+  
 
   <View style={themed($legendRowV2)}>
     <LegendDot label="Baseline" tone="muted" />
@@ -451,10 +470,58 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
         style={themed($stack)}
       >
           <View style={themed($stack)}>
+
+             <AccordionSection
+    title="Auto-lock & Privacy"
+    defaultOpen
+    subtitle="Session hardening"
+    icon={<Shield size={16} color={theme.colors.vaultHub.vaultHubTextPrimary} />}
+    rightValue="3 controls"
+    tone="neutral"
+  >
+    <View style={themed($toggleCardGrid)}>
+      <CompactToggleCard
+        label="Lock on Background"
+        value={privacyPrefs.lockOnBackground ? "On" : "Off"}
+        active={privacyPrefs.lockOnBackground}
+        onPress={() =>
+          handlePrivacyToggle({ lockOnBackground: !privacyPrefs.lockOnBackground })
+        }
+      />
+
+      <CompactToggleCard
+        label="Hide Previews"
+        value={privacyPrefs.hideSensitivePreviews ? "On" : "Off"}
+        active={privacyPrefs.hideSensitivePreviews}
+        onPress={() =>
+          handlePrivacyToggle({
+            hideSensitivePreviews: !privacyPrefs.hideSensitivePreviews,
+          })
+        }
+      />
+
+      <CompactToggleCard
+        label="Inactivity Lock"
+        value={`${privacyPrefs.inactivityLockSeconds}s`}
+        active
+        full
+        onPress={() =>
+          handlePrivacyToggle({
+            inactivityLockSeconds:
+              privacyPrefs.inactivityLockSeconds === 15
+                ? 30
+                : privacyPrefs.inactivityLockSeconds === 30
+                  ? 60
+                  : 15,
+          })
+        }
+      />
+    </View>
+  </AccordionSection>
   <AccordionSection
     title="Security Overview"
     subtitle="Protection posture"
-    defaultOpen
+    // defaultOpen
     icon={<Shield size={16} color={theme.colors.vaultHub.vaultHubTextPrimary} />}
     rightValue={overviewWarnings.length > 0 ? `${overviewWarnings.length} warnings` : "Healthy"}
     // tone={overviewWarnings.length > 0 ? "warning" : "neutral"}
@@ -541,52 +608,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
     </View>
   </AccordionSection> */}
 
-  <AccordionSection
-    title="Auto-lock & Privacy"
-    subtitle="Session hardening"
-    icon={<Shield size={16} color={theme.colors.vaultHub.vaultHubTextPrimary} />}
-    rightValue="3 controls"
-    tone="neutral"
-  >
-    <View style={themed($toggleCardGrid)}>
-      <CompactToggleCard
-        label="Lock on Background"
-        value={privacyPrefs.lockOnBackground ? "On" : "Off"}
-        active={privacyPrefs.lockOnBackground}
-        onPress={() =>
-          handlePrivacyToggle({ lockOnBackground: !privacyPrefs.lockOnBackground })
-        }
-      />
-
-      <CompactToggleCard
-        label="Hide Previews"
-        value={privacyPrefs.hideSensitivePreviews ? "On" : "Off"}
-        active={privacyPrefs.hideSensitivePreviews}
-        onPress={() =>
-          handlePrivacyToggle({
-            hideSensitivePreviews: !privacyPrefs.hideSensitivePreviews,
-          })
-        }
-      />
-
-      <CompactToggleCard
-        label="Inactivity Lock"
-        value={`${privacyPrefs.inactivityLockSeconds}s`}
-        active
-        full
-        onPress={() =>
-          handlePrivacyToggle({
-            inactivityLockSeconds:
-              privacyPrefs.inactivityLockSeconds === 15
-                ? 30
-                : privacyPrefs.inactivityLockSeconds === 30
-                  ? 60
-                  : 15,
-          })
-        }
-      />
-    </View>
-  </AccordionSection>
+ 
 </View>
 
           <View style={themed($securityTileGrid)}>
@@ -887,7 +909,7 @@ function SecurityTileTint({
       pointerEvents="none"
       width="102%"
       height="110%"
-      
+      preserveAspectRatio="none"
       viewBox="0 0 100 100"
       style={{flex:1, position: "absolute", top: 0, left: 0 }}
     >
@@ -966,12 +988,12 @@ function SecurityTileCard({
   const { themed } = useAppTheme()
 
   const gradientByTone = {
-    default: ["rgba(9,13,31,0.98)", "rgba(5,8,22,1)"],
-    critical: ["rgba(16, 8, 18, 0.88)", "rgba(8,5,16,1)"],
-    accent: ["rgba(15,8,25,0.98)", "rgba(7,5,18,1)"],
-    violet: ["rgba(18, 8, 24, 0.96)", "rgba(7,5,18,1)"],
-    blue: ["rgb(6, 10, 24)", "rgba(4,7,18,1)"],
-    green: ["rgba(8,14,18,0.98)", "rgba(5,9,14,1)"],
+    default: ["rgba(112, 45, 134, 0.98)", "rgba(5,8,22,1)"],
+    critical: ["rgba(202, 25, 55, 0.61)", "rgb(16, 5, 9)"],
+    accent: ["rgba(213, 63, 175, 0.98)", "rgba(7,5,18,1)"],
+    violet: ["rgba(141, 12, 131, 0.96)", "rgba(7,5,18,1)"],
+    blue: ["rgb(56, 92, 219)", "rgba(4,7,18,1)"],
+    green: ["rgba(58, 184, 148, 0.98)", "rgba(5,9,14,1)"],
   } as const
 
   return (
@@ -979,10 +1001,10 @@ function SecurityTileCard({
       <LinearGradient
         colors={gradientByTone[tone]}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0.4, y: 0.4 }}
         style={themed($securityTileGradient)}
       >
-        <SecurityTileTint tone={tone} />
+        {/* <SecurityTileTint tone={tone} /> */}
 {icon ? (
   <Ionicons
     name={icon}
@@ -1012,94 +1034,51 @@ function SecurityTileCard({
   )
 }
 
-function MetricTile({
-  icon,
-  label,
-  value,
-  tone,
+
+function GlassActivityCell({
+  cell,
+  themed,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  tone?: "accent" | "warning" | "neutral";
+  cell: { active: boolean; tone: "muted" | "accent" | "warning" | "critical" }
+  themed: <T>(style: T) => T
 }) {
-  const { themed } = useAppTheme();
+  const pulse = useSharedValue(cell.active ? 0 : 0)
 
-  return (
-     <View style={themed([$metricTile,
-         tone === "accent" && $chipAccent,
-         tone === "warning" && $chipWarning])}>
+  useEffect(() => {
+    if (cell.active) {
+      pulse.value = withRepeat(
+        withTiming(1, {
+          duration: 1600,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        -1,
+        true,
+      )
+    } else {
+      pulse.value = withTiming(0, { duration: 180 })
+    }
+  }, [cell.active, pulse])
 
-      <Text style={themed($metricLabel)}>{label}</Text>
-      <View style={themed($metricIconWrap)}>{icon}</View>
-      <Text preset="bold" style={themed($metricValue)}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function StatusChip({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "accent" | "warning" | "neutral";
-}) {
-  const { themed } = useAppTheme();
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: cell.active ? 0.14 + pulse.value * 0.1 : 0,
+    transform: [{ scale: cell.active ? 0.96 + pulse.value * 0.06 : 1 }],
+  }))
 
   return (
     <View
       style={themed([
-        $chip,
-        tone === "accent" && $chipAccent,
-        tone === "warning" && $chipWarning,
+        $activityCellV2,
+        cell.active && $activityCellActiveV2,
+        cell.tone === "warning" && $activityCellWarningV2,
+        cell.tone === "critical" && $activityCellCriticalV2,
       ])}
     >
-      <Text style={themed($chipText)}>{label}</Text>
+      <View pointerEvents="none" style={styles.cellTint} />
+      <View pointerEvents="none" style={styles.cellSheen} />
+      <Animated.View pointerEvents="none" style={[styles.cellGlow, glowStyle]} />
+      <View pointerEvents="none" style={styles.cellInnerBorder} />
     </View>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  const { themed } = useAppTheme();
-
-  return (
-    <View style={themed($infoRow)}>
-      <Text style={themed($infoLabel)}>{label}</Text>
-      <Text style={themed($infoValue)}>{value}</Text>
-    </View>
-  );
-}
-
-function SettingRow({
-  active,
-  description,
-  label,
-  onPress,
-  value,
-}: {
-  active: boolean;
-  description: string;
-  label: string;
-  onPress: () => void;
-  value: string;
-}) {
-  const { themed } = useAppTheme();
-
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [themed($settingRow), pressed && themed($settingRowPressed)]}>
-      <View style={themed($settingCopy)}>
-        <Text preset="bold" style={themed($settingLabel)}>
-          {label}
-        </Text>
-        <Text style={themed($settingDescription)}>{description}</Text>
-      </View>
-      <View style={themed([active ? $settingPillActive : $settingPill, $settingPillBase])}>
-        <Text style={themed(active ? $settingPillTextActive : $settingPillText)}>{value}</Text>
-      </View>
-    </Pressable>
-  );
+  )
 }
 
 function ActionButton({
@@ -1253,153 +1232,183 @@ function formatTimestamp(value: string | null | undefined): string {
   if (!value) return "n/a";
   return new Date(value).toLocaleString();
 }
-
 const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flex: 1,
   // backgroundColor: colors.vaultHub.vaultHubBg,
-// paddingBottom: spacing.xl + 40,
-});
+  // paddingBottom: spacing.xl + 40,
+})
 
 const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
-  paddingTop: spacing.md,
-  paddingBottom: spacing.xl * 2,
-  gap: spacing.lg,
-});
+  paddingHorizontal: spacing.md,
+  paddingTop: spacing.sm,
+  paddingBottom: spacing.xl,
+  gap: spacing.md,
+})
 
 const $hero: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
-});
+  // gap: spacing.sm,
+})
+
+const $heroTopRow: ThemedStyle<ViewStyle> = () => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+})
+
+const $heroBadge: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  paddingHorizontal: spacing.sm,
+  paddingVertical: 6,
+  borderRadius: 999,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+})
+
+const $heroStatusPill: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingHorizontal: spacing.sm,
+  paddingVertical: 6,
+  borderRadius: 999,
+  backgroundColor: "rgba(255, 77, 186, 0.12)",
+  borderWidth: 1,
+  borderColor: "rgba(255, 154, 219, 0.28)",
+})
+
+const $heroStatusText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 11,
+  fontWeight: "600",
+})
 
 const $heroEyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextSecondary,
   fontFamily: typography.primary.medium,
   textTransform: "uppercase",
-  letterSpacing: 1.3,
-  marginBottom: -15,
-});
+  letterSpacing: 1.2,
+})
 
 const $heroTitle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontFamily: typography.primary.medium,
-
-});
+  fontSize: 32,
+  marginTop: -5,
+  // lineHeight: 4,
+})
 
 const $heroSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
-  fontSize: 13,
-  lineHeight: 15,
-});
+  fontSize: 12,
+  lineHeight: 22,
+})
+
 
 const $chipRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
-  gap: spacing.sm,
-});
+  gap: spacing.xs,
+})
 
 const $chip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderRadius: 999,
-  paddingHorizontal: spacing.md,
-  paddingVertical: spacing.xs + 2,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs + 1,
   backgroundColor: "rgba(255,255,255,0.04)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-});
+})
 
 const $chipAccent: ThemedStyle<ViewStyle> = () => ({
   backgroundColor: "rgba(255, 77, 186, 0.14)",
   borderColor: "rgba(255, 154, 219, 0.42)",
-});
+})
 
 const $chipWarning: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: "rgba(255, 214, 90, 0.14)",
   borderColor: colors.accentYellow,
-});
+})
 
 const $chipText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontFamily: typography.primary.medium,
   fontSize: 12,
-});
+})
 
 const $metricRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
-  gap: spacing.sm,
-});
+  gap: spacing.xs,
+})
 
 const $metricTile: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flex: 1,
-  borderRadius: 30,
-  padding: spacing.xs,
+  borderRadius: 24,
+  padding: spacing.xxs,
   backgroundColor: colors.vaultHub.vaultHubSurface,
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-  // gap: spacing.xxs,
-  alignItems: 'center',
-});
+  alignItems: "center",
+})
 
 const $metricIconWrap: ThemedStyle<ViewStyle> = () => ({
   marginBottom: 2,
-});
+})
 
 const $metricLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
   fontSize: 12,
-});
+})
 
 const $metricValue: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
-  fontSize: 12
-});
+  fontSize: 12,
+})
 
 const $stack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.lg,
-});
+  gap: spacing.md,
+})
 
 const $panel: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  borderRadius: 26,
-  padding: spacing.md,
-  gap: spacing.md,
+  borderRadius: 22,
+  padding: spacing.sm,
+  gap: spacing.sm,
   backgroundColor: "rgba(12, 12, 24, 0.65)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
   shadowColor: "rgba(0,0,0,0.82)",
   shadowOpacity: 0.34,
-  shadowRadius: 22,
-  shadowOffset: { width: 0, height: 16 },
-  elevation: 10,
-});
+  shadowRadius: 18,
+  shadowOffset: { width: 0, height: 12 },
+  elevation: 8,
+})
 
 const $panelCritical: ThemedStyle<ViewStyle> = () => ({
   borderColor: "rgba(255, 122, 158, 0.28)",
-});
+})
 
 const $sectionTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontSize: 14,
-});
+})
 
 const $sectionSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
   marginTop: -4,
   lineHeight: 19,
   fontSize: 13,
-});
+})
 
 const $activityLayout: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   gap: spacing.md,
-});
+})
 
 const $activityGridWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
   gap: spacing.xs,
-});
+})
 
 const $activityRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   gap: spacing.xs,
-});
+})
 
 const $activityCell: ThemedStyle<ViewStyle> = ({ colors }) => ({
   flex: 1,
@@ -1408,27 +1417,27 @@ const $activityCell: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: "rgba(255,255,255,0.05)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-});
+})
 
 const $activityCellActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: colors.vaultHub.vaultHubAccentPink,
   borderColor: "rgba(255, 154, 219, 0.46)",
-});
+})
 
 const $activityCellWarning: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: colors.accentYellow,
   borderColor: colors.accentYellow,
-});
+})
 
 const $activityCellCritical: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: colors.error,
   borderColor: colors.error,
-});
+})
 
 const $activitySummaryColumn: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   width: 108,
   gap: spacing.sm,
-});
+})
 
 const $summaryStat: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderRadius: 18,
@@ -1437,34 +1446,34 @@ const $summaryStat: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: "rgba(255,255,255,0.04)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-});
+})
 
 const $summaryLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
   fontSize: 11,
-});
+})
 
 const $summaryValue: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   marginTop: 4,
-});
+})
 
 const $summaryValueAccent: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.accentYellow,
   marginTop: 4,
-});
+})
 
 const $legendRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
   gap: spacing.md,
-});
+})
 
 const $legendItem: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
   gap: spacing.xs,
-});
+})
 
 const $legendDot: ThemedStyle<ViewStyle> = ({ colors }) => ({
   width: 10,
@@ -1473,22 +1482,22 @@ const $legendDot: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: "rgba(255,255,255,0.08)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-});
+})
 
 const $legendDotAccent: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  backgroundColor: "#F5B435",
-  borderColor: "#F5B435",
-});
+  backgroundColor: "#fa80d489",
+  borderColor: "#f535c8",
+})
 
 const $legendDotWarning: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: "#FF7A7A",
   borderColor: "#FF7A7A",
-});
+})
 
 const $legendText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
   fontSize: 12,
-});
+})
 
 const $infoRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flexDirection: "row",
@@ -1498,13 +1507,13 @@ const $infoRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   paddingBottom: spacing.xs,
   borderBottomWidth: 1,
   borderBottomColor: "rgba(255,255,255,0.05)",
-});
+})
 
 const $infoLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
   fontSize: 14,
   flex: 1,
-});
+})
 
 const $infoValue: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
@@ -1512,16 +1521,16 @@ const $infoValue: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   textAlign: "right",
   fontSize: 14,
   fontFamily: typography.primary.medium,
-});
+})
 
 const $supportText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
   lineHeight: 20,
-});
+})
 
 const $textFieldContainer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginTop: spacing.xs,
-});
+})
 
 const $textFieldWrapper: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderRadius: 18,
@@ -1529,67 +1538,67 @@ const $textFieldWrapper: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: "rgba(10, 9, 14, 0.82)",
   paddingHorizontal: spacing.md,
   minHeight: 54,
-});
+})
 
 const $textFieldInput: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontSize: 15,
-});
+})
 
 const $textFieldLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextSecondary,
   fontFamily: typography.primary.medium,
   fontSize: 12,
-});
+})
 
 const $buttonStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
-});
+})
 
 const $actionButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   borderRadius: 22,
   paddingVertical: spacing.xs,
   alignItems: "center",
   justifyContent: "center",
-});
+})
 
 const $actionButtonPrimary: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  backgroundColor: '#7a366af1',
-});
+  backgroundColor: "#7a366af1",
+})
 
 const $actionButtonSecondary: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: "rgba(255,255,255,0.05)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-});
+})
 
 const $actionButtonDanger: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: "rgba(255, 122, 158, 0.12)",
   borderWidth: 1,
   borderColor: "rgba(255, 122, 158, 0.34)",
-});
+})
 
 const $actionButtonPressed: ThemedStyle<ViewStyle> = () => ({
   transform: [{ scale: 0.986 }],
-});
+})
 
 const $actionButtonTextPrimary: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontFamily: typography.primary.semiBold,
-  fontSize: 14
-});
+  fontSize: 14,
+})
 
 const $actionButtonTextSecondary: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontFamily: typography.primary.semiBold,
-  fontSize: 14
-});
+  fontSize: 14,
+})
 
 const $actionButtonTextDanger: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.error,
   fontFamily: typography.primary.semiBold,
-  fontSize: 14
-});
+  fontSize: 14,
+})
 
 const $settingRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flexDirection: "row",
@@ -1598,26 +1607,26 @@ const $settingRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   paddingVertical: spacing.sm,
   borderBottomWidth: 1,
   borderBottomColor: "rgba(255,255,255,0.05)",
-});
+})
 
 const $settingRowPressed: ThemedStyle<ViewStyle> = () => ({
   opacity: 0.88,
-});
+})
 
 const $settingCopy: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
-});
+})
 
 const $settingLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
-});
+})
 
 const $settingDescription: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
   marginTop: 4,
   fontSize: 12,
   lineHeight: 18,
-});
+})
 
 const $settingPillBase: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   minWidth: 76,
@@ -1626,35 +1635,35 @@ const $settingPillBase: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   justifyContent: "center",
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs + 2,
-});
+})
 
 const $settingPill: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: "rgba(255,255,255,0.05)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-});
+})
 
 const $settingPillActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: "rgba(255, 77, 186, 0.14)",
   borderWidth: 1,
   borderColor: "rgba(255, 154, 219, 0.4)",
-});
+})
 
 const $settingPillText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextSecondary,
   fontFamily: typography.primary.medium,
   fontSize: 12,
-});
+})
 
 const $settingPillTextActive: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontFamily: typography.primary.medium,
   fontSize: 12,
-});
+})
 
 const $alertStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
-});
+})
 
 const $alertRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flexDirection: "row",
@@ -1665,18 +1674,18 @@ const $alertRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: "rgba(255, 214, 90, 0.09)",
   borderWidth: 1,
   borderColor: "rgba(255, 214, 90, 0.18)",
-});
+})
 
 const $alertText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextSecondary,
   flex: 1,
   lineHeight: 19,
-  fontSize: 15
-});
+  fontSize: 15,
+})
 
 const $auditList: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
-});
+})
 
 const $auditRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flexDirection: "row",
@@ -1686,192 +1695,40 @@ const $auditRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: "rgba(255,255,255,0.03)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-});
+})
 
 const $auditIconWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingTop: 2,
-});
+})
 
 const $auditCopy: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
-});
+})
 
 const $auditTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   lineHeight: 20,
-});
+})
 
 const $auditMeta: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
+  marginTop: 2,
   fontSize: 12,
-  marginTop: 4,
-});
-
-const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.error,
-});
-
-const $statusText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.vaultHub.vaultHubTextPrimary,
-});
-const $activityPanelContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.lg,
-})
-
-const $activityChartShellV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  // gap: spacing.md,
-})
-
-const $activityChartHeaderV2: ThemedStyle<ViewStyle> = () => ({
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-})
-
-const $activityEyebrowV2: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.textDim ?? "rgba(255,255,255,0.58)",
-  fontFamily: typography.primary.medium,
-  fontSize: 13,
-  letterSpacing: 0.3,
-  textTransform: "uppercase",
-})
-
-const $activityHintV2: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.textDim ?? "rgba(255,255,255,0.4)",
-  fontFamily: typography.primary.normal,
-  fontSize: 12,
-  marginTop: -20,
-  marginBottom: 12,
-
-})
-
-const $activityChartFrameV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  borderRadius: 28,
-  // paddingHorizontal: spacing.md,
-  paddingBottom: spacing.xs,
-  minHeight: 250,
-  justifyContent: "center",
-  // backgroundColor: "rgba(255,255,255,0.02)",
-  // borderWidth: 1,
-  // borderColor: "rgba(255,255,255,0.05)",
-})
-
-const $activityGridWrapV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  alignSelf: "center",
-  gap: spacing.xs,
-})
-
-const $activityRowV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  justifyContent: "center",
-  gap: spacing.xs,
-})
-
-const $activityCellV2: ThemedStyle<ViewStyle> = () => ({
-  width: 20,
-  height: 20,
-  borderRadius: 2,
-  backgroundColor: "rgba(255,255,255,0.06)",
-  borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.05)",
-})
-
-const $activityCellActiveV2: ThemedStyle<ViewStyle> = () => ({
-  backgroundColor: "#F5B435",
-  borderColor: "#f5b5357e",
-  shadowColor: "#c1a161",
-  shadowOpacity: 0.35,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 0 },
-  elevation: 4,
-})
-
-const $activityCellWarningV2: ThemedStyle<ViewStyle> = () => ({
-  backgroundColor: "#f6976b",
-  borderColor: "rgba(246, 181, 107, 0.85)",
-  shadowColor: "#f6a56b",
-  shadowOpacity: 0.28,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 0 },
-  elevation: 4,
-})
-
-const $activityCellCriticalV2: ThemedStyle<ViewStyle> = () => ({
-  backgroundColor: "#FF7A7A",
-  borderColor: "rgba(255,122,122,0.85)",
-  shadowColor: "#FF7A7A",
-  shadowOpacity: 0.28,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 0 },
-  elevation: 4,
-})
-
-const $activitySummaryRowV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  flexWrap: "wrap",
-  gap: spacing.sm,
-})
-
-const $summaryStatCardV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexGrow: 1,
-  minWidth: 70,
-  maxWidth: 75,
-  borderRadius: 12,
-  paddingHorizontal: spacing.xxs,
-  paddingVertical: spacing.xs,
-  backgroundColor: "rgba(255,255,255,0.03)",
-  borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.05)",
-})
-
-const $summaryStatCardAccentV2: ThemedStyle<ViewStyle> = () => ({
-  backgroundColor: "rgba(245, 230, 92, 0.06)",
-  borderColor: "rgba(245, 230, 92, 0.16)",
-})
-
-const $summaryStatLabelV2: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.textDim ?? "rgba(255,255,255,0.52)",
-  fontFamily: typography.primary.normal,
-  fontSize: 12,
-  marginBottom: 2,
-  height: 50,
-})
-
-const $summaryStatValueV2: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.text ?? "#FFFFFF",
-  fontFamily: typography.primary.bold,
-  fontSize: 20,
-  // textAlignVertical: 'bottom',
-  lineHeight: 36,
-})
-
-const $summaryStatValueAccentV2: ThemedStyle<TextStyle> = ({ typography }) => ({
-  color: "#F6DC6B",
-  fontFamily: typography.primary.bold,
-  fontSize: 20,
-  lineHeight: 36,
-})
-
-const $legendRowV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  flexWrap: "wrap",
-  alignItems: "center",
-  gap: spacing.md,
-  paddingTop: spacing.xs,
+  lineHeight: 16,
 })
 
 const $securityTileGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
   marginHorizontal: -6,
-  marginTop: spacing.md,
+  marginTop: spacing.sm,
   alignItems: "stretch",
 })
 
 const $securityTileOuter: ThemedStyle<ViewStyle> = () => ({
   width: "50%",
   paddingHorizontal: 6,
-  marginBottom: 12,
+  marginBottom: 8,
 })
 
 const $securityTileGlow: ThemedStyle<ViewStyle> = () => ({
@@ -1884,19 +1741,14 @@ const $securityTileGlow: ThemedStyle<ViewStyle> = () => ({
   opacity: 1,
 })
 
-
-
 const $securityTileAlertStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
 })
-
 
 const $securityTileGlassVeil: ThemedStyle<ViewStyle> = () => ({
   ...StyleSheet.absoluteFillObject,
   backgroundColor: "rgba(255,255,255,0.02)",
 })
-
-
 
 const $securityTileTitle: ThemedStyle<TextStyle> = () => ({
   fontSize: 13,
@@ -1934,9 +1786,6 @@ const $securityTileStatusText: ThemedStyle<TextStyle> = () => ({
 const $securityTileGradient: ThemedStyle<ViewStyle> = () => ({
   minHeight: 168,
   borderRadius: 22,
-  // padding: 3, 
-  
-  // flex:1,
   overflow: "hidden",
   borderWidth: 1,
   borderColor: "rgba(255,255,255,0.07)",
@@ -1950,9 +1799,9 @@ const $securityTileGradient: ThemedStyle<ViewStyle> = () => ({
 const $securityTileInner: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
   minHeight: 168,
-  paddingHorizontal: 14,
-  paddingTop: 12,
-  paddingBottom: 12,
+  paddingHorizontal: 12,
+  paddingTop: 10,
+  paddingBottom: 10,
   justifyContent: "space-between",
 })
 
@@ -1962,20 +1811,21 @@ const $securityTileTextWrap: ThemedStyle<ViewStyle> = () => ({
 })
 
 const $securityTileFooter: ThemedStyle<ViewStyle> = () => ({
-  marginTop: 10,
+  marginTop: 8,
   zIndex: 2,
 })
+
 const $securityTileIcon: ThemedStyle<TextStyle> = () => ({
   position: "absolute",
   alignSelf: "center",
   top: "32%",
-  opacity: 0.12, // KEY: keeps it subtle
+  opacity: 0.12,
   color: "#FFFFFF",
   zIndex: 1,
 })
 
 const $accordionCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  borderRadius: 22,
+  borderRadius: 20,
   padding: spacing.sm,
   backgroundColor: "rgba(12, 12, 24, 0.56)",
   borderWidth: 1,
@@ -1989,12 +1839,10 @@ const $accordionCardAccent: ThemedStyle<ViewStyle> = () => ({
 
 const $accordionCardWarning: ThemedStyle<ViewStyle> = ({ colors }) => ({
   borderColor: "rgba(221, 215, 125, 0.56)",
-  // backgroundColor: "rgba(52, 50, 28, 0.56)",
-  
 })
 
 const $accordionHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  minHeight: 44,
+  minHeight: 40,
   flexDirection: "row",
   alignItems: "center",
   justifyContent: "space-between",
@@ -2030,11 +1878,13 @@ const $accordionTitleWrap: ThemedStyle<ViewStyle> = () => ({
 const $accordionTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontSize: 13,
+  lineHeight: 16,
 })
 
 const $accordionSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
   fontSize: 11,
+  lineHeight: 14,
   marginTop: 2,
 })
 
@@ -2068,7 +1918,7 @@ const $compactMetricRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $compactInfoPill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   width: "48.8%",
-  minHeight: 58,
+  minHeight: 54,
   borderRadius: 16,
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
@@ -2165,10 +2015,10 @@ const $toggleCardGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $compactToggleCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   width: "31%",
-  minHeight: 68,
+  minHeight: 60,
   borderRadius: 16,
   paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.sm,
+  paddingVertical: spacing.xs,
   backgroundColor: "rgba(255,255,255,0.04)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
@@ -2189,7 +2039,7 @@ const $compactToggleCardPressed: ThemedStyle<ViewStyle> = () => ({
 })
 
 const $compactToggleTopRow: ThemedStyle<ViewStyle> = () => ({
-  gap: 8,
+  gap: 6,
 })
 
 const $compactToggleLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
@@ -2224,4 +2074,172 @@ const $compactToggleBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
 const $compactToggleBadgeTextActive: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontSize: 11,
+})
+
+const $activityPanelContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $activityChartShellV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $activityHintV2: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 11,
+  marginTop: -10,
+  lineHeight: 14,
+})
+
+const $activityChartFrameV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  borderRadius: 16,
+  alignItems: 'center',
+  padding: spacing.xs,
+  backgroundColor: "rgba(255,255,255,0.025)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.05)",
+})
+
+const $activityGridWrapV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xxs,
+})
+
+const $activityRowV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.xxs,
+})
+
+const $activityCellV2: ThemedStyle<ViewStyle> = () => ({
+  width: 20,
+  height: 20,
+  borderRadius: 2,
+  overflow: 'hidden',
+  backgroundColor: "rgba(255,255,255,0.06)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.05)",
+})
+
+const $activityCellActiveV2: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "#F5B435",
+  borderColor: "#f5b5357e",
+  shadowColor: "#c1a161",
+  shadowOpacity: 0.35,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 0 },
+  elevation: 4,
+})
+
+const $activityCellWarningV2: ThemedStyle<ViewStyle> = () => ({
+  shadowColor: "#8b2860",
+  backgroundColor: "rgba(255, 77, 187, 0.4)",
+  borderColor: "rgba(255, 154, 219, 0.24)",
+  shadowOpacity: 0.28,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 0 },
+  elevation: 4,
+})
+
+const $activityCellCriticalV2: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "#ff7a7a9d",
+  borderColor: "rgba(255,122,122,0.85)",
+  shadowColor: "#ff7ae07e",
+  shadowOpacity: 0.28,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 0 },
+  elevation: 4,
+})
+
+const $activitySummaryRowV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.sm,
+})
+
+const $summaryStatCardV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexGrow: 1,
+  minWidth: '22.5%',
+  maxWidth: 75,
+  borderRadius: 12,
+  paddingHorizontal: spacing.xxs,
+  paddingVertical: spacing.xs,
+  backgroundColor: "rgba(255,255,255,0.03)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.05)",
+})
+
+const $summaryStatCardAccentV2: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "rgba(245, 92, 184, 0.06)",
+  borderColor: "rgba(245, 92, 214, 0.16)",
+})
+
+const $summaryStatLabelV2: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.textDim ?? "rgba(255,255,255,0.52)",
+  fontFamily: typography.primary.normal,
+  fontSize: 12,
+  lineHeight: 20,
+  marginBottom: 2,
+  height: 45,
+})
+
+const $summaryStatValueV2: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.text ?? "#FFFFFF",
+  fontFamily: typography.primary.bold,
+  fontSize: 20,
+  lineHeight: 36,
+})
+
+const $summaryStatValueAccentV2: ThemedStyle<TextStyle> = ({ typography }) => ({
+  color: "#f66bbe",
+  fontFamily: typography.primary.bold,
+  fontSize: 20,
+  lineHeight: 36,
+})
+
+const $legendRowV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: spacing.md,
+  paddingTop: spacing.xs,
+})
+
+
+const styles = StyleSheet.create({
+  cellTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderRadius: 2,
+  },
+
+  cellSheen: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "80%",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+  },
+
+  cellGlow: {
+    position: "absolute",
+    top: "24%",
+    left: "24%",
+    width: "80%",
+    height: "80%",
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+
+  cellInnerBorder: {
+    position: "absolute",
+    top: 1,
+    left: 1,
+    right: 1,
+    bottom: 1,
+    borderRadius: 1.5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.035)",
+  },
 })

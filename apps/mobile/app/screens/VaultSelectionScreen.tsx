@@ -103,6 +103,23 @@ export const VaultSelectionScreen: FC<AppStackScreenProps<"VaultSelection">> =
           </Text>
         </Animated.View>
 
+     {__DEV__&& <Pressable style={themed([
+              $actionPill,
+              $actionPillPrimary
+            ])}
+            onPress={() => navigation.navigate('ServerUrl')}
+          >
+        <Text
+          style={themed([
+            $actionPillText,
+            $actionPillTextPrimary
+          ])}
+        >
+          Change URL
+        </Text>
+        </Pressable>}
+
+
         <Animated.View
           entering={
             reducedMotion
@@ -159,7 +176,9 @@ export const VaultSelectionScreen: FC<AppStackScreenProps<"VaultSelection">> =
                 </Pressable>
               </Animated.View>
             ))}
-          </View>
+              </View>
+
+
 
           <View style={themed($footerNoteWrap)}>
             <Text style={themed($footerNote)}>
@@ -167,6 +186,8 @@ export const VaultSelectionScreen: FC<AppStackScreenProps<"VaultSelection">> =
             </Text>
           </View>
         </Animated.View>
+
+        
       </Screen>
     )
   }

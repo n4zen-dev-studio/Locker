@@ -56,9 +56,9 @@ const SATELLITE_SIZE = 90
 const CENTER_RADIUS = CENTER_SIZE / 2
 const SATELLITE_RADIUS = SATELLITE_SIZE / 2
 
-const DRAG_ROTATION_MULTIPLIER = 1
-const RELEASE_VELOCITY_MULTIPLIER = 1.15
-const ROTATION_DECELERATION = 0.992
+const DRAG_ROTATION_MULTIPLIER = 1.5
+const RELEASE_VELOCITY_MULTIPLIER = 1.5
+const ROTATION_DECELERATION = 0.998
 const DRAG_TOUCH_SCALE = 1.03
 
 const ORB_SIZE = 320;
@@ -100,7 +100,7 @@ const ORB_THEMES: Record<
   }
 > = {
   note: {
-        shellTop:  "#ff5cab",
+    shellTop:   "#FF4DBA",
     shellBottom: "#050209",
     glow: "#FFF7FD",
     glowSoft: "#FF9ADB",
@@ -116,19 +116,15 @@ const ORB_THEMES: Record<
     // icon: "#FFF0FA",
     // ring: "rgba(107, 60, 91, 0.18)",
     // halo: "rgba(81, 36, 65, 0.91)",
-    shellTop:  "#ff5cab",
+    shellTop:  "#f97dce",
     shellBottom: "#050209",
     glow: "#FFF7FD",
-    glowSoft: "#FF9ADB",
+    glowSoft: "#ed9bd0",
     icon: "#FFF0FA",
     ring: "rgba(136, 110, 126, 0.82)",
     halo: "rgba(81, 36, 65, 0.91)",
 
-    // vaultBg: "#050209",
-    // vaultBgTint: "#150817",
-    // vaultDot: "rgba(255, 184, 226, 0.16)",
-    // vaultTextPrimary: "#FFF7FD",
-    // vaultTextSecondary: "#B7A8C1",
+
     // vaultAccentPink: "#FF4DBA",
     // vaultAccentPinkSoft: "#FF9ADB",
     // vaultGlow: "rgba(255, 77, 186, 0.28)",
@@ -136,11 +132,11 @@ const ORB_THEMES: Record<
     // vaultGlow3: "rgba(255, 219, 77, 0.28))",
     // vaultRing: "rgba(255, 77, 186, 0.82)",
     // vaultBorderSubtle: "rgba(255, 255, 255, 0.08)",
-    // vaultSurface: "rgba(18, 12, 24, 0.72)",
+    // vaultSurface: "rgba(17, 11, 23, 0.72)",
     // vaultError: "#FF7A9E",
   },
   image: {
-        shellTop:  "#ff5cab",
+    shellTop:   "#FF4DBA",
     shellBottom: "#050209",
     glow: "#FFF7FD",
     glowSoft: "#FF9ADB",
@@ -149,7 +145,7 @@ const ORB_THEMES: Record<
     halo: "rgba(81, 36, 65, 0.91)",
   },
   pdf: {
-       shellTop:  "#ff5cab",
+    shellTop:   "#FF4DBA",
     shellBottom: "#050209",
     glow: "#FFF7FD",
     glowSoft: "#FF9ADB",
@@ -158,7 +154,7 @@ const ORB_THEMES: Record<
     halo: "rgba(81, 36, 65, 0.91)",
   },
   file: {
-        shellTop:  "#ff5cab",
+    shellTop:   "#FF4DBA",
     shellBottom: "#050209",
     glow: "#FFF7FD",
     glowSoft: "#FF9ADB",
@@ -760,15 +756,15 @@ function SatelliteOrb({
       <AnimatedView pointerEvents="none" style={[styles.satellitePressGlow, pressGlowStyle]}>
         <GlowBlob size={104} color={palette.glow} opacity={0.78} />
       </AnimatedView>
-
+ 
       <AnimatedView style={[styles.satelliteHaloWrap, haloStyle]}>
-        <GlowBlob size={96} color={palette.glow} opacity={0.92} />
-      </AnimatedView>
+        <GlowBlob size={96} color={palette.glow} opacity={0.8} />
+      </AnimatedView> 
 
       <AnimatedView style={shellPressStyle}>
         <View style={[styles.satelliteOuterRing, { borderColor: palette.ring, shadowColor: palette.glow }]}>
           <LinearGradient
-            colors={["rgba(255,255,255,0.18)", "rgba(255,255,255,0.04)", "rgba(0,0,0,0.18)"]}
+            colors={["rgba(255, 255, 255, 0.12)", "rgba(255, 255, 255, 0.01)", "rgba(0, 0, 0, 0.12)"]}
             start={{ x: 0.15, y: 0.08 }}
             end={{ x: 0.9, y: 1 }}
             style={styles.satelliteShell}
@@ -784,7 +780,7 @@ function SatelliteOrb({
               </AnimatedView>
 
               <AnimatedView style={[styles.satelliteBlobWrap, innerBlobStyle]}>
-                <GlowBlob size={70} color={palette.glow} opacity={0.95} />
+                <GlowBlob size={70} color={palette.glow} opacity={0.3} />
               </AnimatedView>
 
               <AnimatedView style={iconUprightStyle}>
@@ -962,7 +958,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
     .shouldCancelWhenOutside(false)
     .onBegin((event) => {
       cancelAnimation(orbitRotation)
-      orbitTouchScale.value = withTiming(DRAG_TOUCH_SCALE, { duration: 120 })
+      orbitTouchScale.value = withTiming(DRAG_TOUCH_SCALE, { duration: 320 })
       runOnJS(notifyOrbitDragState)(true)
 
       const dx = event.absoluteX - canvasCenter.x
@@ -998,7 +994,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
       lastTouchTime.value = now
     })
     .onEnd(() => {
-      orbitTouchScale.value = withTiming(1, { duration: 180 })
+      orbitTouchScale.value = withTiming(1, { duration: 320 })
       parallaxX.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.cubic) })
       parallaxY.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.cubic) })
       runOnJS(notifyOrbitDragState)(false)
@@ -1018,12 +1014,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
     })
 
 
-  //     const coreStyle = useAnimatedStyle(() => ({
-  //   transform: [
-  //     { scale: interpolate(energy.value, [0, 1], [1, 1.03]) },
-  //     { scale: interpolate(pulse.value, [0.86, 1], [0.99, 1.02]) },
-  //   ],
-  // }));
+
 
 
   return (
@@ -1411,7 +1402,7 @@ const styles = StyleSheet.create({
     height: SATELLITE_SIZE,
     borderRadius: SATELLITE_RADIUS,
     borderWidth: 1,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(253, 251, 251, 0.01)",
     shadowOpacity: 0.2,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
