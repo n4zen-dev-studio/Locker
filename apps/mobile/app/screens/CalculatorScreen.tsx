@@ -128,7 +128,7 @@ const CalculatorChromeButton: FC<CalculatorChromeButtonProps> = ({
   style,
   textStyle,
 }) => {
-  const { themed, theme } = useAppTheme();
+  const { themed } = useAppTheme();
 
   return (
     <Pressable
@@ -140,9 +140,9 @@ const CalculatorChromeButton: FC<CalculatorChromeButtonProps> = ({
       ]}
     >
       <LinearGradient
-        colors={theme.colors.calculator.surfaceInsetGradient}
-        start={{ x: 0.1, y: 0 }}
-        end={{ x: 0.88, y: 1 }}
+        colors={["rgba(31, 16, 24, 0.9)", "rgba(15, 10, 15, 0.9)"]}
+        start={{ x: 0.08, y: 0 }}
+        end={{ x: 0.92, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
       <View pointerEvents="none" style={themed($chromeGlow)} />
@@ -158,20 +158,20 @@ type CalculatorPanelProps = {
 };
 
 const CalculatorPanel: FC<CalculatorPanelProps> = ({ children, style }) => {
-  const { themed, theme } = useAppTheme();
+  const { themed } = useAppTheme();
 
   return (
     <View style={[themed($panelBase), style]}>
       <LinearGradient
-        colors={theme.colors.calculator.surfaceGradient}
-        start={{ x: 0.08, y: 0.02 }}
+        colors={["rgba(22, 12, 19, 0.92)", "rgba(10, 8, 10, 0.94)"]}
+        start={{ x: 0.08, y: 0.04 }}
         end={{ x: 0.92, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
       <LinearGradient
-        colors={theme.colors.calculator.shellGradient}
-        start={{ x: 0.16, y: 0 }}
-        end={{ x: 0.84, y: 1 }}
+        colors={["rgba(255,255,255,0.08)", "rgba(255,255,255,0.01)"]}
+        start={{ x: 0.14, y: 0 }}
+        end={{ x: 0.82, y: 1 }}
         style={[StyleSheet.absoluteFillObject, themed($panelGloss)]}
       />
       <View pointerEvents="none" style={themed($panelEdge)} />
@@ -184,7 +184,7 @@ const CalculatorPanel: FC<CalculatorPanelProps> = ({ children, style }) => {
 export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
   function CalculatorScreen(props) {
     const { navigation } = props;
-    const { themed, theme, toggleTheme } = useAppTheme();
+    const { themed, toggleTheme } = useAppTheme();
     const $bottomInsets = useSafeAreaInsetsStyle(["bottom"]);
 
     const [display, setDisplay] = useState("0");
@@ -663,8 +663,7 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
         safeAreaEdges={["top", "bottom"]}
         contentContainerStyle={themed([$screen, $bottomInsets])}
       >
-        <VaultLockBackground reducedMotion={reducedMotion} />
-
+        <VaultLockBackground reducedMotion={true}/>
         <Animated.View style={[themed($shellFrame), shellRevealStyle]}>
           <Animated.View style={[themed($topBar), headerRevealStyle]}>
             <CalculatorChromeButton
@@ -761,7 +760,7 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
                 ]}
               >
                 <LinearGradient
-                  colors={theme.colors.calculator.surfaceGradient}
+                  colors={["rgba(26, 14, 21, 0.82)", "rgba(12, 8, 12, 0.82)"]}
                   start={{ x: 0.06, y: 0 }}
                   end={{ x: 0.9, y: 1 }}
                   style={StyleSheet.absoluteFillObject}
@@ -1248,8 +1247,9 @@ const $historyEmptyText: ThemedStyle<TextStyle> = ({ colors }) => ({
 });
 
 const $keypadPanel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.lg,
-  paddingHorizontal: spacing.xs,
+  gap: spacing.md,
+  paddingHorizontal: 2,
+  paddingBottom: spacing.xs,
 });
 
 const $advancedToggle: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
@@ -1287,16 +1287,16 @@ const $advancedToggleText: ThemedStyle<TextStyle> = ({
 });
 
 const $advancedSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
+  gap: spacing.sm,
 });
 
 const $buttonGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
+  gap: 12,
 });
 
-const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $buttonRow: ThemedStyle<ViewStyle> = () => ({
   flexDirection: "row",
-  gap: spacing.md,
+  gap: 12,
   alignItems: "stretch",
 });
 

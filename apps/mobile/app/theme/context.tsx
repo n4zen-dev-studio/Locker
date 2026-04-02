@@ -7,7 +7,7 @@ import {
   useEffect,
   useMemo,
 } from "react"
-import { StyleProp, useColorScheme } from "react-native"
+import { StyleProp } from "react-native"
 import {
   DarkTheme as NavDarkTheme,
   DefaultTheme as NavDefaultTheme,
@@ -47,10 +47,7 @@ export const ThemeProvider: FC<PropsWithChildren<ThemeProviderProps>> = ({
   children,
   initialContext,
 }) => {
-  // The operating system theme:
-  const systemColorScheme = useColorScheme()
-
-  // Our saved theme context: can be "light", "dark", or undefined (system theme)
+  // Our saved theme context: can be "light", "dark", or undefined
   const [themeScheme, setThemeScheme] = useMMKVString("ignite.themeScheme", storage)
 
   const setThemeContextOverride = useCallback(
@@ -62,15 +59,13 @@ export const ThemeProvider: FC<PropsWithChildren<ThemeProviderProps>> = ({
 
   /**
    * initialContext always takes precedence.
-   * If themeScheme is undefined => follow system theme.
-   * If systemColorScheme is undefined => fallback to "light".
+   * If themeScheme is undefined => default to dark.
    */
   const themeContext: ImmutableThemeContextModeT = useMemo(() => {
-    const t = initialContext || themeScheme || (systemColorScheme ? systemColorScheme : "light")
+    const t = initialContext || themeScheme || "dark"
     return t === "dark" ? "dark" : "light"
-  }, [initialContext, themeScheme, systemColorScheme])
+  }, [initialContext, themeScheme])
 
-  // ✅ NEW: toggle helper (toggles between explicit light/dark)
   const toggleTheme = useCallback(() => {
     const next: ThemeContextModeT = themeContext === "dark" ? "light" : "dark"
     setThemeScheme(next)
@@ -118,7 +113,7 @@ export const ThemeProvider: FC<PropsWithChildren<ThemeProviderProps>> = ({
     theme,
     themeContext,
     setThemeContextOverride,
-    toggleTheme, 
+    toggleTheme,
     themed,
   }
 

@@ -22,26 +22,11 @@ export const CalculatorDisplayCard: FC<CalculatorDisplayCardProps> = ({
 
   return (
     <View style={[themed($card), style]}>
-      <View pointerEvents="none" style={themed($resultAura)} />
-      <View pointerEvents="none" style={themed($resultAuraSoft)} />
+      <View pointerEvents="none" style={themed($resultGlow)} />
 
-      <View style={themed($statusRow)}>
-        <Text size="xxs" style={themed($statusLabel)}>
-          Secure Calculator
-        </Text>
-        <View style={themed($livePill)}>
-          <View style={themed($liveDot)} />
-          <Text size="xxs" style={themed($liveLabel)}>
-            Live
-          </Text>
-        </View>
-      </View>
-
-      <View style={themed($expressionMetaRow)}>
-        <Text size="xxs" style={themed($expressionLabel)}>
-          {expressionLabel}
-        </Text>
-      </View>
+      <Text size="xxs" style={themed($expressionLabel)}>
+        {expressionLabel}
+      </Text>
 
       {completedExpression ? (
         <Text
@@ -72,104 +57,47 @@ export const CalculatorDisplayCard: FC<CalculatorDisplayCardProps> = ({
 };
 
 const $card: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  minHeight: 232,
+  minHeight: 244,
   justifyContent: "flex-end",
-  paddingTop: spacing.md,
-  paddingBottom: spacing.lg,
+  paddingTop: spacing.xs,
+  paddingBottom: spacing.md,
 });
 
-const $resultAura: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $resultGlow: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
-  right: 6,
-  bottom: 8,
-  width: 256,
-  height: 128,
+  right: 2,
+  bottom: 12,
+  width: 280,
+  height: 132,
   borderRadius: 999,
-  backgroundColor: colors.calculator.accentGlow,
-  opacity: 0.3,
-});
-
-const $resultAuraSoft: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  right: 54,
-  bottom: 30,
-  width: 168,
-  height: 88,
-  borderRadius: 999,
-  backgroundColor: colors.calculator.accentPinkSoft,
-  opacity: 0.16,
-});
-
-const $statusRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: spacing.xl + spacing.xs,
-});
-
-const $statusLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.textMuted,
-  fontFamily: typography.primary.medium,
-  textTransform: "uppercase",
-  letterSpacing: 1.7,
-  opacity: 0.84,
-});
-
-const $livePill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.xs,
-  paddingHorizontal: spacing.sm,
-  paddingVertical: 6,
-  borderRadius: 999,
-  backgroundColor: "rgba(20, 12, 26, 0.34)",
-  borderWidth: 1,
-  borderColor: "rgba(255, 154, 219, 0.18)",
-});
-
-const $liveDot: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  width: 6,
-  height: 6,
-  borderRadius: 999,
-  backgroundColor: colors.calculator.accentPink,
-  shadowColor: colors.calculator.accentPink,
-  shadowOpacity: 0.85,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 0 },
-});
-
-const $liveLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.textSecondary,
-  fontFamily: typography.primary.medium,
-  letterSpacing: 0.3,
-});
-
-const $expressionMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  marginBottom: spacing.xs,
+  backgroundColor: "rgba(255, 79, 163, 0.26)",
+  opacity: 0.92,
 });
 
 const $expressionLabel: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.textMuted,
+  color: "#ff9ad0",
   fontFamily: typography.primary.medium,
-  textTransform: "uppercase",
-  letterSpacing: 1.25,
+  fontSize: 14,
+  lineHeight: 18,
+  letterSpacing: -0.2,
   textAlign: "right",
-  opacity: 0.82,
+  marginBottom: 6,
+  opacity: 0.9,
 });
 
 const $expressionPreview: ThemedStyle<TextStyle> = ({ colors, spacing, typography }) => ({
-  color: colors.calculator.accentPinkSoft,
+  color: "#ff8fcc",
   textAlign: "right",
   marginBottom: spacing.xs,
   fontFamily: typography.primary.normal,
-  fontSize: 28,
-  lineHeight: 34,
-  letterSpacing: -1.1,
+  fontSize: 34,
+  lineHeight: 38,
+  letterSpacing: -1.2,
   opacity: 0.96,
 });
 
 const $expressionPlaceholder: ThemedStyle<TextStyle> = ({ colors, spacing, typography }) => ({
-  color: colors.calculator.textMuted,
+  color: "#9f8895",
   textAlign: "right",
   marginBottom: spacing.xs,
   fontFamily: typography.primary.normal,
@@ -179,13 +107,13 @@ const $expressionPlaceholder: ThemedStyle<TextStyle> = ({ colors, spacing, typog
 });
 
 const $resultText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.accentPinkSoft,
+  color: "#ff9cda",
   textAlign: "right",
   fontFamily: typography.primary.light,
-  fontSize: 92,
-  lineHeight: 100,
-  letterSpacing: -5.5,
-  textShadowColor: colors.calculator.accentGlow,
-  textShadowRadius: 38,
+  fontSize: 104,
+  lineHeight: 110,
+  letterSpacing: -6.4,
+  textShadowColor: "rgba(255, 79, 163, 0.62)",
+  textShadowRadius: 28,
   textShadowOffset: { width: 0, height: 0 },
 });
