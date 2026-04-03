@@ -13,6 +13,13 @@ import { LinearGradient } from "expo-linear-gradient"
 
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
+import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
+import { vaultSession } from "@/locker/session"
+import {
+  matchesDecoyVaultEntryCode,
+  matchesRealVaultEntryCode,
+} from "@/locker/storage/stealthEntryRepo"
+import { resolveVaultEntryRoute } from "@/navigators/postUnlockRoute"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import {
   ScientificPanel,
@@ -75,8 +82,11 @@ const keypadRows = [
   ],
 ]
 
-export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
-  function CalculatorAltScreen() {
+export const CalculatorAltScreen: FC<
+  AppStackScreenProps<"CalculatorAlt"> | AppStackScreenProps<"Calculator">
+> =
+  function CalculatorAltScreen(props) {
+    const { navigation } = props
     const [expression, setExpression] = useState(DEFAULT_EXPRESSION)
     const [displayExpression, setDisplayExpression] = useState(DEFAULT_EXPRESSION)
     const [displayValue, setDisplayValue] = useState(DEFAULT_DISPLAY)
@@ -90,6 +100,7 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
     const [historyVisible, setHistoryVisible] = useState(false)
     const historyTranslate = useRef(new Animated.Value(-420)).current
     const historyOpacity = useRef(new Animated.Value(0)).current
+    const longPressTriggered = useRef(false)
 
     const expressionParts = useMemo(
       () => formatDisplayExpressionParts(displayExpression),
@@ -482,9 +493,44 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
       setPreviewMode(false)
     }, [angleMode, displayExpression, displayValue, entryMode, expression, previewMode, setFreshState])
 
+    const handleVaultEntry = useCallback(async () => {
+      const next = await resolveVaultEntryRoute({ unlocked: vaultSession.isUnlocked() })
+      if (next.name === "VaultPasskeySetup") {
+        navigation.navigate("VaultPasskeySetup", next.params)
+        return
+      }
+      if (next.name === "VaultTabs") {
+        navigation.navigate("VaultLocked")
+        return
+      }
+      navigation.navigate(next.name)
+    }, [navigation])
+
     const handleEquals = useCallback(() => {
+      if (longPressTriggered.current) {
+        longPressTriggered.current = false
+        return
+      }
+
       const sourceExpression = previewMode ? DEFAULT_EXPRESSION : expression
       const sourceDisplayExpression = previewMode ? DEFAULT_EXPRESSION : displayExpression
+      const unlockInput = previewMode || entryMode === "equals" ? displayValue : displayExpression
+
+      if (matchesRealVaultEntryCode(unlockInput)) {
+        void handleVaultEntry()
+        return
+      }
+
+      if (matchesDecoyVaultEntryCode(unlockInput)) {
+        recordSecurityEvent({
+          type: "decoy_vault_open",
+          message: "Decoy vault opened from calculator entry code.",
+          severity: "info",
+        })
+        navigation.navigate("DecoyVault")
+        return
+      }
+
       const result = evaluateScientificExpression(sourceExpression, { angleMode })
       setExpression(sourceExpression)
       setDisplayExpression(sourceDisplayExpression)
@@ -504,7 +550,21 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
           ].slice(0, 24),
         )
       }
-    }, [angleMode, displayExpression, expression, previewMode])
+    }, [
+      angleMode,
+      displayExpression,
+      displayValue,
+      entryMode,
+      expression,
+      handleVaultEntry,
+      navigation,
+      previewMode,
+    ])
+
+    const handleEqualsLongPress = useCallback(() => {
+      longPressTriggered.current = true
+      void handleVaultEntry()
+    }, [handleVaultEntry])
 
     const toggleHistory = useCallback(() => {
       setHistoryVisible((value) => !value)
@@ -841,6 +901,8 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
                   <Pressable
                     key={item.key}
                     hitSlop={8}
+                    delayLongPress={900}
+                    onLongPress={item.key === "=" ? handleEqualsLongPress : undefined}
                     onPress={() => {
                       switch (item.key) {
                         case "clear":
