@@ -1,110 +1,76 @@
-########################################
-# General
-########################################
+# Node / package managers
 node_modules/
 .pnpm-store/
 .pnp.*
-package-lock.json
-yarn.lock
 npm-debug.log*
 pnpm-debug.log*
-*.log
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+**/pnpm-lock.yaml
+!/pnpm-lock.yaml
 
-########################################
-# Environment files
-########################################
+# Environment / secrets
 .env
-.env.local
-.env.development
-.env.test
-.env.production
+.env.*
 !.env.example
 
-########################################
 # TypeScript
-########################################
 *.tsbuildinfo
 
-########################################
-# Build outputs (workspace packages)
-########################################
-packages/**/dist/
-apps/api/dist/
-
-########################################
-# Next.js (admin)
-########################################
-apps/admin/.next/
-apps/admin/out/
-apps/admin/.turbo/
-apps/admin/node_modules/
-
-########################################
-# React Native (mobile / Ignite)
-########################################
-apps/mobile/node_modules/
-apps/mobile/android/.gradle/
-apps/mobile/android/build/
-apps/mobile/android/app/build/
-apps/mobile/android/local.properties
-apps/mobile/android/.idea/
-apps/mobile/android/.cxx/
-apps/mobile/ios/Pods/
-apps/mobile/ios/build/
-apps/mobile/ios/DerivedData/
-apps/mobile/ios/*.xcworkspace
-apps/mobile/ios/*.xcodeproj/project.xcworkspace
-apps/mobile/ios/*.xcodeproj/xcuserdata/
-apps/mobile/ios/*.xcworkspace/xcuserdata/
-apps/mobile/ios/*.xcuserdata
-apps/mobile/metro-cache/
-apps/mobile/.expo/
-apps/mobile/.expo-shared/
-apps/mobile/dist/
-apps/mobile/web-build/
-
-########################################
-# Expo (if using Dev Client)
-########################################
-apps/mobile/.expo/
-apps/mobile/.expo-shared/
-
-########################################
-# Metro
-########################################
+# Expo / React Native
+.expo/
+.expo-shared/
+dist/
+web-build/
 .metro-cache/
+metro-cache/
 
-########################################
-# Fastify / API temp
-########################################
+# Expo CNG generated native projects
+/apps/mobile/android/
+/apps/mobile/ios/
+
+# Android / Gradle
+**/android/.gradle/
+**/android/build/
+**/android/app/build/
+**/android/.cxx/
+local.properties
+*.keystore
+*.jks
+
+# iOS / Xcode / CocoaPods
+**/ios/build/
+**/ios/Pods/
+**/*.xcworkspace
+**/*.xcuserdata
+**/*.xcuserstate
+.xcode.env.local
+DerivedData/
+
+# Framework / app build output
+.next/
+out/
+.turbo/
+coverage/
+.cache/
 tmp/
 temp/
 
-########################################
-# OS / Editor
-########################################
+# Local app/API data
+apps/api/.data/
+apps/api/apps/api/.data/
+
+# Logs / patch rejects
+*.log
+*.orig
+*.rej
+
+# IDE / OS
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 *.swp
 *.swo
-
-########################################
-# Android / Gradle global
-########################################
-.gradle/
-local.properties
-
-########################################
-# Xcode
-########################################
-*.xcuserstate
-*.xcworkspace
-DerivedData/
-
-########################################
-# Misc
-########################################
-coverage/
-.cache/

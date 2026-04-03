@@ -125,6 +125,12 @@
       "exclude": [
         "react-native-worklets"
       ]
+    },
+    "autolinking": {
+      "searchPaths": [
+        "./node_modules",
+        "../../node_modules"
+      ]
     }
   }
 }

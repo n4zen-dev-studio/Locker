@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["com.n4zen.calculator.locker.LockerKeystoreModule"]
+  }
+}
