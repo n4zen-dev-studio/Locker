@@ -16,7 +16,7 @@ import {
   formatHeroValue,
 } from "@/screens/calculatorAlt/scientificEvaluator"
 import { typography } from "@/theme/typography"
-
+import { History } from "lucide-react-native"
 
 const BASE_FONT_SIZE = 220
 const MIN_FONT_SIZE = 20
@@ -683,6 +683,10 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
       
 
         <View style={$content}>
+          <Pressable style={{flexDirection: 'row', justifyContent: 'flex-end'}} onPress={() => {}}>
+
+          <History size={25} color={"#f1b219"}  />
+          </Pressable>
           <View style={$expressionRow}>
             {expressionParts.map((token, index) => (
               <Text
@@ -1116,7 +1120,7 @@ const $verticalTexture: ViewStyle = {
 const $content: ViewStyle = {
   flex: 1,
   paddingHorizontal: 26,
-  paddingTop: 78,
+  paddingTop: 48,
   paddingBottom: 28,
   position: "relative",
   zIndex: 1,
