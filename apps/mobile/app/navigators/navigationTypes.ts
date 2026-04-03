@@ -46,6 +46,7 @@ export type DemoTabParamList = {
 // App Stack Navigator types
 export type AppStackParamList = {
   Calculator: undefined
+  CalculatorAlt: undefined
   VaultLocked: undefined
   VaultPin: undefined
   VaultPasskeySetup: { mode?: "fresh" | "migrate" | "recovery" } | undefined

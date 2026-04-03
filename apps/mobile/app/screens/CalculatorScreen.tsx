@@ -320,6 +320,11 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
     };
 
     const handleDigit = (digit: string) => {
+      if (digit === "1") {
+        navigation.navigate("CalculatorAlt")
+        return
+      }
+
       if (display === "Error") {
         setDisplay(digit);
         setLastAction("input");
