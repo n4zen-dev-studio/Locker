@@ -63,6 +63,7 @@ const keypadRows = [
 export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
   function CalculatorAltScreen() {
     const [expression, setExpression] = useState(DEFAULT_EXPRESSION)
+    const [displayExpression, setDisplayExpression] = useState(DEFAULT_EXPRESSION)
     const [displayValue, setDisplayValue] = useState(DEFAULT_DISPLAY)
     const [entryMode, setEntryMode] = useState<EntryMode>("input")
     const [previewMode, setPreviewMode] = useState(true)
@@ -71,49 +72,74 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
     const [angleMode, setAngleMode] = useState<AngleMode>("rad")
     const [memoryValue, setMemoryValue] = useState<number | null>(null)
 
-    const expressionParts = useMemo(() => formatExpressionParts(expression), [expression])
+    const expressionParts = useMemo(
+      () => formatDisplayExpressionParts(displayExpression),
+      [displayExpression],
+    )
     const heroText = displayValue === "Error" ? "ERR" : formatHeroValue(displayValue)
 
-    const setFreshState = useCallback((nextExpression: string, nextDisplay = nextExpression) => {
-      setExpression(nextExpression)
-      setDisplayValue(nextDisplay)
-      setEntryMode("input")
-      setPreviewMode(false)
-    }, [])
+    const setFreshState = useCallback(
+      (
+        nextExpression: string,
+        nextDisplayExpression = nextExpression,
+        nextDisplayValue = nextDisplayExpression,
+      ) => {
+        setExpression(nextExpression)
+        setDisplayExpression(nextDisplayExpression)
+        setDisplayValue(nextDisplayValue)
+        setEntryMode("input")
+        setPreviewMode(false)
+      },
+      [],
+    )
 
     const maybeResetSecondMode = useCallback(() => {
       setSecondMode((value) => (value ? false : value))
     }, [])
 
     const replaceCurrentOperand = useCallback(
-      (nextOperand: string) => {
+      (nextOperand: string, nextDisplayOperand = nextOperand) => {
         if (previewMode || entryMode === "equals") {
-          setFreshState(nextOperand)
+          setFreshState(nextOperand, nextDisplayOperand, nextDisplayOperand)
           return
         }
 
-        const range = findTrailingOperandRange(expression)
-        if (!range) {
+        const expressionRange = findTrailingOperandRange(expression)
+        const displayRange = findTrailingDisplayOperandRange(displayExpression)
+        if (!expressionRange || !displayRange) {
           if (isTrailingOperator(expression) || expression.endsWith("(")) {
             const nextExpression = `${expression}${nextOperand}`
-            setFreshState(nextExpression, nextOperand)
+            const nextDisplayExpression = `${displayExpression}${nextDisplayOperand}`
+            setFreshState(nextExpression, nextDisplayExpression, nextDisplayOperand)
             return
           }
 
-          setFreshState(nextOperand)
+          setFreshState(nextOperand, nextDisplayOperand, nextDisplayOperand)
           return
         }
 
         const nextExpression =
-          expression.slice(0, range.start) + nextOperand + expression.slice(range.end)
-        setFreshState(nextExpression, nextOperand)
+          expression.slice(0, expressionRange.start) +
+          nextOperand +
+          expression.slice(expressionRange.end)
+        const nextDisplayExpression =
+          displayExpression.slice(0, displayRange.start) +
+          nextDisplayOperand +
+          displayExpression.slice(displayRange.end)
+        setFreshState(nextExpression, nextDisplayExpression, nextDisplayOperand)
       },
-      [entryMode, expression, previewMode, setFreshState],
+      [displayExpression, entryMode, expression, previewMode, setFreshState],
     )
 
     const insertAtTail = useCallback(
-      (token: string, displayToken = token, options?: { implicitMultiply?: boolean }) => {
+      (
+        token: string,
+        displayToken = token,
+        options?: { displayValue?: string; implicitMultiply?: boolean },
+      ) => {
         const baseExpression = previewMode || entryMode === "equals" || displayValue === "Error" ? "" : expression
+        const baseDisplayExpression =
+          previewMode || entryMode === "equals" || displayValue === "Error" ? "" : displayExpression
         const shouldMultiply =
           options?.implicitMultiply &&
           baseExpression.length > 0 &&
@@ -121,81 +147,160 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
           !baseExpression.endsWith("(")
 
         const nextExpression = `${baseExpression}${shouldMultiply ? "×" : ""}${token}`
+        const nextDisplayExpression = `${baseDisplayExpression}${shouldMultiply ? "×" : ""}${displayToken}`
         setExpression(nextExpression)
-        setDisplayValue(displayToken)
+        setDisplayExpression(nextDisplayExpression)
+        setDisplayValue(options?.displayValue ?? displayToken)
         setEntryMode("input")
         setPreviewMode(false)
       },
-      [displayValue, entryMode, expression, previewMode],
+      [displayExpression, displayValue, entryMode, expression, previewMode],
     )
 
-    const insertWrappedFunction = useCallback(
-      (name: string) => {
-        const range = !previewMode && entryMode !== "equals" ? findTrailingOperandRange(expression) : null
-        if (!range) {
-          insertAtTail(`${name}(`, "0", { implicitMultiply: true })
+    const applyUnaryScientificOperation = useCallback(
+      (
+        buildExpression: (operand: string) => string,
+        buildDisplayExpression: (operand: string) => string,
+      ) => {
+        const canReplaceOperand =
+          !previewMode &&
+          entryMode !== "equals" &&
+          displayValue !== "Error" &&
+          !isTrailingOperator(expression) &&
+          !expression.endsWith("(")
+        const expressionRange = canReplaceOperand ? findTrailingOperandRange(expression) : null
+        const displayRange = canReplaceOperand
+          ? findTrailingDisplayOperandRange(displayExpression)
+          : null
+
+        const baseOperandExpression =
+          expressionRange && displayRange ? expression.slice(expressionRange.start, expressionRange.end) : "0"
+        const baseOperandDisplay =
+          expressionRange && displayRange
+            ? displayExpression.slice(displayRange.start, displayRange.end)
+            : "0"
+        const wrappedExpression = buildExpression(baseOperandExpression)
+        const wrappedDisplayExpression = buildDisplayExpression(baseOperandDisplay)
+        const nextDisplayValue = evaluateScientificExpression(wrappedExpression, { angleMode })
+
+        if (expressionRange && displayRange) {
+          const nextExpression =
+            expression.slice(0, expressionRange.start) +
+            wrappedExpression +
+            expression.slice(expressionRange.end)
+          const nextDisplayExpression =
+            displayExpression.slice(0, displayRange.start) +
+            wrappedDisplayExpression +
+            displayExpression.slice(displayRange.end)
+          setFreshState(nextExpression, nextDisplayExpression, nextDisplayValue)
           maybeResetSecondMode()
           return
         }
 
-        const operand = expression.slice(range.start, range.end)
-        const wrapped = `${name}(${operand})`
-        const nextExpression =
-          expression.slice(0, range.start) + wrapped + expression.slice(range.end)
-        const nextDisplay = evaluateScientificExpression(wrapped, { angleMode })
+        if (!previewMode && entryMode !== "equals" && displayValue !== "Error") {
+          const baseExpression =
+            expression === "" || expression === "0" ? "" : expression
+          const baseDisplayExpression =
+            displayExpression === "" || displayExpression === "0" ? "" : displayExpression
+          if (isTrailingOperator(expression) || expression.endsWith("(") || baseExpression.length > 0) {
+            const nextExpression = `${baseExpression}${wrappedExpression}`
+            const nextDisplayExpression = `${baseDisplayExpression}${wrappedDisplayExpression}`
+            setFreshState(nextExpression, nextDisplayExpression, nextDisplayValue)
+            maybeResetSecondMode()
+            return
+          }
+        }
 
-        setExpression(nextExpression)
-        setDisplayValue(nextDisplay)
-        setEntryMode("input")
-        setPreviewMode(false)
+        setFreshState(wrappedExpression, wrappedDisplayExpression, nextDisplayValue)
         maybeResetSecondMode()
       },
-      [angleMode, entryMode, expression, insertAtTail, maybeResetSecondMode, previewMode],
+      [
+        angleMode,
+        displayExpression,
+        displayValue,
+        entryMode,
+        expression,
+        maybeResetSecondMode,
+        previewMode,
+        setFreshState,
+      ],
     )
 
     const handleDigit = useCallback(
       (digit: string) => {
         if (previewMode || entryMode === "equals" || displayValue === "Error") {
-          setFreshState(digit)
+          setFreshState(digit, digit, digit)
           return
         }
 
         const currentOperand = getCurrentOperand(expression)
+        if (!isEditableOperand(currentOperand)) {
+          replaceCurrentOperand(digit, digit)
+          return
+        }
+
         if (currentOperand === "0" && !expression.endsWith(".") && !expression.endsWith("E")) {
-          replaceCurrentOperand(digit)
+          replaceCurrentOperand(digit, digit)
           return
         }
 
         const nextExpression = `${expression}${digit}`
-        setFreshState(nextExpression, getCurrentOperand(nextExpression))
+        const nextDisplayExpression = `${displayExpression}${digit}`
+        setFreshState(nextExpression, nextDisplayExpression, getCurrentOperand(nextExpression))
       },
-      [displayValue, entryMode, expression, previewMode, replaceCurrentOperand, setFreshState],
+      [
+        displayExpression,
+        displayValue,
+        entryMode,
+        expression,
+        previewMode,
+        replaceCurrentOperand,
+        setFreshState,
+      ],
     )
 
     const handleDecimal = useCallback(() => {
       if (previewMode || entryMode === "equals" || displayValue === "Error") {
-        setFreshState("0.")
+        setFreshState("0.", "0.", "0.")
         return
       }
 
       const currentOperand = getCurrentOperand(expression)
+      if (!isEditableOperand(currentOperand)) {
+        replaceCurrentOperand("0.", "0.")
+        return
+      }
+
       if (currentOperand.includes(".") && !currentOperand.includes("E")) return
       if (currentOperand.includes("E")) return
 
       if (isTrailingOperator(expression) || expression.endsWith("(")) {
         const nextExpression = `${expression}0.`
-        setFreshState(nextExpression, "0.")
+        const nextDisplayExpression = `${displayExpression}0.`
+        setFreshState(nextExpression, nextDisplayExpression, "0.")
         return
       }
 
       const nextExpression = `${expression}.`
-      setFreshState(nextExpression, getCurrentOperand(nextExpression))
-    }, [displayValue, entryMode, expression, previewMode, setFreshState])
+      const nextDisplayExpression = `${displayExpression}.`
+      setFreshState(nextExpression, nextDisplayExpression, getCurrentOperand(nextExpression))
+    }, [
+      displayExpression,
+      displayValue,
+      entryMode,
+      expression,
+      previewMode,
+      replaceCurrentOperand,
+      setFreshState,
+    ])
 
     const handleOperator = useCallback(
-      (operator: "+" | "−" | "×" | "÷" | "^" | "root") => {
+      (
+        operator: "+" | "−" | "×" | "÷" | "^" | "root",
+        displayOperator = operator === "root" ? "ʸ√" : operator,
+      ) => {
         if (displayValue === "Error") {
-          setFreshState("0")
+          setFreshState("0", "0", "0")
           return
         }
 
@@ -203,28 +308,36 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
         if (currentOperand.endsWith("E") && (operator === "+" || operator === "−")) {
           const exponentSign = operator === "−" ? "-" : "+"
           const nextExpression = `${expression}${exponentSign}`
-          setFreshState(nextExpression, getCurrentOperand(nextExpression))
+          const nextDisplayExpression = `${displayExpression}${exponentSign}`
+          setFreshState(nextExpression, nextDisplayExpression, getCurrentOperand(nextExpression))
           return
         }
 
         const baseExpression = previewMode || entryMode === "equals" ? displayValue : expression
+        const baseDisplayExpression =
+          previewMode || entryMode === "equals" ? displayValue : displayExpression
         const safeBase = baseExpression === "" ? "0" : baseExpression
+        const safeDisplayBase = baseDisplayExpression === "" ? "0" : baseDisplayExpression
         const nextExpression = isTrailingOperator(safeBase)
           ? `${safeBase.slice(0, -getTrailingOperatorLength(safeBase))}${operator}`
           : `${safeBase}${operator}`
+        const nextDisplayExpression = isTrailingDisplayOperator(safeDisplayBase)
+          ? `${safeDisplayBase.slice(0, -getTrailingDisplayOperatorLength(safeDisplayBase))}${displayOperator}`
+          : `${safeDisplayBase}${displayOperator}`
 
         setExpression(nextExpression)
+        setDisplayExpression(nextDisplayExpression)
         setDisplayValue(getCurrentOperand(nextExpression))
         setEntryMode("input")
         setPreviewMode(false)
       },
-      [displayValue, entryMode, expression, previewMode, setFreshState],
+      [displayExpression, displayValue, entryMode, expression, previewMode, setFreshState],
     )
 
     const handleParenthesis = useCallback(
       (token: "(" | ")") => {
         if (token === "(") {
-          insertAtTail("(", "0", { implicitMultiply: true })
+          insertAtTail("(", "(", { displayValue: "0", implicitMultiply: true })
           return
         }
 
@@ -233,32 +346,54 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
         if (isTrailingOperator(expression) || expression.endsWith("(")) return
 
         const nextExpression = `${expression})`
+        const nextDisplayExpression = `${displayExpression})`
         setExpression(nextExpression)
+        setDisplayExpression(nextDisplayExpression)
         setDisplayValue(getCurrentOperand(nextExpression))
         setEntryMode("input")
         setPreviewMode(false)
       },
-      [entryMode, expression, insertAtTail, previewMode],
+      [displayExpression, entryMode, expression, insertAtTail, previewMode],
     )
 
     const handleClear = useCallback(() => {
-      setFreshState("0")
+      setFreshState("0", "0", "0")
     }, [setFreshState])
 
     const handleDelete = useCallback(() => {
       if (previewMode || displayValue === "Error" || entryMode === "equals") {
-        setFreshState("0")
+        setFreshState("0", "0", "0")
         return
       }
 
       if (expression.length <= 1) {
-        setFreshState("0")
+        setFreshState("0", "0", "0")
         return
       }
 
+      const currentOperand = getCurrentOperand(expression)
+      const currentDisplayOperand = getCurrentDisplayOperand(displayExpression)
+      if (shouldDeleteWholeOperand(currentOperand, currentDisplayOperand)) {
+        const expressionRange = findTrailingOperandRange(expression)
+        const displayRange = findTrailingDisplayOperandRange(displayExpression)
+        if (expressionRange && displayRange) {
+          const nextExpression =
+            expressionRange.start === 0
+              ? "0"
+              : `${expression.slice(0, expressionRange.start)}0`
+          const nextDisplayExpression =
+            displayRange.start === 0
+              ? "0"
+              : `${displayExpression.slice(0, displayRange.start)}0`
+          setFreshState(nextExpression, nextDisplayExpression, "0")
+          return
+        }
+      }
+
       const nextExpression = expression.slice(0, -1)
+      const nextDisplayExpression = displayExpression.slice(0, -1)
       if (nextExpression.length === 0) {
-        setFreshState("0")
+        setFreshState("0", "0", "0")
         return
       }
 
@@ -267,51 +402,66 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
         : getCurrentOperand(nextExpression)
 
       setExpression(nextExpression)
+      setDisplayExpression(nextDisplayExpression)
       setDisplayValue(nextDisplay)
       setEntryMode("input")
       setPreviewMode(false)
-    }, [displayValue, entryMode, expression, previewMode, setFreshState])
+    }, [displayExpression, displayValue, entryMode, expression, previewMode, setFreshState])
 
     const handlePercent = useCallback(() => {
-      insertWrappedFunction("percent")
-    }, [insertWrappedFunction])
+      applyUnaryScientificOperation(
+        (operand) => `percent(${operand})`,
+        (operand) => `${operand}%`,
+      )
+    }, [applyUnaryScientificOperation])
 
     const handleToggleSign = useCallback(() => {
       if (displayValue === "Error") {
-        setFreshState("0")
+        setFreshState("0", "0", "0")
         return
       }
 
       if (previewMode || entryMode === "equals") {
-        setFreshState(toggleSignExpression(displayValue))
+        const toggled = toggleSignExpression(displayValue)
+        setFreshState(toggled, toggled, toggled)
         return
       }
 
-      const range = findTrailingOperandRange(expression)
-      if (!range) return
-      const operand = expression.slice(range.start, range.end)
+      const expressionRange = findTrailingOperandRange(expression)
+      const displayRange = findTrailingDisplayOperandRange(displayExpression)
+      if (!expressionRange || !displayRange) return
+      const operand = expression.slice(expressionRange.start, expressionRange.end)
+      const displayOperand = displayExpression.slice(displayRange.start, displayRange.end)
       const toggled = toggleSignExpression(operand)
+      const toggledDisplay = toggleSignExpression(displayOperand)
       const nextExpression =
-        expression.slice(0, range.start) + toggled + expression.slice(range.end)
+        expression.slice(0, expressionRange.start) + toggled + expression.slice(expressionRange.end)
+      const nextDisplayExpression =
+        displayExpression.slice(0, displayRange.start) +
+        toggledDisplay +
+        displayExpression.slice(displayRange.end)
 
       setExpression(nextExpression)
-      setDisplayValue(toggled)
+      setDisplayExpression(nextDisplayExpression)
+      setDisplayValue(evaluateScientificExpression(toggled, { angleMode }))
       setEntryMode("input")
       setPreviewMode(false)
-    }, [displayValue, entryMode, expression, previewMode, setFreshState])
+    }, [angleMode, displayExpression, displayValue, entryMode, expression, previewMode, setFreshState])
 
     const handleEquals = useCallback(() => {
       const sourceExpression = previewMode ? DEFAULT_EXPRESSION : expression
+      const sourceDisplayExpression = previewMode ? DEFAULT_EXPRESSION : displayExpression
       const result = evaluateScientificExpression(sourceExpression, { angleMode })
       setExpression(sourceExpression)
+      setDisplayExpression(sourceDisplayExpression)
       setDisplayValue(result)
       setEntryMode("equals")
       setPreviewMode(false)
-    }, [angleMode, expression, previewMode])
+    }, [angleMode, displayExpression, expression, previewMode])
 
     const handleScientificNotation = useCallback(() => {
       if (displayValue === "Error") {
-        setFreshState("0")
+        setFreshState("0", "0", "0")
         return
       }
 
@@ -322,11 +472,11 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
 
       const nextOperand = `${normalized}E`
       if (previewMode || entryMode === "equals") {
-        setFreshState(nextOperand)
+        setFreshState(nextOperand, nextOperand, nextOperand)
         return
       }
 
-      replaceCurrentOperand(nextOperand)
+      replaceCurrentOperand(nextOperand, nextOperand)
     }, [displayValue, entryMode, expression, previewMode, replaceCurrentOperand, setFreshState])
 
     const handleScientificKey = useCallback(
@@ -349,55 +499,108 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
             return
           case "mr":
             if (memoryValue === null) return
-            replaceCurrentOperand(formatComputedNumber(memoryValue))
+            replaceCurrentOperand(formatComputedNumber(memoryValue), formatComputedNumber(memoryValue))
             return
           case "2nd":
             setSecondMode((value) => !value)
             return
           case "x²":
-            insertWrappedFunction("square")
+            applyUnaryScientificOperation(
+              (operand) => `square(${operand})`,
+              (operand) => `${operand}²`,
+            )
             return
           case "x³":
-            insertWrappedFunction("cube")
+            applyUnaryScientificOperation(
+              (operand) => `cube(${operand})`,
+              (operand) => `${operand}³`,
+            )
             return
           case "xʸ":
-            handleOperator("^")
+            handleOperator("^", "^")
             return
           case "eˣ":
-            insertWrappedFunction(secondMode ? "ln" : "exp")
+            if (secondMode) {
+              applyUnaryScientificOperation(
+                (operand) => `ln(${operand})`,
+                (operand) => `ln(${operand})`,
+              )
+              return
+            }
+            applyUnaryScientificOperation(
+              (operand) => `exp(${operand})`,
+              (operand) => `e^${operand}`,
+            )
             return
           case "10ˣ":
-            insertWrappedFunction(secondMode ? "log10" : "tenpow")
+            if (secondMode) {
+              applyUnaryScientificOperation(
+                (operand) => `log10(${operand})`,
+                (operand) => `log10(${operand})`,
+              )
+              return
+            }
+            applyUnaryScientificOperation(
+              (operand) => `tenpow(${operand})`,
+              (operand) => `10^${operand}`,
+            )
             return
           case "1/x":
-            insertWrappedFunction("inv")
+            applyUnaryScientificOperation(
+              (operand) => `inv(${operand})`,
+              (operand) => `1/${operand}`,
+            )
             return
           case "²√x":
-            insertWrappedFunction("sqrt")
+            applyUnaryScientificOperation(
+              (operand) => `sqrt(${operand})`,
+              (operand) => `²√${operand}`,
+            )
             return
           case "³√x":
-            insertWrappedFunction("cbrt")
+            applyUnaryScientificOperation(
+              (operand) => `cbrt(${operand})`,
+              (operand) => `³√${operand}`,
+            )
             return
           case "ʸ√x":
-            handleOperator("root")
+            handleOperator("root", "ʸ√")
             return
           case "ln":
-            insertWrappedFunction("ln")
+            applyUnaryScientificOperation(
+              (operand) => `ln(${operand})`,
+              (operand) => `ln(${operand})`,
+            )
             return
           case "log10":
-            insertWrappedFunction("log10")
+            applyUnaryScientificOperation(
+              (operand) => `log10(${operand})`,
+              (operand) => `log10(${operand})`,
+            )
             return
           case "x!":
-            insertWrappedFunction("fact")
+            applyUnaryScientificOperation(
+              (operand) => `fact(${operand})`,
+              (operand) => `${operand}!`,
+            )
             return
           case "sin":
-            insertWrappedFunction(secondMode ? "asin" : "sin")
+            applyUnaryScientificOperation(
+              (operand) => `${secondMode ? "asin" : "sin"}(${operand})`,
+              (operand) => `${secondMode ? "asin" : "sin"}(${operand})`,
+            )
             return
           case "cos":
-            insertWrappedFunction(secondMode ? "acos" : "cos")
+            applyUnaryScientificOperation(
+              (operand) => `${secondMode ? "acos" : "cos"}(${operand})`,
+              (operand) => `${secondMode ? "acos" : "cos"}(${operand})`,
+            )
             return
           case "tan":
-            insertWrappedFunction(secondMode ? "atan" : "tan")
+            applyUnaryScientificOperation(
+              (operand) => `${secondMode ? "atan" : "tan"}(${operand})`,
+              (operand) => `${secondMode ? "atan" : "tan"}(${operand})`,
+            )
             return
           case "e":
             insertAtTail("e", "e", { implicitMultiply: true })
@@ -415,13 +618,22 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
             return
           }
           case "sinh":
-            insertWrappedFunction(secondMode ? "asinh" : "sinh")
+            applyUnaryScientificOperation(
+              (operand) => `${secondMode ? "asinh" : "sinh"}(${operand})`,
+              (operand) => `${secondMode ? "asinh" : "sinh"}(${operand})`,
+            )
             return
           case "cosh":
-            insertWrappedFunction(secondMode ? "acosh" : "cosh")
+            applyUnaryScientificOperation(
+              (operand) => `${secondMode ? "acosh" : "cosh"}(${operand})`,
+              (operand) => `${secondMode ? "acosh" : "cosh"}(${operand})`,
+            )
             return
           case "tanh":
-            insertWrappedFunction(secondMode ? "atanh" : "tanh")
+            applyUnaryScientificOperation(
+              (operand) => `${secondMode ? "atanh" : "tanh"}(${operand})`,
+              (operand) => `${secondMode ? "atanh" : "tanh"}(${operand})`,
+            )
             return
           case "π":
             insertAtTail("π", "π", { implicitMultiply: true })
@@ -436,8 +648,8 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
         handleOperator,
         handleParenthesis,
         handleScientificNotation,
+        applyUnaryScientificOperation,
         insertAtTail,
-        insertWrappedFunction,
         maybeResetSecondMode,
         memoryValue,
         replaceCurrentOperand,
@@ -691,6 +903,62 @@ function findTrailingOperandRange(expression: string): Range | null {
   return null
 }
 
+function findTrailingDisplayOperandRange(expression: string): Range | null {
+  let end = expression.length
+  while (end > 0 && /[²³!%]/.test(expression[end - 1])) {
+    end -= 1
+  }
+  if (end <= 0) return null
+
+  const suffix = expression.slice(0, end)
+  const numberMatch = suffix.match(/-?(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d*)?$/)
+  if (numberMatch) {
+    let start = end - numberMatch[0].length
+    if (start >= 2) {
+      const prefix = suffix.slice(start - 2, start)
+      if (prefix === "²√" || prefix === "³√") start -= 2
+    }
+    if (start >= 2 && suffix.slice(start - 2, start) === "1/") {
+      start -= 2
+    }
+    return { start, end: expression.length }
+  }
+
+  if (suffix.endsWith("π") || suffix.endsWith("e")) {
+    return { start: end - 1, end: expression.length }
+  }
+
+  const lastChar = suffix[suffix.length - 1]
+  if (lastChar === ")") {
+    let depth = 1
+    let cursor = suffix.length - 2
+    while (cursor >= 0) {
+      if (suffix[cursor] === ")") depth += 1
+      if (suffix[cursor] === "(") depth -= 1
+      if (depth === 0) {
+        let start = cursor
+        while (start > 0 && /[A-Za-z0-9]/.test(suffix[start - 1])) {
+          start -= 1
+        }
+        if (start > 0 && suffix[start - 1] === "-" && isUnaryStart(suffix, start - 1)) {
+          start -= 1
+        }
+        if (start >= 2) {
+          const prefix = suffix.slice(start - 2, start)
+          if (prefix === "²√" || prefix === "³√" || prefix === "1/") {
+            start -= 2
+          }
+        }
+        return { start, end: expression.length }
+      }
+      cursor -= 1
+    }
+    return null
+  }
+
+  return null
+}
+
 function isUnaryStart(expression: string, index: number) {
   if (index === 0) return true
   const previous = expression[index - 1]
@@ -700,6 +968,12 @@ function isUnaryStart(expression: string, index: number) {
 function getCurrentOperand(expression: string) {
   if (isTrailingOperator(expression) || expression.endsWith("(")) return "0"
   const range = findTrailingOperandRange(expression)
+  return range ? expression.slice(range.start, range.end) : "0"
+}
+
+function getCurrentDisplayOperand(expression: string) {
+  if (isTrailingDisplayOperator(expression) || expression.endsWith("(")) return "0"
+  const range = findTrailingDisplayOperandRange(expression)
   return range ? expression.slice(range.start, range.end) : "0"
 }
 
@@ -722,6 +996,106 @@ function isTrailingOperator(expression: string) {
 
 function getTrailingOperatorLength(expression: string) {
   return expression.endsWith("root") ? 4 : 1
+}
+
+function isTrailingDisplayOperator(expression: string) {
+  return (
+    expression.endsWith("+") ||
+    expression.endsWith("−") ||
+    expression.endsWith("×") ||
+    expression.endsWith("÷") ||
+    expression.endsWith("^") ||
+    expression.endsWith("ʸ√")
+  )
+}
+
+function getTrailingDisplayOperatorLength(expression: string) {
+  return expression.endsWith("ʸ√") ? 2 : 1
+}
+
+function isEditableOperand(operand: string) {
+  return /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d*)?$/.test(operand)
+}
+
+function shouldDeleteWholeOperand(operand: string, displayOperand: string) {
+  if (operand !== displayOperand) return true
+  return (
+    operand.includes("(") ||
+    operand.includes("π") ||
+    operand === "e" ||
+    displayOperand.includes("²") ||
+    displayOperand.includes("³") ||
+    displayOperand.includes("√")
+  )
+}
+
+function formatDisplayExpressionParts(expression: string) {
+  const parts: { value: string; isOperator: boolean }[] = []
+  const functionNames = [
+    "asinh",
+    "acosh",
+    "atanh",
+    "asin",
+    "acos",
+    "atan",
+    "sinh",
+    "cosh",
+    "tanh",
+    "log10",
+    "sin",
+    "cos",
+    "tan",
+    "ln",
+  ]
+  let index = 0
+
+  while (index < expression.length) {
+    const segment = expression.slice(index)
+
+    if (segment.startsWith("ʸ√") || segment.startsWith("²√") || segment.startsWith("³√")) {
+      parts.push({ value: segment.slice(0, 2), isOperator: true })
+      index += 2
+      continue
+    }
+
+    const functionName = functionNames.find((name) => segment.startsWith(name))
+    if (functionName) {
+      parts.push({ value: functionName, isOperator: true })
+      index += functionName.length
+      continue
+    }
+
+    const numberMatch = segment.match(/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d*)?/)
+    if (numberMatch) {
+      parts.push({ value: numberMatch[0], isOperator: false })
+      index += numberMatch[0].length
+      continue
+    }
+
+    const char = expression[index]
+    if (char === "-" || char === "+") {
+      parts.push({ value: char === "-" ? "−" : char, isOperator: true })
+      index += 1
+      continue
+    }
+
+    if ("×÷^/()!%²³".includes(char)) {
+      parts.push({ value: char, isOperator: char !== "(" && char !== ")" })
+      index += 1
+      continue
+    }
+
+    if (char === "π" || char === "e") {
+      parts.push({ value: char, isOperator: false })
+      index += 1
+      continue
+    }
+
+    parts.push({ value: char, isOperator: false })
+    index += 1
+  }
+
+  return parts.length > 0 ? parts : formatExpressionParts(expression)
 }
 
 const $screen: ViewStyle = {
