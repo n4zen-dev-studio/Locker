@@ -803,6 +803,18 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
                                 })
                               }
                             />
+                            <MiniIconButton
+                              themed={themed}
+                              label="+ Recovery Key"
+                              icon={<KeyRound size={14} color="#FFE8FD" />}
+                              onPress={() =>
+                                navigation.navigate("VaultRecoveryAccess", {
+                                  mode: "vault-access",
+                                  vaultId: vault.id,
+                                  vaultName: vault.name,
+                                })
+                              }
+                            />
                           </>
                         ) : null}
 

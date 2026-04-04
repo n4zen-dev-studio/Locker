@@ -1,4 +1,4 @@
-import { createRecoveryEnvelope, createRecoveryProof, generateRecoveryKey, openRecoveryEnvelope, parseRecoveryKey } from "./recoveryKey"
+import { createRecoveryArtifact, createRecoveryProof, generateRecoveryKey, openRecoveryArtifact, parseRecoveryKey } from "./recoveryKey"
 
 describe("recoveryKey", () => {
   it("round-trips generated recovery keys", () => {
@@ -12,10 +12,19 @@ describe("recoveryKey", () => {
   it("wraps and unwraps a vault key", () => {
     const generated = generateRecoveryKey()
     const vaultKey = new Uint8Array(32).fill(7)
-    const envelope = createRecoveryEnvelope(vaultKey, generated.canonicalKey)
-    const unwrapped = openRecoveryEnvelope({ ...envelope, vaultId: "vault-1" }, generated.canonicalKey)
+    const artifact = createRecoveryArtifact([{ vaultId: "vault-1", vaultKey, role: "target" }], generated.canonicalKey)
+    const [unwrapped] = openRecoveryArtifact(
+      {
+        ...artifact,
+        envelopes: artifact.envelopes.map((envelope) => ({ ...envelope, vaultName: "Vault 1" })),
+      },
+      generated.canonicalKey,
+    )
 
-    expect(Array.from(unwrapped)).toEqual(Array.from(vaultKey))
-    expect(createRecoveryProof(generated.canonicalKey, { ...envelope, vaultId: "vault-1" })).toBe(envelope.verifierB64)
+    expect(Array.from(unwrapped.vaultKey)).toEqual(Array.from(vaultKey))
+    expect(createRecoveryProof(generated.canonicalKey, {
+      ...artifact,
+      envelopes: artifact.envelopes.map((envelope) => ({ ...envelope, vaultName: "Vault 1" })),
+    })).toBe(artifact.verifierB64)
   })
 })

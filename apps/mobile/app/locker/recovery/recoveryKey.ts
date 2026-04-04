@@ -8,6 +8,7 @@ import { sha256Bytes } from "@/locker/crypto/sha"
 
 const RECOVERY_PREFIX = "RK1"
 const RECOVERY_KEY_VERSION = 1
+const RECOVERY_ARTIFACT_VERSION = 2
 const RECOVERY_ID_BYTES = 8
 const RECOVERY_SECRET_BYTES = 16
 const RECOVERY_CHECKSUM_BYTES = 2
@@ -23,22 +24,34 @@ const KDF_PARAMS = {
 
 export type RecoveryKdfParams = typeof KDF_PARAMS & { saltB64: string }
 
-export type RecoveryEnvelopePayload = {
-  recoveryId: string
-  version: 1
-  keyVersion: string
-  alg: "XCHACHA20-POLY1305"
-  kdf: RecoveryKdfParams
-  verifierB64: string
+export type RecoveryEnvelopeRole = "target" | "personal"
+
+export type RecoveryArtifactEnvelopePayload = {
+  vaultId: string
+  role: RecoveryEnvelopeRole
   nonceB64: string
   ciphertextB64: string
 }
 
-export type RecoveryEnvelopeRecord = RecoveryEnvelopePayload & {
-  vaultId: string
+export type RecoveryArtifactPayload = {
+  recoveryId: string
+  version: number
+  keyVersion: string
+  alg: "XCHACHA20-POLY1305"
+  kdf: RecoveryKdfParams
+  verifierB64: string
+  envelopes: RecoveryArtifactEnvelopePayload[]
+}
+
+export type RecoveryArtifactEnvelopeRecord = RecoveryArtifactEnvelopePayload & {
   vaultName?: string | null
+}
+
+export type RecoveryArtifactRecord = RecoveryArtifactPayload & {
+  envelopes: RecoveryArtifactEnvelopeRecord[]
   createdAt?: string
   rotatedAt?: string
+  legacyLimited?: boolean
 }
 
 export type RecoveryKeyMaterial = {
@@ -109,38 +122,57 @@ export function parseRecoveryKey(value: string): RecoveryKeyMaterial {
   }
 }
 
-export function createRecoveryEnvelope(vaultKey: Uint8Array, canonicalKey: string): RecoveryEnvelopePayload {
+export function createRecoveryArtifact(
+  entries: Array<{ vaultId: string; vaultKey: Uint8Array; role: RecoveryEnvelopeRole }>,
+  canonicalKey: string,
+): RecoveryArtifactPayload {
+  if (entries.length === 0) throw new Error("RECOVERY_ARTIFACT_EMPTY")
   const salt = randomBytes(16)
   const kek = deriveRecoveryKek(canonicalKey, salt)
-  const wrapped = encryptV1(kek, vaultKey)
+  const envelopes = entries.map((entry) => {
+    const wrapped = encryptV1(kek, entry.vaultKey)
+    return {
+      vaultId: entry.vaultId,
+      role: entry.role,
+      nonceB64: wrapped.nonce,
+      ciphertextB64: wrapped.ct,
+    }
+  })
   return {
     recoveryId: parseRecoveryKey(canonicalKey).recoveryId,
-    version: 1,
+    version: RECOVERY_ARTIFACT_VERSION,
     keyVersion: RECOVERY_PREFIX,
     alg: "XCHACHA20-POLY1305",
     kdf: {
       ...KDF_PARAMS,
       saltB64: bytesToBase64(salt),
     },
-    verifierB64: bytesToBase64(createRecoveryVerifier(kek)),
-    nonceB64: wrapped.nonce,
-    ciphertextB64: wrapped.ct,
+    verifierB64: bytesToBase64(createRecoveryVerifierFromKek(kek)),
+    envelopes,
   }
 }
 
-export function openRecoveryEnvelope(envelope: RecoveryEnvelopeRecord, canonicalKey: string): Uint8Array {
-  const kek = deriveRecoveryKek(canonicalKey, base64ToBytes(envelope.kdf.saltB64))
-  return decryptV1(kek, {
-    v: envelope.version,
-    alg: envelope.alg,
-    nonce: envelope.nonceB64,
-    ct: envelope.ciphertextB64,
-  })
+export function openRecoveryArtifact(
+  artifact: RecoveryArtifactRecord,
+  canonicalKey: string,
+): Array<{ vaultId: string; role: RecoveryEnvelopeRole; vaultKey: Uint8Array; vaultName?: string | null }> {
+  const kek = deriveRecoveryKek(canonicalKey, base64ToBytes(artifact.kdf.saltB64))
+  return artifact.envelopes.map((envelope) => ({
+    vaultId: envelope.vaultId,
+    role: envelope.role,
+    vaultName: envelope.vaultName,
+    vaultKey: decryptV1(kek, {
+      v: 1,
+      alg: artifact.alg,
+      nonce: envelope.nonceB64,
+      ct: envelope.ciphertextB64,
+    }),
+  }))
 }
 
-export function createRecoveryProof(canonicalKey: string, envelope: RecoveryEnvelopeRecord): string {
-  const kek = deriveRecoveryKek(canonicalKey, base64ToBytes(envelope.kdf.saltB64))
-  return bytesToBase64(createRecoveryVerifier(kek))
+export function createRecoveryProof(canonicalKey: string, artifact: RecoveryArtifactRecord): string {
+  const kek = deriveRecoveryKek(canonicalKey, base64ToBytes(artifact.kdf.saltB64))
+  return bytesToBase64(createRecoveryVerifierFromKek(kek))
 }
 
 function deriveRecoveryKek(canonicalKey: string, salt: Uint8Array): Uint8Array {
@@ -151,7 +183,7 @@ function recoveryChecksum(bytes: Uint8Array): Uint8Array {
   return sha256Bytes(concatBytes(utf8ToBytes("locker:recovery-key:v1"), bytes)).slice(0, RECOVERY_CHECKSUM_BYTES)
 }
 
-function createRecoveryVerifier(kek: Uint8Array): Uint8Array {
+function createRecoveryVerifierFromKek(kek: Uint8Array): Uint8Array {
   return sha256Bytes(concatBytes(utf8ToBytes("locker:recovery-proof:v1"), kek))
 }
 
