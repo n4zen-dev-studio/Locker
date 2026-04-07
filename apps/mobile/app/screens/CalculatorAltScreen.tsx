@@ -806,6 +806,7 @@ export const CalculatorAltScreen: FC<
         contentContainerStyle={[$screen, {  paddingTop: useSafeAreaInsets().top,
   paddingBottom: useSafeAreaInsets().bottom,}]}
         backgroundColor="#141414"
+        keyboardAvoidingEnabled={false}
       >
         {/* <View style={$backgroundBase}>
           <LinearGradient

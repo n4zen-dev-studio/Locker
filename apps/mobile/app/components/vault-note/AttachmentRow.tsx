@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { Image, Pressable, View, type ImageStyle, type TextStyle, type ViewStyle } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { FileText, Image as LucideImage, Mic, Paperclip } from "lucide-react-native"
@@ -8,7 +9,7 @@ import { getVaultItemTypeFromMime } from "@/locker/vault/types"
 import type { ThemedStyle } from "@/theme/types"
 
 import type { AttachmentUiState, VaultThemed } from "./types"
-import { formatBytes } from "./utils"
+import { formatBytes, getAttachmentPreviewImageUri } from "./utils"
 
 type Props = {
   themed: VaultThemed
@@ -25,12 +26,45 @@ type Props = {
 export function AttachmentRow(props: Props) {
   const { themed, att, state, selected, onSelect, onOpen, onDownload, onRemove, canEdit } = props
   const itemType = getVaultItemTypeFromMime(att.mime)
-  const canRenderPreviewImage = itemType === "image" && !!state.dataUri
+  const previewUri = getAttachmentPreviewImageUri(att.mime, state)
+  const [previewFailed, setPreviewFailed] = useState(false)
+
+  useEffect(() => {
+    setPreviewFailed(false)
+  }, [previewUri])
+
+  useEffect(() => {
+    if (!__DEV__) return
+    console.log("[vault-note-render] AttachmentRow", {
+      attachmentId: att.id,
+      mime: att.mime,
+      itemType,
+      previewUri,
+      state,
+      selected: !!selected,
+    })
+  }, [att.id, att.mime, itemType, previewUri, selected, state])
+
+  const canRenderPreviewImage = itemType === "image" && !!previewUri && !previewFailed
 
   return (
     <Pressable onPress={onSelect} style={themed([$attachmentCard, selected && $attachmentCardSelected])}>
       {canRenderPreviewImage ? (
-        <Image source={{ uri: state.dataUri }} style={themed($attachmentImage)} />
+        <Image
+          source={{ uri: previewUri }}
+          style={themed($attachmentImage)}
+          onError={() => {
+            if (__DEV__) {
+              console.log("[vault-attachment-preview] image row preview failed", {
+                attachmentId: att.id,
+                mime: att.mime,
+                previewUri,
+                state,
+              })
+            }
+            setPreviewFailed(true)
+          }}
+        />
       ) : (
         <View style={themed($attachmentPlaceholder)}>
           {itemType === "image" ? (

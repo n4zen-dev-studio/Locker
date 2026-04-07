@@ -3,6 +3,8 @@ import { randomBytes } from "@/locker/crypto/random"
 import type { Note } from "@/locker/storage/notesRepo"
 import { getVaultItemTypeFromMime, type VaultItemType } from "@/locker/vault/types"
 
+import type { AttachmentUiState } from "./types"
+
 export const VOICE_BARS = [18, 28, 36, 22, 42, 30, 18, 34, 24, 16]
 
 export function buildTextViewerHtml(text: string, title: string): string {
@@ -53,4 +55,59 @@ export function generateVaultNoteId(): string {
   const bytes = randomBytes(12)
   const base64 = bytesToBase64(bytes)
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")
+}
+
+// export function getAttachmentPreviewImageUri(
+//   mime: string,
+//   state: Pick<AttachmentUiState, "dataUri" | "localUri" | "mime">,
+// ): string | undefined {
+//   const resolvedMime = state.mime ?? mime
+//   if (getVaultItemTypeFromMime(resolvedMime) !== "image") return undefined
+
+//   const localUri = normalizeImageUri(state.localUri)
+//   const dataUri = normalizeImageUri(state.dataUri)
+
+//   if (__DEV__) {
+//     console.log("[attachment-preview-uri]", {
+//       mime,
+//       resolvedMime,
+//       localUri,
+//       dataUri,
+//       using: isValidImageUri(localUri) ? "localUri" : isValidImageUri(dataUri) ? "dataUri" : "none",
+//     })
+//   }
+
+//   if (isValidImageUri(localUri)) return localUri
+//   if (isValidImageUri(dataUri)) return dataUri
+
+//   return undefined
+// }
+
+export function getAttachmentPreviewImageUri( mime: string, state: Pick<AttachmentUiState, "dataUri" | "localUri" | "mime">, ): string | undefined { 
+  const resolvedMime = state.mime ?? mime 
+  if (getVaultItemTypeFromMime(resolvedMime) !== "image") 
+    return undefined 
+  const localUri = normalizeImageUri(state.localUri) 
+  if (localUri) return localUri 
+  const dataUri = normalizeImageUri(state.dataUri)
+     if (dataUri) return dataUri 
+  return undefined 
+}
+export function isValidImageUri(uri?: string): boolean {
+  if (!uri) return false
+  if (uri.startsWith("file://")) return true
+  if (uri.startsWith("content://")) return true
+  if (uri.startsWith("data:image")) return true
+  if (uri.startsWith("http")) return true
+  return false
+}
+
+function normalizeImageUri(uri?: string): string | undefined {
+  if (!uri) return undefined
+  const value = uri.trim()
+  if (!value) return undefined
+  if (value.startsWith("file://") || value.startsWith("content://") || value.startsWith("data:image/")) {
+    return value
+  }
+  return undefined
 }

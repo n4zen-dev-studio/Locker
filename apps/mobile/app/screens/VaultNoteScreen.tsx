@@ -143,6 +143,11 @@ function debugVoiceFlow(event: string, payload: Record<string, unknown>) {
   console.log(`[voice-flow] ${event}`, payload)
 }
 
+function debugAutoImportFlow(event: string, payload: Record<string, unknown>) {
+  if (!__DEV__) return
+  console.log(`[vault-note-auto-import] ${event}`, payload)
+}
+
 function resolveExistingAttachmentId(
   attachments: NoteAttachment[],
   ...preferredIds: Array<string | null | undefined>
@@ -169,6 +174,18 @@ function shouldPrepareVoiceAttachment(
   return true
 }
 
+function shouldPrepareAttachment(
+  attachment: NoteAttachment | null,
+  state: AttachmentUiState | undefined,
+): boolean {
+  if (!attachment) return false
+  if (!state) return true
+  if (state.status === "idle") return true
+  if (state.status === "ready" && state.localUri) return false
+  if (state.status === "downloading") return false
+  return false
+}
+
 const fileSystemCompat = FileSystem as any
 
 export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function VaultNoteScreen(
@@ -179,7 +196,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
   useBackgroundLockSuppression("VaultNoteScreen")
 
-  const noteId = route.params?.noteId
+  const routeNoteId = route.params?.noteId
+  const [noteId, setNoteId] = useState<string | undefined>(routeNoteId)
   const importType = route.params?.importType
   const requestedType = route.params?.createType ?? (importType ? getVaultItemTypeFromImportType(importType) : "note")
 
@@ -211,11 +229,27 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const [isSavingVoice, setIsSavingVoice] = useState(false)
   const [isPlayingVoice, setIsPlayingVoice] = useState(false)
   const [playbackPositionMs, setPlaybackPositionMs] = useState(0)
+  const [isInitialAutoImportInProgress, setIsInitialAutoImportInProgress] = useState(false)
 
   const recordingRef = useRef<Audio.Recording | null>(null)
   const soundRef = useRef<Audio.Sound | null>(null)
   const soundAttachmentIdRef = useRef<string | null>(null)
+  const attachmentStatesRef = useRef<Record<string, AttachmentUiState>>({})
+  const handleImportAttachmentRef = useRef<
+    ((kind: VaultImportType, options?: { trigger?: "auto" | "manual" }) => Promise<void>) | null
+  >(null)
+  const initialAutoImportStartedRef = useRef(false)
+  const initialAutoImportInProgressRef = useRef(false)
+  const pendingHydrationLogRef = useRef<string | null>(null)
   const pulse = useSharedValue(1)
+
+  useEffect(() => {
+    attachmentStatesRef.current = attachmentStates
+  }, [attachmentStates])
+
+  useEffect(() => {
+    setNoteId(routeNoteId)
+  }, [routeNoteId])
 
   const attachmentScope = vaultId ?? LOCAL_ATTACHMENT_SCOPE
   const canEdit = true
@@ -263,6 +297,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const isFileFirstItem =
     effectiveItemType === "image" || effectiveItemType === "pdf" || effectiveItemType === "doc"
   const isVoiceItem = effectiveItemType === "voice"
+  const isAutoImportProcessingPlaceholderVisible =
+    !noteId && !!route.params?.createType && isInitialAutoImportInProgress && attachments.length === 0
   const saveLabel = noteId ? "Update Secure Item" : "Save Secure Item"
   const titleTrimmed = title.trim()
   const bodyTrimmed = body.trim()
@@ -315,6 +351,30 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       setActiveAttachmentId(
         resolveExistingAttachmentId(nextAttachments, routeAttachmentId, nextPrimaryAttachmentId),
       )
+      pendingHydrationLogRef.current = note.id
+      debugAutoImportFlow("checkpoint-5-hydrateFromNote", {
+        noteId: note.id,
+        routeImportType: route.params?.importType ?? null,
+        routeCreateType: route.params?.createType ?? null,
+        hydratedItemType: inferredItemType,
+        hydratedAttachmentsLength: nextAttachments.length,
+        hydratedPrimaryAttachmentId: nextPrimaryAttachmentId,
+        hydratedActiveAttachmentId: resolveExistingAttachmentId(
+          nextAttachments,
+          routeAttachmentId,
+          nextPrimaryAttachmentId,
+        ),
+        hydratedLockedAttachmentType:
+          nextAttachments.length > 0
+            ? getVaultItemTypeFromMime(nextAttachments[0].mime)
+            : inferredItemType,
+        hydratedEffectiveItemType:
+          nextAttachments.length > 0
+            ? getVaultItemTypeFromMime(nextAttachments[0].mime)
+            : inferredItemType,
+        hydratedIsFileFirstItem:
+          inferredItemType === "image" || inferredItemType === "pdf" || inferredItemType === "doc",
+      })
     },
     [route.params?.attachmentId],
   )
@@ -402,13 +462,28 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   )
 
   const resolveAttachment = useCallback(
-    async (att: NoteAttachment, options?: { silent?: boolean }) => {
-      const existingState = attachmentStates[att.id]
+    async (att: NoteAttachment, options?: { silent?: boolean; force?: boolean }) => {
+      const existingState = attachmentStatesRef.current[att.id]
       if (existingState?.status === "ready" && existingState.localUri) return existingState
       if (existingState?.status === "downloading") return existingState
+      if (!options?.force && (existingState?.status === "error" || existingState?.status === "corrupt")) {
+        return existingState
+      }
 
       const context = await resolveAttachmentKeyContext(vaultId, {
         preferRemote: Boolean(noteId && isExisting && vaultId),
+      })
+      debugAutoImportFlow("attachment-resolve-context", {
+        noteId: noteId ?? null,
+        vaultId,
+        isExisting,
+        attId: att.id,
+        blobId: att.blobId,
+        mime: att.mime,
+        mode: context?.mode ?? null,
+        scope: context?.scope ?? null,
+        preferRemote: Boolean(noteId && isExisting && vaultId),
+        existingState: existingState ?? null,
       })
       if (!context?.key) {
         if (!options?.silent) setError("Missing attachment key")
@@ -432,6 +507,13 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         }
 
         let encryptedBytes = await readEncryptedAttachment(context.scope, att.id)
+        debugAutoImportFlow("attachment-resolve-cache", {
+          attId: att.id,
+          blobId: att.blobId,
+          mime: att.mime,
+          scope: context.scope,
+          cacheHit: !!encryptedBytes,
+        })
         if (isVoiceAttachment) {
           debugVoiceFlow("resolve:cache-read", {
             attId: att.id,
@@ -461,6 +543,16 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         }
 
         const payload = parseAttachmentBlobBytes(encryptedBytes, context.key)
+        debugAutoImportFlow("attachment-resolve-parsed", {
+          attId: att.id,
+          blobId: att.blobId,
+          mime: att.mime,
+          payloadNoteId: payload.noteId,
+          payloadAttId: payload.attId,
+          payloadMime: payload.mime,
+          mode: context.mode,
+          scope: context.scope,
+        })
         if (payload.attId !== att.id) throw new Error("Attachment mismatch")
         if (isVoiceAttachment) {
           debugVoiceFlow("resolve:parsed", {
@@ -495,6 +587,15 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         return state
       } catch (err) {
         const message = err instanceof Error ? err.message : "Attachment download failed"
+        debugAutoImportFlow("attachment-resolve-error", {
+          noteId: noteId ?? null,
+          vaultId,
+          isExisting,
+          attId: att.id,
+          blobId: att.blobId,
+          mime: att.mime,
+          message,
+        })
         const nextState: AttachmentUiState = { status: "error", error: message }
         setAttachmentStates((prev) => ({ ...prev, [att.id]: nextState }))
         if (getVaultItemTypeFromMime(att.mime) === "voice") {
@@ -509,7 +610,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         return null
       }
     },
-    [attachmentStates, effectiveItemType, isExisting, noteId, resolveAttachmentKeyContext, vaultId, writeTempFile],
+    [effectiveItemType, isExisting, noteId, resolveAttachmentKeyContext, vaultId, writeTempFile],
   )
 
   const exportCurrentItem = useCallback(async () => {
@@ -566,7 +667,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           .map((entry) => ({
             id: entry.attachment.id,
             title: entry.attachment.filename ?? "Secure image",
-            uri: entry.prepared.dataUri ?? entry.prepared.localUri ?? "",
+            uri: entry.prepared.localUri ?? entry.prepared.dataUri ?? "",
           }))
 
         const initialImageIndex = Math.max(
@@ -710,8 +811,26 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   }, [attachmentScope, attachments, navigation, noteId])
 
   const handleImportAttachment = useCallback(
-    async (kind: VaultImportType) => {
+    async (kind: VaultImportType, options?: { trigger?: "auto" | "manual" }) => {
       try {
+        debugAutoImportFlow("checkpoint-2-before-handleImportAttachment", {
+          trigger: options?.trigger ?? "manual",
+          noteId: noteId ?? null,
+          routeImportType: route.params?.importType ?? null,
+          routeCreateType: route.params?.createType ?? null,
+          requestedType,
+          itemType,
+          attachmentsLength: attachments.length,
+          activeAttachmentId,
+          primaryAttachmentId,
+          lockedAttachmentType,
+          effectiveItemType,
+          isFileFirstItem,
+          canEdit,
+          deletedAt,
+          vaultId,
+          isExisting,
+        })
         if (!vaultSession.isUnlocked()) return
         if (!canEdit) {
           setError("This item is read-only right now")
@@ -743,6 +862,17 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           pickedAssets[0]?.mimeType ?? "application/octet-stream",
         )
         const nextLockedType = lockedAttachmentType ?? firstType
+        const nextVaultId = noteId ? vaultId : (vaultId ?? getRemoteVaultId())
+        const nextNoteId = noteId ?? generateVaultNoteId()
+
+        debugAutoImportFlow("checkpoint-3-after-picker", {
+          trigger: options?.trigger ?? "manual",
+          pickedMimes: pickedAssets.map((asset) => asset.mimeType ?? "application/octet-stream"),
+          firstType,
+          nextLockedType,
+          nextNoteId,
+          nextVaultId,
+        })
 
         if (nextLockedType === "voice") {
           setError("Voice items only accept secure voice recordings.")
@@ -772,15 +902,24 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           return
         }
 
-        const nextVaultId = noteId ? vaultId : (vaultId ?? getRemoteVaultId())
-        const nextNoteId = noteId ?? generateVaultNoteId()
         const keyContext = await resolveAttachmentKeyContext(nextVaultId, {
-          preferRemote: Boolean(noteId && isExisting && nextVaultId),
+          preferRemote: Boolean(nextVaultId),
         })
         if (!keyContext?.key) {
           setError("Missing attachment key for this item")
           return
         }
+
+        debugAutoImportFlow("attachment-import-key-context", {
+          trigger: options?.trigger ?? "manual",
+          noteId: noteId ?? null,
+          isExisting,
+          nextVaultId,
+          nextNoteId,
+          mode: keyContext.mode,
+          scope: keyContext.scope,
+          preferRemote: Boolean(nextVaultId),
+        })
 
         const newAttachments: NoteAttachment[] = []
         const queuedBlobs: Array<{ attachmentId: string; bytes: Uint8Array }> = []
@@ -851,9 +990,18 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           { suppressSync: true },
         )
 
+        debugAutoImportFlow("checkpoint-4-after-saveNote", {
+          trigger: options?.trigger ?? "manual",
+          savedItemType: saved.itemType,
+          savedFirstAttachmentMime: saved.attachments?.[0]?.mime ?? null,
+          savedPrimaryAttachmentId: saved.primaryAttachmentId ?? null,
+          savedAttachmentsLength: saved.attachments?.length ?? 0,
+        })
+
         hydrateFromNote(saved)
         setAttachmentStates((prev) => ({ ...prev, ...nextAttachmentStates }))
         setIsExisting(true)
+        setNoteId(saved.id)
         setError(null)
 
         if (saved.vaultId && keyContext.syncKey) {
@@ -861,7 +1009,12 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         }
 
         if (!noteId) {
-          navigation.replace("VaultNote", {
+          debugAutoImportFlow("first-save-staying-on-screen", {
+            savedNoteId: saved.id,
+            nextPrimaryAttachmentId,
+            trigger: options?.trigger ?? "manual",
+          })
+          navigation.setParams({
             noteId: saved.id,
             attachmentId: nextPrimaryAttachmentId ?? undefined,
           })
@@ -893,8 +1046,19 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       syncSavedAttachmentNote,
       titleTrimmed,
       vaultId,
+      route.params?.createType,
+      route.params?.importType,
+      requestedType,
+      itemType,
+      activeAttachmentId,
+      effectiveItemType,
+      isExisting,
     ],
   )
+
+  useEffect(() => {
+    handleImportAttachmentRef.current = handleImportAttachment
+  }, [handleImportAttachment])
 
   const persistVoiceRecording = useCallback(
     async (uri: string, durationMs: number) => {
@@ -1005,6 +1169,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           })),
         })
         setIsExisting(true)
+        setNoteId(saved.id)
         setError(null)
 
         if (saved.vaultId && keyContext.syncKey) {
@@ -1012,7 +1177,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         }
 
         if (!noteId) {
-          navigation.replace("VaultNote", {
+          navigation.setParams({
             noteId: saved.id,
             createType: "voice",
             attachmentId: attId,
@@ -1302,6 +1467,14 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     useCallback(() => {
       if (noteId) loadNote()
       else {
+        if (initialAutoImportInProgressRef.current) {
+          debugAutoImportFlow("focus-reset-skipped", {
+            noteId: noteId ?? null,
+            routeImportType: route.params?.importType ?? null,
+            routeCreateType: route.params?.createType ?? null,
+          })
+          return
+        }
         setIsExisting(false)
         setTitle("")
         setBody("")
@@ -1315,9 +1488,53 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         setPrimaryAttachmentId(null)
         setVoiceDurationMs(null)
         setActiveAttachmentId(route.params?.attachmentId ?? null)
+        debugAutoImportFlow("checkpoint-1-focus-reset", {
+          noteId: noteId ?? null,
+          routeImportType: route.params?.importType ?? null,
+          routeCreateType: route.params?.createType ?? null,
+          requestedType,
+          itemType: requestedType,
+          attachmentsLength: 0,
+          activeAttachmentId: route.params?.attachmentId ?? null,
+          primaryAttachmentId: null,
+          lockedAttachmentType: requestedType === "image" || requestedType === "pdf" || requestedType === "doc" ? requestedType : null,
+          effectiveItemType: requestedType,
+          isFileFirstItem:
+            requestedType === "image" || requestedType === "pdf" || requestedType === "doc",
+        })
       }
     }, [loadNote, noteId, requestedType, route.params?.attachmentId]),
   )
+
+  useEffect(() => {
+    debugAutoImportFlow("checkpoint-1-render", {
+      noteId: noteId ?? null,
+      routeImportType: route.params?.importType ?? null,
+      routeCreateType: route.params?.createType ?? null,
+      requestedType,
+      itemType,
+      attachmentsLength: attachments.length,
+      activeAttachmentId,
+      primaryAttachmentId,
+      lockedAttachmentType,
+      effectiveItemType,
+      isFileFirstItem,
+      isInitialAutoImportInProgress,
+    })
+  }, [
+    activeAttachmentId,
+    attachments.length,
+    effectiveItemType,
+    importType,
+    isFileFirstItem,
+    isInitialAutoImportInProgress,
+    itemType,
+    lockedAttachmentType,
+    noteId,
+    primaryAttachmentId,
+    requestedType,
+    route.params?.createType,
+  ])
 
   useEffect(() => {
     if (isVoiceItem) {
@@ -1326,10 +1543,13 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       }
       return
     }
-    if (selectedAttachment) {
+    const selectedAttachmentState = selectedAttachment
+      ? attachmentStates[selectedAttachment.id]
+      : undefined
+    if (shouldPrepareAttachment(selectedAttachment, selectedAttachmentState) && selectedAttachment) {
       void resolveAttachment(selectedAttachment, { silent: true })
     }
-  }, [isVoiceItem, resolveAttachment, selectedAttachment, selectedVoiceAttachment, selectedVoiceState])
+  }, [attachmentStates, isVoiceItem, resolveAttachment, selectedAttachment, selectedVoiceAttachment, selectedVoiceState])
 
   useEffect(() => {
     if (activeAttachmentId !== selectedAttachmentId) {
@@ -1346,12 +1566,99 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   useEffect(() => {
     if (!importType || !vaultSession.isUnlocked() || deletedAt) return
     if (importType === "voice") return
+    if (noteId || initialAutoImportStartedRef.current) return
+
     const timer = setTimeout(() => {
-      void handleImportAttachment(importType)
+      initialAutoImportStartedRef.current = true
+      initialAutoImportInProgressRef.current = true
+      setIsInitialAutoImportInProgress(true)
+      debugAutoImportFlow("checkpoint-2-auto-import-start", {
+        noteId: noteId ?? null,
+        routeImportType: route.params?.importType ?? null,
+        routeCreateType: route.params?.createType ?? null,
+        requestedType,
+        itemType,
+        attachmentsLength: attachments.length,
+        activeAttachmentId,
+        primaryAttachmentId,
+        lockedAttachmentType,
+        effectiveItemType,
+        isFileFirstItem,
+        canEdit,
+        deletedAt,
+        vaultId,
+        isExisting,
+      })
       navigation.setParams({ importType: undefined })
+      void (async () => {
+        try {
+          await handleImportAttachmentRef.current?.(importType, { trigger: "auto" })
+        } finally {
+          initialAutoImportInProgressRef.current = false
+          setIsInitialAutoImportInProgress(false)
+        }
+      })()
     }, 80)
     return () => clearTimeout(timer)
-  }, [deletedAt, handleImportAttachment, importType, navigation])
+  }, [
+    deletedAt,
+    importType,
+    navigation,
+    noteId,
+  ])
+
+  useEffect(() => {
+    if (!pendingHydrationLogRef.current) return
+    debugAutoImportFlow("checkpoint-5-after-hydrate-state", {
+      noteId: noteId ?? null,
+      currentItemType: itemType,
+      attachmentsLength: attachments.length,
+      activeAttachmentId,
+      primaryAttachmentId,
+      lockedAttachmentType,
+      effectiveItemType,
+      isFileFirstItem,
+      attachmentMimes: attachments.map((attachment) => attachment.mime),
+    })
+    pendingHydrationLogRef.current = null
+  }, [
+    activeAttachmentId,
+    attachments,
+    effectiveItemType,
+    isFileFirstItem,
+    itemType,
+    lockedAttachmentType,
+    noteId,
+    primaryAttachmentId,
+  ])
+
+  useEffect(() => {
+    if (!isFileFirstItem) return
+    debugAutoImportFlow("checkpoint-6-render-branch", {
+      branch: effectiveItemType === "image" ? "ImageAttachmentCard" : "AttachmentRow",
+      noteId: noteId ?? null,
+      routeCreateType: route.params?.createType ?? null,
+      routeImportType: route.params?.importType ?? null,
+      effectiveItemType,
+      lockedAttachmentType,
+      attachments: attachments.map((attachment) => ({
+        id: attachment.id,
+        mime: attachment.mime,
+        state: attachmentStates[attachment.id] ?? { status: "idle" },
+      })),
+      isAutoImportProcessingPlaceholderVisible,
+    })
+  }, [
+    attachmentStates,
+    attachments,
+    effectiveItemType,
+    isAutoImportProcessingPlaceholderVisible,
+    isFileFirstItem,
+    lockedAttachmentType,
+    noteId,
+    route.params?.createType,
+    route.params?.importType,
+  ])
 
   useEffect(() => {
     return () => {
@@ -1525,7 +1832,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
                       selected={attachment.id === selectedVoiceAttachment?.id}
                       onSelect={() => setActiveAttachmentId(attachment.id)}
                       onOpen={() => void playOrPauseVoice(attachment)}
-                      onDownload={() => void resolveAttachment(attachment)}
+                      onDownload={() => void resolveAttachment(attachment, { force: true })}
                       onRemove={() => void removeAttachment(attachment)}
                       canEdit={canEdit}
                     />
@@ -1569,7 +1876,12 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
               </Text>
             ) : null}
 
-            {!isImportingAttachment? attachments.length === 0 ? (
+            {isAutoImportProcessingPlaceholderVisible ? (
+              <EmptyAttachmentState
+                themed={themed}
+                label="Preparing secure import. The picker result will attach as soon as the screen state settles."
+              />
+            ) : !isImportingAttachment? attachments.length === 0 ? (
               <EmptyAttachmentState themed={themed} label="Import an image, PDF, or document to secure it inside the vault." />
             ) : effectiveItemType === "image" ? (
               <View style={themed($imageGrid)}>
@@ -1581,7 +1893,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
                     state={attachmentStates[attachment.id] ?? { status: "idle" }}
                     selected={attachment.id === selectedAttachment?.id}
                     onOpen={() => void openAttachmentViewer(attachment)}
-                    onPrepare={() => void resolveAttachment(attachment)}
+                    onPrepare={() => void resolveAttachment(attachment, { force: true })}
                     onSelect={() => setActiveAttachmentId(attachment.id)}
                     onRemove={() => void removeAttachment(attachment)}
                     canEdit={canEdit}
@@ -1599,7 +1911,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
                     selected={attachment.id === selectedAttachment?.id}
                     onSelect={() => setActiveAttachmentId(attachment.id)}
                     onOpen={() => void openAttachmentViewer(attachment)}
-                    onDownload={() => void resolveAttachment(attachment)}
+                    onDownload={() => void resolveAttachment(attachment, { force: true })}
                     onRemove={() => void removeAttachment(attachment)}
                     canEdit={canEdit}
                   />
@@ -1627,6 +1939,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
                       : effectiveItemType === "pdf"
                         ? "pdf"
                         : "file",
+                    { trigger: "manual" },
                   )
                 }
                 disabled={!canEdit || isImportingAttachment}

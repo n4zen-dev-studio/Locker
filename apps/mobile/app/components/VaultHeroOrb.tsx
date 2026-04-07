@@ -42,6 +42,7 @@ type VaultHeroOrbAction = {
 type VaultHeroOrbProps = {
   actions: VaultHeroOrbAction[]
   reducedMotion?: boolean
+  active?: boolean
   onOrbitDragStateChange?: (isDragging: boolean) => void
 }
 
@@ -116,10 +117,10 @@ const ORB_THEMES: Record<
     // icon: "#FFF0FA",
     // ring: "rgba(107, 60, 91, 0.18)",
     // halo: "rgba(81, 36, 65, 0.91)",
-    shellTop:  "#f97dce",
+    shellTop:   "#FF4DBA",
     shellBottom: "#050209",
     glow: "#FFF7FD",
-    glowSoft: "#ed9bd0",
+    glowSoft: "#FF9ADB",
     icon: "#FFF0FA",
     ring: "rgba(136, 110, 126, 0.82)",
     halo: "rgba(81, 36, 65, 0.91)",
@@ -805,10 +806,13 @@ function useStableGradientId(prefix: string) {
 export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
   actions,
   reducedMotion = false,
+  active = true,
   onOrbitDragStateChange,
 }) => {
   const canvasRef = useRef<View>(null)
   const isOrbitDraggingRef = useRef(false)
+  const frameRef = useRef<number | null>(null)
+  const isMountedRef = useRef(true)
   const [canvasCenter, setCanvasCenter] = useState({ x: 0, y: 0 })
   const { theme, themed } = useAppTheme()
 
@@ -834,6 +838,17 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
     isOrbitDraggingRef.current = isDragging
     onOrbitDragStateChange?.(isDragging)
   }
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current)
+        frameRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (reducedMotion) return
@@ -890,13 +905,29 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
   }, [connectorsIn, coreBlobX, coreBlobY, corePulse, reducedMotion])
 
   const onCanvasLayout = () => {
-    requestAnimationFrame(() => {
-      canvasRef.current?.measureInWindow((x, y, width, height) => {
-        setCanvasCenter({
-          x: x + width / 2,
-          y: y + height / 2,
+    if (!active) return
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current)
+    }
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null
+      if (!active || !isMountedRef.current || !canvasRef.current) return
+      try {
+        canvasRef.current.measureInWindow((x, y, width, height) => {
+          if (!isMountedRef.current || !active) return
+          setCanvasCenter({
+            x: x + width / 2,
+            y: y + height / 2,
+          })
         })
-      })
+      } catch (error) {
+        if (__DEV__) {
+          console.log("[vault-hero-orb] skipped stale measureInWindow", {
+            active,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
     })
   }
 
@@ -1470,4 +1501,3 @@ const $iconWrap: ThemedStyle<ViewStyle> = () => ({
   alignItems: "center",
   justifyContent: "center",
 });
-
