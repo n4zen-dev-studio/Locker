@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   TextStyle,
   View,
   ViewStyle,
@@ -33,9 +34,11 @@ import {
 } from "@/screens/calculatorAlt/scientificEvaluator"
 import { typography } from "@/theme/typography"
 import { History } from "lucide-react-native"
+import { VaultLockBackground } from "@/components/VaultLockBackground"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 const BASE_FONT_SIZE = 220
-const MIN_FONT_SIZE = 20
+const MIN_FONT_SIZE = 80
 const DEFAULT_EXPRESSION = "3164977+8+22+333"
 const DEFAULT_DISPLAY = "333"
 
@@ -566,6 +569,17 @@ export const CalculatorAltScreen: FC<
       void handleVaultEntry()
     }, [handleVaultEntry])
 
+    const handleDisplayPasteOrEdit = useCallback(
+      (nextValue: string) => {
+        setExpression(nextValue)
+        setDisplayExpression(nextValue)
+        setDisplayValue(nextValue)
+        setEntryMode("input")
+        setPreviewMode(false)
+      },
+      [],
+    )
+
     const toggleHistory = useCallback(() => {
       setHistoryVisible((value) => !value)
     }, [])
@@ -788,11 +802,12 @@ export const CalculatorAltScreen: FC<
     return (
       <Screen
         preset="fixed"
-        safeAreaEdges={["top", "bottom"]}
-        contentContainerStyle={$screen}
+        // safeAreaEdges={["top", "bottom"]}
+        contentContainerStyle={[$screen, {  paddingTop: useSafeAreaInsets().top,
+  paddingBottom: useSafeAreaInsets().bottom,}]}
         backgroundColor="#141414"
       >
-        <View style={$backgroundBase}>
+        {/* <View style={$backgroundBase}>
           <LinearGradient
             colors={["#232323", "#141414", "#101010"]}
             start={{ x: 0.2, y: 0 }}
@@ -806,7 +821,8 @@ export const CalculatorAltScreen: FC<
             end={{ x: 0.88, y: 1 }}
             style={StyleSheet.absoluteFillObject}
           />
-        </View>
+        </View> */}
+        <VaultLockBackground/>
 
         <Animated.View
           pointerEvents={historyVisible ? "auto" : "none"}
@@ -891,8 +907,11 @@ export const CalculatorAltScreen: FC<
           </View>
 
           <View style={$heroWrap}>
-            <ExtrudedDisplay text={heroText} />
-          </View>
+              <ExtrudedDisplay
+                text={heroText}
+                onCommitText={handleDisplayPasteOrEdit}
+              />
+            </View>
 
           <View style={$keypad}>
             {keypadRows.map((row, rowIndex) => (
@@ -951,6 +970,11 @@ export const CalculatorAltScreen: FC<
                     >
                       {item.label}
                     </Text>
+                    {/* <GlitchGlyph
+  label={item.label}
+  size={item.key === "sign" ? 34 : 44}
+  tone={item.tone}
+/> */}
                   </Pressable>
                 ))}
               </View>
@@ -982,8 +1006,8 @@ const ExtrudedText: FC<{ text: string; fontSize: number }> = ({
   return (
     <>
       <Text style={[$displayText, dynamicStyle, $displayShadowFar]}>{text}</Text>
-      <Text style={[$displayText, dynamicStyle, $displayShadowMid]}>{text}</Text>
-      <Text style={[$displayText, dynamicStyle, $displayDepth]}>{text}</Text>
+      {/* <Text style={[$displayText, dynamicStyle, $displayShadowMid]}>{text}</Text> */}
+      {/* <Text style={[$displayText, dynamicStyle, $displayDepth]}>{text}</Text> */}
       <Text style={[$displayText, dynamicStyle, $displayFaceShade]}>{text}</Text>
       <Text style={[$displayText, dynamicStyle, $displayFaceHighlight]}>
         {text}
@@ -993,15 +1017,56 @@ const ExtrudedText: FC<{ text: string; fontSize: number }> = ({
   )
 }
 
+// 2) add this helper near the other helpers
+function sanitizePastedDisplayValue(value: string) {
+  const trimmed = value.trim()
 
-const ExtrudedDisplay: FC<{ text: string }> = ({ text }) => {
+  if (!trimmed) return null
+
+  // keep only a plain numeric value for the main display
+  let normalized = trimmed
+    .replace(/,/g, "")
+    .replace(/−/g, "-")
+    .replace(/[^\d.-]/g, "")
+
+  // only allow a single leading minus
+  normalized = normalized.replace(/(?!^)-/g, "")
+
+  // only allow a single decimal point
+  const firstDot = normalized.indexOf(".")
+  if (firstDot !== -1) {
+    normalized =
+      normalized.slice(0, firstDot + 1) +
+      normalized
+        .slice(firstDot + 1)
+        .replace(/\./g, "")
+  }
+
+  if (
+    normalized === "" ||
+    normalized === "-" ||
+    normalized === "." ||
+    normalized === "-."
+  ) {
+    return null
+  }
+
+  return normalized
+}
+
+
+const ExtrudedDisplay: FC<{
+  text: string
+  onCommitText: (nextValue: string) => void
+}> = ({ text, onCommitText }) => {
   const [containerWidth, setContainerWidth] = useState(0)
+  const inputRef = useRef<TextInput>(null)
 
   const handleLayout = (e: LayoutChangeEvent) => {
     setContainerWidth(e.nativeEvent.layout.width)
   }
 
-  const estimatedCharWidth = BASE_FONT_SIZE * 0.6 
+  const estimatedCharWidth = BASE_FONT_SIZE * 0.7
   const estimatedTextWidth = text.length * estimatedCharWidth
 
   let scale = 1
@@ -1012,12 +1077,83 @@ const ExtrudedDisplay: FC<{ text: string }> = ({ text }) => {
   const fontSize = Math.max(BASE_FONT_SIZE * scale, MIN_FONT_SIZE)
 
   return (
-    <View style={$displayStack} onLayout={handleLayout}>
+    <Pressable
+      style={$displayStack}
+      onLayout={handleLayout}
+      onLongPress={() => {
+        inputRef.current?.focus()
+      }}
+    >
       <ExtrudedText text={text} fontSize={fontSize} />
-    </View>
+
+      <TextInput
+        ref={inputRef}
+        value={text}
+        onChangeText={(raw) => {
+          const sanitized = sanitizePastedDisplayValue(raw)
+          if (!sanitized) return
+          onCommitText(sanitized)
+        }}
+        style={[
+          $displayInputOverlay,
+          {
+            fontSize,
+            lineHeight: fontSize,
+          },
+        ]}
+        multiline={false}
+        contextMenuHidden={false}
+        selectTextOnFocus
+        underlineColorAndroid="transparent"
+        autoCorrect={false}
+        autoCapitalize="none"
+        keyboardType="decimal-pad"
+      />
+    </Pressable>
   )
 }
+const GlitchDisplayText: FC<{ text: string; fontSize: number }> = ({
+  text,
+  fontSize,
+}) => {
 
+  const dynamicStyle = {
+    fontSize,
+    lineHeight: fontSize,
+    letterSpacing: -fontSize * 0.08,
+  }
+  return (
+    <>
+    <Text
+        style={[
+          styles.heroText,
+          dynamicStyle,
+          {
+            fontSize,
+            color: "#ffffff",
+            textShadowColor: "rgba(255,0,200,0.5)",
+            textShadowRadius: 30,
+            left: -7,
+            // bottom: 52
+          },
+        ]}
+      >
+        {text}
+      </Text>
+      <Text style={[styles.heroText, dynamicStyle,{ fontSize, color: "#00F5D4", left: -1 }]}>
+        {text}
+      </Text>
+      <Text style={[styles.heroText, dynamicStyle,{ fontSize, color: "#FF4FD8", left: 1 }]}>
+        {text}
+      </Text>
+      <Text style={[styles.heroText, dynamicStyle,{ fontSize, color: "#D6FF4D", left: -2 }]}>
+        {text}
+      </Text>
+
+      
+    </>
+  )
+}
 
 function adjustMemory(
   displayValue: string,
@@ -1293,8 +1429,62 @@ function formatDisplayExpressionParts(expression: string) {
   return parts.length > 0 ? parts : formatExpressionParts(expression)
 }
 
+const GlitchGlyph: FC<{ label: string; size?: number; tone?: string }> = ({
+  label,
+  size = 44,
+  tone = "default",
+}) => {
+  const baseColor =
+    tone === "operator"
+      ? "#f1b219"
+      : tone === "equals"
+      ? "#e7a0ad"
+      : tone === "muted"
+      ? "#7d7a76"
+      : "#f0eeeb"
+
+  return (
+    <View style={{ alignItems: "center", justifyContent: "center" }}>
+          <Text
+        style={[
+          styles.glitchText,
+          {
+            fontSize: size,
+            color: baseColor,
+            textShadowColor: "rgba(255,0,180,0.4)",
+            textShadowRadius: 10,
+            right: -20
+          },
+        ]}
+      >
+        {label}
+      </Text>
+
+           <Text style={[styles.glitchText, { fontSize: size, color: "#D6FF4D", left :-2 }]}>
+        {label}
+      </Text>
+      {/* Cyan */}
+      <Text style={[styles.glitchText, { fontSize: size, color: "#00F5D4", left: -1, top:-20, }]}>
+        {label}
+      </Text>
+
+      {/* Pink */}
+      <Text style={[styles.glitchText, { fontSize: size, color: "#FF4FD8", left: 1, top: -11, }]}>
+        {label}
+      </Text>
+
+      {/* Green */}
+ 
+
+      {/* Main */}
+  
+    </View>
+  )
+}
+
 const $screen: ViewStyle = {
   flex: 1,
+
 }
 
 const $backgroundBase: ViewStyle = {
@@ -1310,12 +1500,13 @@ const $verticalTexture: ViewStyle = {
 
 const $content: ViewStyle = {
   flex: 1,
-  paddingHorizontal: 26,
-  paddingTop: 48,
+  paddingHorizontal: 15,
+  paddingTop: 10,
   paddingBottom: 28,
   position: "relative",
   zIndex: 1,
   elevation: 1,
+
 }
 
 const $historyOverlay: ViewStyle = {
@@ -1442,7 +1633,7 @@ const $expressionRow: ViewStyle = {
   flexDirection: "row",
   flexWrap: "wrap",
   alignItems: "flex-end",
-  // justifyContent: 'center',
+  justifyContent: 'center',
   paddingHorizontal: 2,
 }
 
@@ -1487,7 +1678,7 @@ const $displayStack: ViewStyle = {
 const $displayText: TextStyle = {
   position: "absolute",
   width: "100%",
-  fontFamily: typography.primary.bold,
+  fontFamily: typography.fonts.hustle.five,
   textAlign: "center",
   includeFontPadding: false,
   textAlignVertical: "center",
@@ -1495,23 +1686,23 @@ const $displayText: TextStyle = {
 }
 
 const $displayShadowFar: TextStyle = {
-  color: "rgba(0,0,0,0.92)",
-  transform: [{ translateX: -26 }, { translateY: 34 }, { scaleX: 0.6 }],
+  color: "rgba(195, 195, 195, 0.2)",
+  transform: [{ translateX: -25 }, { translateY: 15 }, { scaleX: 0.6 }],
 }
 
 const $displayShadowMid: TextStyle = {
-  color: "rgba(0,0,0,0.45)",
+  color: "rgba(152, 152, 152, 0.45)",
   transform: [{ translateX: -14 }, { translateY: 18 }, { scaleX: 0.6 }],
 }
 
 const $displayDepth: TextStyle = {
-  color: "#bababa",
-  transform: [{ translateX: -7 }, { translateY: 10 }, { scaleX: 0.6 }],
+  color: "#a5a5a5",
+  transform: [{ translateX: -7 }, { translateY: 2 }, { scaleX: 0.6 }],
 }
 
 const $displayFaceShade: TextStyle = {
-  color: "#d4d4d4",
-  transform: [{ translateX: 3 }, { translateY: 3 }, { scaleX: 0.6 }],
+  color: "#868585",
+  transform: [{ translateX: 3 }, { translateY: -2 }, { scaleX: 0.6 }],
 }
 
 const $displayFaceHighlight: TextStyle = {
@@ -1580,4 +1771,35 @@ const $signLabel: TextStyle = {
   fontSize: 34,
   lineHeight: 38,
   letterSpacing: -1.2,
+}
+const styles = StyleSheet.create({
+  glitchText: {
+    position: "absolute",
+    fontFamily: typography.primary.bold,
+    includeFontPadding: false,
+    textAlign: "center",
+  },
+
+  heroText: {
+    position: "absolute",
+    width: "100%",
+    fontFamily: typography.fonts.hustle.five,
+    textAlign: "center",
+    includeFontPadding: false,
+    transform: [{ scaleX: 0.6 }],
+  },
+})
+
+const $displayInputOverlay: TextStyle = {
+  position: "absolute",
+  width: "100%",
+  height: "100%",
+  fontFamily: typography.fonts.hustle.five,
+  textAlign: "center",
+  includeFontPadding: false,
+  textAlignVertical: "center",
+  color: "transparent",
+  backgroundColor: "transparent",
+  opacity: 0.01,
+  transform: [{ scaleX: 0.6 }],
 }

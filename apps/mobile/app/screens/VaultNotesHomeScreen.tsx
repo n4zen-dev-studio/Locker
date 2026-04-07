@@ -445,20 +445,34 @@ refreshControl={
             {__DEV__ && metaVersion ? <MetaPill label={`Meta v${metaVersion}`} /> : null}
           </View> */}
         {availableVaults.length > 1 ? (
-          <View style={themed($vaultSwitcher)}>
-            {availableVaults.map((vault) => (
-              <Pressable
-                key={vault.id}
-                style={themed([$vaultChip, activeVaultId === vault.id && $vaultChipActive])}
-                onPress={() => handleSwitchVault(vault.id, vault.name)}
-              >
-                <Text style={themed([$vaultChipText, activeVaultId === vault.id && $vaultChipTextActive])}>
-                  {vault.name ?? "Vault"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
+  <View style={themed($vaultSwitcher)}>
+    {[...availableVaults]
+      .sort((a, b) => {
+        if ((a.name ?? "").toLowerCase() === "personal") return -1
+        if ((b.name ?? "").toLowerCase() === "personal") return 1
+        return 0
+      })
+      .map((vault) => (
+        <Pressable
+          key={vault.id}
+          style={themed([
+            $vaultChip,
+            activeVaultId === vault.id && $vaultChipActive,
+          ])}
+          onPress={() => handleSwitchVault(vault.id, vault.name)}
+        >
+          <Text
+            style={themed([
+              $vaultChipText,
+              activeVaultId === vault.id && $vaultChipTextActive,
+            ])}
+          >
+            {vault.name ?? "Vault"}
+          </Text>
+        </Pressable>
+      ))}
+  </View>
+) : null}
         </Animated.View>
 
 
