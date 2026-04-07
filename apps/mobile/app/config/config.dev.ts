@@ -7,5 +7,8 @@
  */
 export default {
   API_URL: "https://api.rss2json.com/v1/",
-  API_BASE_URL: "http://10.0.2.2:4000",
+  API_BASE_URL:
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "https://vault-api.n4zen.dev",
 }
