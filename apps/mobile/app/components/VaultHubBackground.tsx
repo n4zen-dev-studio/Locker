@@ -292,8 +292,8 @@ const VaultHubBackgroundComponent: FC<VaultHubBackgroundProps> = ({
         style={StyleSheet.absoluteFillObject}
       />
 
-{!dimmed &&
-      <AnimatedView style={[StyleSheet.absoluteFillObject, primaryDotsStyle]}>
+    {!dimmed &&
+      <AnimatedView style={[StyleSheet.absoluteFillObject]}>
         <Svg
           width="100%"
           height="100%"
