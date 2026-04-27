@@ -1,4 +1,12 @@
-import { Dimensions, LayoutChangeEvent, Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-native";
+import {
+  Dimensions,
+  LayoutChangeEvent,
+  Pressable,
+  ScrollView,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native";
 import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
 
 import { Text } from "@/components/Text";
@@ -9,9 +17,14 @@ import { VaultFilterRail } from "./VaultFilterRail";
 import { VaultListView } from "./VaultListView";
 import { VaultStackCarousel } from "./VaultStackCarousel";
 import { VaultViewToggle } from "./VaultViewToggle";
-import { VaultFilter, VaultListItem, VaultSort, VaultViewMode } from "./vaultUi";
+import {
+  VaultFilter,
+  VaultListItem,
+  VaultSort,
+  VaultViewMode,
+} from "./vaultUi";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons"
+import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 
 type VaultSectionProps = {
@@ -42,19 +55,32 @@ export function VaultSection(props: VaultSectionProps) {
     onChangeViewMode,
     onSortCycle,
     onOpenItem,
-    children
-  } =
-    props;
+    children,
+  } = props;
   const { themed } = useAppTheme();
-  const emptyLabel = filter === "deleted" ? "Trash is empty." : "No matching vault items yet.";
-  const [searchShown, setSearchShown] = useState(false)
+  const emptyLabel =
+    filter === "deleted" ? "Trash is empty." : "No matching vault items yet.";
+  const [searchShown, setSearchShown] = useState(false);
 
   return (
     <Animated.View
       onLayout={onLayout}
-      entering={reducedMotion || !animateOnMount ? undefined : FadeInUp.delay(120).duration(360)}
-      layout={LinearTransition.springify().damping(20).stiffness(180)}
-      style={[themed($section), {height: Dimensions.get('screen').height *( searchShown ?0.66:0.62),}]}
+      entering={
+        reducedMotion || !animateOnMount
+          ? undefined
+          : FadeInUp.delay(120).duration(360)
+      }
+      layout={
+        reducedMotion
+          ? undefined
+          : LinearTransition.springify().damping(20).stiffness(180)
+      }
+      style={[
+        themed($section),
+        {
+          height: Dimensions.get("screen").height * (searchShown ? 0.66 : 0.62),
+        },
+      ]}
     >
       <View style={themed($header)}>
         <View style={themed($headerCopy)}>
@@ -66,33 +92,56 @@ export function VaultSection(props: VaultSectionProps) {
           </Text>
         </View>
       </View>
-        <View style={themed($controls)}>
-          <Pressable onPress={onSortCycle} style={themed($sortPill)}>
-            <Text style={themed($sortText)}>Sort: {sort}</Text>
-          </Pressable>
-          <VaultViewToggle mode={viewMode} onChangeMode={onChangeViewMode} />
-          <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={() =>setSearchShown((v) => !v)}>
-              <Ionicons
-              name={"search"}
-              size={18}
-              color={'#fff'}
-              style={{ paddingVertical: 5 }}
-            />
-            </Pressable>
-        </View>
-        {searchShown && children}
+      <View style={themed($controls)}>
+        <Pressable onPress={onSortCycle} style={themed($sortPill)}>
+          <Text style={themed($sortText)}>Sort: {sort}</Text>
+        </Pressable>
+        <VaultViewToggle mode={viewMode} onChangeMode={onChangeViewMode} />
+        <Pressable
+          style={[themed($jumpButton), { flexDirection: "row" }]}
+          onPress={() => setSearchShown((v) => !v)}
+        >
+          <Ionicons
+            name={"search"}
+            size={18}
+            color={"#fff"}
+            style={{ paddingVertical: 5 }}
+          />
+        </Pressable>
+      </View>
+      {searchShown && children}
 
       <View style={themed($workspace)}>
-        <VaultFilterRail filter={filter} onChangeFilter={onChangeFilter} reducedMotion={reducedMotion} />
-        <Animated.View layout={LinearTransition.springify().damping(22).stiffness(190)} style={themed($content)}>
+        <VaultFilterRail
+          filter={filter}
+          onChangeFilter={onChangeFilter}
+          reducedMotion={reducedMotion}
+        />
+        <Animated.View
+          layout={
+            reducedMotion
+              ? undefined
+              : LinearTransition.springify().damping(22).stiffness(190)
+          }
+          style={themed($content)}
+        >
           {viewMode === "stack" ? (
-            <VaultStackCarousel items={items} reducedMotion={reducedMotion} emptyLabel={emptyLabel} onOpenItem={onOpenItem} />
+            <VaultStackCarousel
+              items={items}
+              reducedMotion={reducedMotion}
+              emptyLabel={emptyLabel}
+              onOpenItem={onOpenItem}
+            />
           ) : (
             // <ScrollView scrollEnabled={true} pointerEvents="auto" showsVerticalScrollIndicator={false}>
-              <VaultListView items={items} reducedMotion={reducedMotion} emptyLabel={emptyLabel} onOpenItem={onOpenItem} />
+            <VaultListView
+              items={items}
+              reducedMotion={reducedMotion}
+              emptyLabel={emptyLabel}
+              onOpenItem={onOpenItem}
+            />
 
             // </ScrollView>
-
           )}
         </Animated.View>
       </View>
@@ -102,9 +151,7 @@ export function VaultSection(props: VaultSectionProps) {
 
 const $section: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
- 
-  marginBottom: spacing.xl * 3+ useSafeAreaInsets().bottom,
-
+  marginBottom: spacing.xl * 3 + useSafeAreaInsets().bottom,
 });
 const $jumpButton: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
   borderRadius: 999,
@@ -142,7 +189,7 @@ const $meta: ThemedStyle<TextStyle> = ({ colors }) => ({
 
 const $controls: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
-  justifyContent: 'space-between',
+  justifyContent: "space-between",
   alignItems: "center",
   gap: spacing.sm,
 });

@@ -39,8 +39,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 const BASE_FONT_SIZE = 220
 const MIN_FONT_SIZE = 80
-const DEFAULT_EXPRESSION = "3164977+8+22+333"
-const DEFAULT_DISPLAY = "333"
+const DEFAULT_EXPRESSION = ""
+const DEFAULT_DISPLAY = "0"
 
 type AngleMode = "rad" | "deg"
 type EntryMode = "input" | "equals"

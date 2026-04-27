@@ -127,6 +127,8 @@ export const CalculatorEntryCodesScreen: FC<
           subtitle="Shortcut codes open the vault from the calculator when entered exactly and followed by '='."
           icon={<KeyRound size={13} color="#FFD8FA" />}
           metaLabel="Stealth access"
+          showBackButton
+          onBackPress={() => navigation.goBack()}
         />
 
         <GlassSection

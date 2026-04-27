@@ -102,6 +102,8 @@ export const VaultDiagnosticsScreen: FC<
           subtitle="Demo-safe technical state and protected export tools."
           icon={<Database size={13} color="#FFD8FA" />}
           metaLabel={snapshot ? "Loaded" : "Snapshot pending"}
+          showBackButton
+          onBackPress={() => navigation.goBack()}
         />
 
         <GlassSection

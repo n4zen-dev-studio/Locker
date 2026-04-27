@@ -129,6 +129,8 @@ export const VaultRecoveryAccessScreen: FC<
           }
           icon={<KeyRound size={13} color="#FFD8FA" />}
           metaLabel={busy ? "Working" : "Ready"}
+          showBackButton
+          onBackPress={() => navigation.goBack()}
         />
 
         <GlassSection

@@ -38,6 +38,8 @@ export const ThreatModelScreen: FC<AppStackScreenProps<"ThreatModel">> =
             subtitle="What Locker is designed to protect, and where its limits are."
             icon={<ShieldAlert size={13} color="#FFD8FA" />}
             metaLabel="Reference"
+            showBackButton
+            onBackPress={() => navigation.goBack()}
           />
 
           <GlassSection

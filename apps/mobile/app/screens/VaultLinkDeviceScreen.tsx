@@ -187,6 +187,8 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
             subtitle="Add this phone to your existing Locker account."
             icon={<Unplug size={13} color="#FFD8FA" />}
             metaLabel={status ? "Linking" : "Awaiting code"}
+            showBackButton
+            onBackPress={() => navigation.goBack()}
           />
 
           <GlassSection

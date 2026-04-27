@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-
 import { useFocusEffect } from "@react-navigation/native"
 import { Ionicons } from "@expo/vector-icons"
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronUp,
   HardDrive,
@@ -62,6 +63,7 @@ import { encodeVaultAccessQrPayload } from "@/locker/linking/qrPayload"
 import { forgetDeletedVaultLocally, removeVaultFromCurrentDevice } from "@/locker/vaults/deviceVaultCleanup"
 import { typography } from "@/theme/typography"
 import { DescriptionChip } from "@/components/vault-note/DescriptionChip"
+import { HeroCard } from "@/components/vault-note/HeroCard"
 
 const PERSONAL_VAULT_NAME = "Personal"
 
@@ -513,19 +515,21 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
 
       <ScrollView contentContainerStyle={themed($content)} showsVerticalScrollIndicator={false}>
           <View style={themed($heroTopRow)}>
+             <View style={themed($heroLeftGroup)}>
+             <Pressable onPress={() => navigation.goBack()} style={themed($backButton)}>
+              <ArrowLeft size={16} color="#FFF7FF" />
+            </Pressable>
             <View style={themed($heroBadge)}>
               <Shield size={13} color="#FFD8FA" />
               <Text style={themed($heroBadgeText)}>REMOTE CONTROL</Text>
             </View>
+             </View>
             <View style={themed($heroMetaRow)}>
               <MetaChip themed={themed} label={loading ? "Refreshing" : "Ready"} />
             </View>
           </View>
 
           <View style={themed($heroTitleRow)}>
-            {/* <View style={themed($heroIconWrap)}>
-              <HardDrive size={20} color="#FFF5FF" />
-            </View> */}
             <View style={themed($heroTextWrap)}>
               <Text style={themed($heroTitle)}>Vaults & Devices</Text>
               <Text style={themed($heroSubtitle)}>
@@ -533,15 +537,6 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
               </Text>
             </View>
           </View>
-        {/* <View style={themed($heroCard)}> */}
-
-          {/* <View style={themed($heroDetails)}>
-            <MetaChip themed={themed} label={`Account ${accountLabel}`} />
-            <MetaChip themed={themed} label={`This device ${deviceLabel}`} />
-          </View> */}
-
-         
-        {/* </View> */}
 
         {error ? (
           <View style={themed($errorBanner)}>
@@ -1371,4 +1366,20 @@ const $revokePillText: ThemedStyle<TextStyle> = () => ({
 const $dangerGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   gap: spacing.sm,
+})
+const $heroLeftGroup: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $backButton: ThemedStyle<ViewStyle> = () => ({
+  width: 32,
+  height: 32,
+  borderRadius: 10,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(255,255,255,0.08)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
 })
