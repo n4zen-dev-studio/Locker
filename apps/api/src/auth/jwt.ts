@@ -21,3 +21,8 @@ export function verifyToken(token: string): JwtPayload {
   const env = getApiEnv()
   return jwt.verify(token, env.JWT_SECRET) as JwtPayload
 }
+
+export function verifyTokenAllowExpired(token: string): JwtPayload {
+  const env = getApiEnv()
+  return jwt.verify(token, env.JWT_SECRET, { ignoreExpiration: true }) as JwtPayload
+}

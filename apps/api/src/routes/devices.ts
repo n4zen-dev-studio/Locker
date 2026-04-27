@@ -209,6 +209,10 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
     const user = request.user!
     const currentDeviceId = typeof request.headers["x-device-id"] === "string" ? request.headers["x-device-id"] : null
     const db = getDb()
+    if (!currentDeviceId || !deviceBelongsToUser(user.id, currentDeviceId)) {
+      reply.code(403).send({ error: "Device not recognized" })
+      return
+    }
     const rows = db
       .prepare(
         "SELECT id, userId, name, platform, createdAt, lastSeenAt FROM devices WHERE userId = ? ORDER BY lastSeenAt DESC, createdAt DESC",
