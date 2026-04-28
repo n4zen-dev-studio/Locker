@@ -36,6 +36,9 @@ import { typography } from "@/theme/typography"
 import { History } from "lucide-react-native"
 import { VaultLockBackground } from "@/components/VaultLockBackground"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { KeyRadialGlow } from "@/components/RadialGlow"
+import { useFocusEffect } from "@react-navigation/native"
+import * as Haptics from "expo-haptics"
 
 const BASE_FONT_SIZE = 220
 const MIN_FONT_SIZE = 80
@@ -111,6 +114,41 @@ export const CalculatorAltScreen: FC<
     )
     const heroText = displayValue === "Error" ? "ERR" : formatHeroValue(displayValue)
 
+    useFocusEffect(
+  useCallback(() => {
+    // reset everything
+    setExpression(DEFAULT_EXPRESSION)
+    setDisplayExpression(DEFAULT_EXPRESSION)
+    setDisplayValue(DEFAULT_DISPLAY)
+    setEntryMode("input")
+    setPreviewMode(true)
+    setScientificOpen(false)
+    setSecondMode(false)
+    setAngleMode("rad")
+    setMemoryValue(null)
+    setHistoryVisible(false)
+
+    // optional: clear history if you want fresh session
+    // setHistory([])
+
+    return () => {
+      // optional cleanup if needed
+    }
+  }, [])
+)
+    const triggerKeyHaptic = useCallback((tone?: string) => {
+      if (tone === "equals") {
+        void Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Keyboard_Tap)
+        return
+      }
+
+      if (tone === "operator") {
+        void Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Keyboard_Press)
+        return
+      }
+
+      void Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Keyboard_Press)
+    }, [])
     useEffect(() => {
       Animated.parallel([
         Animated.timing(historyTranslate, {
@@ -924,6 +962,7 @@ export const CalculatorAltScreen: FC<
                     delayLongPress={900}
                     onLongPress={item.key === "=" ? handleEqualsLongPress : undefined}
                     onPress={() => {
+                      triggerKeyHaptic(item.tone)
                       switch (item.key) {
                         case "clear":
                           handleClear()
@@ -960,6 +999,16 @@ export const CalculatorAltScreen: FC<
                       item.tone === "equals" && $equalsKey,
                     ]}
                   >
+                     <KeyRadialGlow
+                        color={
+                          item.tone === "operator"
+                            ? "#f1b219"
+                            : item.tone === "equals"
+                            ? "#e7a0ad"
+                            : "#c76eac"
+                        }
+                      />
+
                     <Text
                       style={[
                         $keyLabel,
@@ -1103,6 +1152,7 @@ const ExtrudedDisplay: FC<{
           },
         ]}
         multiline={false}
+        showSoftInputOnFocus={false}
         contextMenuHidden={false}
         selectTextOnFocus
         underlineColorAndroid="transparent"
@@ -1733,6 +1783,7 @@ const $key: ViewStyle = {
   alignItems: "center",
   justifyContent: "center",
   borderRadius: 18,
+  overflow: 'visible',
 }
 
 const $keyPressed: ViewStyle = {
@@ -1804,3 +1855,4 @@ const $displayInputOverlay: TextStyle = {
   opacity: 0.01,
   transform: [{ scaleX: 0.6 }],
 }
+
