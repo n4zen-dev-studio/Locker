@@ -120,6 +120,7 @@ const SettingsHomeScreenComponent: FC<
       ])}
       systemBarStyle="light"
     >
+      <VaultHubBackground active={isFocused} reducedMotion={true} />
       {/* <VaultHubBackground /> */}
 
       <Animated.View
@@ -130,7 +131,6 @@ const SettingsHomeScreenComponent: FC<
         }
         // style={themed($hero)}
       >
-        <VaultHubBackground active={isFocused} reducedMotion={true} />
 
         <View style={themed($heroTopRow)}>
           <Text size="xs" style={themed($heroEyebrow)}>
