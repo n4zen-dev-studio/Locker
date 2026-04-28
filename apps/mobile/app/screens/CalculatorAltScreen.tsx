@@ -128,8 +128,6 @@ export const CalculatorAltScreen: FC<
     setMemoryValue(null)
     setHistoryVisible(false)
 
-    // optional: clear history if you want fresh session
-    // setHistory([])
 
     return () => {
       // optional cleanup if needed
@@ -999,17 +997,17 @@ export const CalculatorAltScreen: FC<
                       item.tone === "equals" && $equalsKey,
                     ]}
                   >
-                     <KeyRadialGlow
+                     {/* <KeyRadialGlow
                         color={
                           item.tone === "operator"
                             ? "#f1b219"
                             : item.tone === "equals"
                             ? "#e7a0ad"
-                            : "#c76eac"
+                            : "#c76eacb7"
                         }
-                      />
+                      /> */}
 
-                    <Text
+                    {/* <Text
                       style={[
                         $keyLabel,
                         item.tone === "muted" && $keyLabelMuted,
@@ -1019,7 +1017,46 @@ export const CalculatorAltScreen: FC<
                       ]}
                     >
                       {item.label}
-                    </Text>
+                    </Text> */}
+<View style={{ position: "relative" }}>
+  {/* Shadow (behind) */}
+  <Text
+    style={[
+      $keyLabel,
+      item.tone === "muted" && $keyLabelMuted,
+      item.tone === "operator" && $keyLabelOperator,
+      item.tone === "equals" && $keyLabelEquals,
+      item.key === "sign" && $signLabel,
+      {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        transform: [{ translateX: -3 }, { translateY: 3 }],
+        opacity: 0.25,
+        zIndex: 0,
+      },
+    ]}
+  >
+    {item.label}
+  </Text>
+
+  {/* Main text (front) */}
+  <Text
+    style={[
+      $keyLabel,
+      item.tone === "muted" && $keyLabelMuted,
+      item.tone === "operator" && $keyLabelOperator,
+      item.tone === "equals" && $keyLabelEquals,
+      item.key === "sign" && $signLabel,
+      {
+        zIndex: 1,
+      },
+    ]}
+  >
+    {item.label}
+  </Text>
+</View>
+                
                     {/* <GlitchGlyph
   label={item.label}
   size={item.key === "sign" ? 34 : 44}
