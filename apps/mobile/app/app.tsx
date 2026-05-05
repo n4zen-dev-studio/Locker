@@ -18,7 +18,8 @@ if (__DEV__) {
 }
 import "./utils/gestureHandler"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { AppState, AppStateStatus } from "react-native"
 import { useFonts } from "expo-font"
 import * as Linking from "expo-linking"
 import { KeyboardProvider } from "react-native-keyboard-controller"
@@ -31,6 +32,7 @@ import { ThemeProvider } from "./theme/context"
 import { customFontsToLoad } from "./theme/typography"
 import { loadDateFnsLocale } from "./utils/formatDate"
 import * as storage from "./utils/storage"
+import { vaultSession } from "./locker/session"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
@@ -61,6 +63,7 @@ const config = {
  * @returns {JSX.Element} The rendered `App` component.
  */
 export function App() {
+  const backgroundTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const {
     initialNavigationState,
     onNavigationStateChange,
@@ -74,6 +77,26 @@ export function App() {
     initI18n()
       .then(() => setIsI18nInitialized(true))
       .then(() => loadDateFnsLocale())
+  }, [])
+
+  useEffect(() => {
+    const handleStateChange = (nextState: AppStateStatus) => {
+      if (nextState === "background" || nextState === "inactive") {
+        if (backgroundTimer.current) clearTimeout(backgroundTimer.current)
+        backgroundTimer.current = setTimeout(() => {
+          vaultSession.clear()
+        }, 30_000)
+      } else {
+        if (backgroundTimer.current) clearTimeout(backgroundTimer.current)
+        backgroundTimer.current = null
+      }
+    }
+
+    const sub = AppState.addEventListener("change", handleStateChange)
+    return () => {
+      if (backgroundTimer.current) clearTimeout(backgroundTimer.current)
+      sub.remove()
+    }
   }, [])
 
   // Before we show the app, we have to wait for our state to be ready.

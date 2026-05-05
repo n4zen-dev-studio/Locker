@@ -10,7 +10,10 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import Config from "@/config"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
 import { CalculatorScreen } from "@/screens/CalculatorScreen"
+import { VaultHomeScreen } from "@/screens/VaultHomeScreen"
 import { VaultLockedScreen } from "@/screens/VaultLockedScreen"
+import { VaultNoteScreen } from "@/screens/VaultNoteScreen"
+import { VaultPinScreen } from "@/screens/VaultPinScreen"
 import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
@@ -43,6 +46,9 @@ const AppStack = () => {
     >
       <Stack.Screen name="Calculator" component={CalculatorScreen} />
       <Stack.Screen name="VaultLocked" component={VaultLockedScreen} />
+      <Stack.Screen name="VaultPin" component={VaultPinScreen} />
+      <Stack.Screen name="VaultHome" component={VaultHomeScreen} />
+      <Stack.Screen name="VaultNote" component={VaultNoteScreen} />
       {/** 🔥 Your screens go here */}
       {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}
     </Stack.Navigator>

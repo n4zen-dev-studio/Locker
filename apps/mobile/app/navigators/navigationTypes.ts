@@ -19,6 +19,9 @@ export type DemoTabParamList = {
 export type AppStackParamList = {
   Calculator: undefined
   VaultLocked: undefined
+  VaultPin: undefined
+  VaultHome: undefined
+  VaultNote: { noteId?: string } | undefined
   Welcome: undefined
   Login: undefined
   Demo: NavigatorScreenParams<DemoTabParamList>
