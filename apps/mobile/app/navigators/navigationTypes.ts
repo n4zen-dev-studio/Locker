@@ -17,6 +17,8 @@ export type DemoTabParamList = {
 
 // App Stack Navigator types
 export type AppStackParamList = {
+  Calculator: undefined
+  VaultLocked: undefined
   Welcome: undefined
   Login: undefined
   Demo: NavigatorScreenParams<DemoTabParamList>
