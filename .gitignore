@@ -43,12 +43,14 @@ apps/admin/node_modules/
 # React Native (mobile / Ignite)
 ########################################
 apps/mobile/node_modules/
+apps/mobile/android
 apps/mobile/android/.gradle/
 apps/mobile/android/build/
 apps/mobile/android/app/build/
 apps/mobile/android/local.properties
 apps/mobile/android/.idea/
 apps/mobile/android/.cxx/
+apps/mobile/ios
 apps/mobile/ios/Pods/
 apps/mobile/ios/build/
 apps/mobile/ios/DerivedData/
@@ -62,6 +64,14 @@ apps/mobile/.expo/
 apps/mobile/.expo-shared/
 apps/mobile/dist/
 apps/mobile/web-build/
+
+
+apps/mobile/modules/locker-keystore/android/build
+
+########################################
+# Next.js (api)
+########################################
+apps/api/.data
 
 ########################################
 # Expo (if using Dev Client)
@@ -108,3 +118,5 @@ DerivedData/
 ########################################
 coverage/
 .cache/
+
+
