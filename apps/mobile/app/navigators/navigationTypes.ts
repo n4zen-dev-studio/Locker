@@ -20,6 +20,7 @@ export type AppStackParamList = {
   Calculator: undefined
   VaultLocked: undefined
   VaultPin: undefined
+  VaultPasskeySetup: { mode?: "fresh" | "migrate" | "recovery" } | undefined
   VaultHome: undefined
   VaultNote: { noteId?: string } | undefined
   Welcome: undefined

@@ -8,36 +8,21 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
-import { getVaultMetaState, initializeVault, resetVaultMeta, unlockVault } from "@/locker/storage/vaultMetaRepo"
-import { resetNotes } from "@/locker/storage/notesRepo"
+import { getMeta, unlockLegacyVault } from "@/locker/storage/vaultMetaRepo"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
 const MAX_PIN_LENGTH = 6
 
-type Mode = "setup" | "confirm" | "unlock"
+type PinError = "incorrect" | "corrupt" | null
 
-type PinError = "incorrect" | "mismatch" | "corrupt" | null
-
-export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function VaultPinScreen(
-  props,
-) {
+export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function VaultPinScreen(props) {
   const { navigation } = props
   const { themed } = useAppTheme()
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
-  const [processing, setProcessing] = useState(false)
 
-
-  const [mode, setMode] = useState<Mode>(() => {
-    const state = getVaultMetaState()
-    return state.status === "ready" ? "unlock" : "setup"
-  })
-  const [error, setError] = useState<PinError>(() => {
-    const state = getVaultMetaState()
-    return state.status === "corrupt" ? "corrupt" : null
-  })
   const [pin, setPin] = useState("")
-  const [firstPin, setFirstPin] = useState("")
-  const hasCorruptVault = error === "corrupt"
+  const [error, setError] = useState<PinError>(null)
+  const meta = useMemo(() => getMeta(), [])
 
   useFocusEffect(
     useCallback(() => {
@@ -48,144 +33,55 @@ export const VaultPinScreen: FC<AppStackScreenProps<"VaultPin">> = function Vaul
   )
 
   useEffect(() => {
-    if (!hasCorruptVault) setError(null)
-  }, [pin, hasCorruptVault])
-
-  // useEffect(() => {
-  //   if (pin.length !== MAX_PIN_LENGTH) return
-
-  //   console.log("PIN entered:", pin, "Mode:", mode)
-
-  //   if (mode === "setup") {
-  //     setFirstPin(pin)
-  //     setPin("")
-  //     setMode("confirm")
-  //     return
-  //   }
-
-  //   if (mode === "confirm") {
-  //     if (pin !== firstPin) {
-  //       setError("mismatch")
-  //       setPin("")
-  //       setFirstPin("")
-  //       setMode("setup")
-  //       return
-  //     }
-  //     const vmk = initializeVault(pin)
-  //     vaultSession.setKey(vmk)
-  //     navigation.replace("VaultHome")
-  //     return
-  //   }
-
-  //   if (mode === "unlock") {
-  //     setProcessing(true)
-  //     setTimeout(() => {
-  //       const result = unlockVault(pin)
-  //       if ("vmk" in result) {
-  //         vaultSession.setKey(result.vmk)
-  //         navigation.replace("VaultHome")
-  //       } else {
-  //         setError(result.error === "corrupt" ? "corrupt" : "incorrect")
-  //         setPin("")
-  //       }
-  //       setProcessing(false)
-  //     }, 0)
-  //   }
-
-  // }, [pin, mode, firstPin, navigation])
+    setError(null)
+  }, [pin])
 
   useEffect(() => {
-  if (processing) return
-  if (pin.length !== MAX_PIN_LENGTH) return
-
-  setProcessing(true)
-
-  setTimeout(() => {
-    try {
-      if (mode === "setup") {
-        setFirstPin(pin)
-        setPin("")
-        setMode("confirm")
-        return
-      }
-
-      if (mode === "confirm") {
-        if (pin !== firstPin) {
-          setError("mismatch")
-          setPin("")
-          setFirstPin("")
-          setMode("setup")
-          return
-        }
-        const vmk = initializeVault(pin)
-        vaultSession.setKey(vmk)
-        navigation.replace("VaultHome")
-        return
-      }
-
-      const result = unlockVault(pin)
-      if ("vmk" in result) {
-        vaultSession.setKey(result.vmk)
-        navigation.replace("VaultHome")
-      } else {
-        setError(result.error === "corrupt" ? "corrupt" : "incorrect")
-        setPin("")
-      }
-    } finally {
-      setProcessing(false)
+    if (pin.length !== MAX_PIN_LENGTH) return
+    const result = unlockLegacyVault(pin)
+    if ("vmk" in result) {
+      vaultSession.setKey(result.vmk)
+      Alert.alert("Enable Passkey", "Passkey unlock is faster and more secure.", [
+        {
+          text: "Enable Passkey",
+          onPress: () => navigation.replace("VaultPasskeySetup", { mode: "migrate" }),
+        },
+        {
+          text: "Later",
+          style: "cancel",
+          onPress: () => navigation.replace("VaultHome"),
+        },
+      ])
+    } else {
+      setError(result.error)
+      setPin("")
     }
-  }, 0)
-}, [pin, mode, firstPin, navigation, processing])
-
+  }, [pin, navigation])
 
   const headerText = useMemo(() => {
-    if (hasCorruptVault) return "Vault data error"
-    if (mode === "setup") return "Set a 6-digit PIN"
-    if (mode === "confirm") return "Confirm your PIN"
-    return "Enter your PIN"
-  }, [mode, hasCorruptVault])
+    if (!meta || meta.v !== 1) return "No legacy PIN vault"
+    return "Enter your legacy PIN"
+  }, [meta])
 
   const errorText = useMemo(() => {
     if (error === "incorrect") return "Incorrect PIN"
-    if (error === "mismatch") return "PINs do not match"
     if (error === "corrupt") return "Vault data error"
     return ""
   }, [error])
 
-const handleDigit = (digit: string) => {
-  if (processing || hasCorruptVault) return
-  if (pin.length >= MAX_PIN_LENGTH) return
-  setPin((prev) => `${prev}${digit}`)
-}
+  const handleDigit = (digit: string) => {
+    if (!meta || meta.v !== 1) return
+    if (pin.length >= MAX_PIN_LENGTH) return
+    setPin((prev) => `${prev}${digit}`)
+  }
 
-const handleBackspace = () => {
-  if (processing || hasCorruptVault) return
-  if (pin.length === 0) return
-  setPin((prev) => prev.slice(0, -1))
-}
+  const handleBackspace = () => {
+    if (pin.length === 0) return
+    setPin((prev) => prev.slice(0, -1))
+  }
 
-const handleClear = () => {
-  if (processing || hasCorruptVault) return
-  setPin("")
-}
-
-  const handleReset = () => {
-    Alert.alert("Reset Vault", "This will erase all local vault data.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Reset",
-        style: "destructive",
-        onPress: () => {
-          resetVaultMeta()
-          resetNotes()
-          vaultSession.clear()
-          setMode("setup")
-          setFirstPin("")
-          setPin("")
-          setError(null)
-        },
-      },
-    ])
+  const handleClear = () => {
+    setPin("")
   }
 
   return (
@@ -246,16 +142,12 @@ const handleClear = () => {
             </Text>
           </Pressable>
         </View>
-        {processing ? <Text style={themed($subtitle)}>Unlocking…</Text> : null}
 
-
-        {__DEV__ ? (
-          <Pressable style={themed($resetButton)} onPress={handleReset}>
-            <Text preset="bold" style={themed($resetText)}>
-              Reset Vault (Dev)
-            </Text>
-          </Pressable>
-        ) : null}
+        <Pressable style={themed($linkButton)} onPress={() => navigation.goBack()}>
+          <Text preset="bold" style={themed($linkText)}>
+            Back
+          </Text>
+        </Pressable>
       </View>
     </Screen>
   )
@@ -342,11 +234,11 @@ const $keyText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
 })
 
-const $resetButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $linkButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginTop: spacing.lg,
   alignItems: "center",
 })
 
-const $resetText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.angry500,
+const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral300,
 })
