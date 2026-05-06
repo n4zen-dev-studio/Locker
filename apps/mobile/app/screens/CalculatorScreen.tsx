@@ -46,6 +46,7 @@ import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 import { evaluateExpression } from "@/utils/calc/evaluate";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
+import { VaultLockBackground } from "@/components/VaultLockBackground";
 
 const binaryOperatorSymbols = ["+", "−", "×", "÷", "^"] as const;
 const postfixSymbols = ["%", "²"] as const;
@@ -662,7 +663,7 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
         safeAreaEdges={["top", "bottom"]}
         contentContainerStyle={themed([$screen, $bottomInsets])}
       >
-        <AnimatedScreenBackground reducedMotion={reducedMotion} />
+        <VaultLockBackground reducedMotion={reducedMotion} />
 
         <Animated.View style={[themed($shellFrame), shellRevealStyle]}>
           <Animated.View style={[themed($topBar), headerRevealStyle]}>
@@ -1050,8 +1051,8 @@ function stripTrailingBinaryOperator(value: string) {
 
 const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flex: 1,
-  paddingHorizontal: spacing.lg,
-  paddingTop: spacing.sm,
+  paddingHorizontal: spacing.md,
+  paddingTop: spacing.xs,
   backgroundColor: colors.calculator.backgroundBase,
   position: "relative",
   overflow: "hidden",
@@ -1060,10 +1061,12 @@ const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 const $shellFrame: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
   width: "100%",
-  maxWidth: 460,
+  maxWidth: 480,
   alignSelf: "center",
+  justifyContent: "space-between",
   gap: spacing.lg,
-  paddingBottom: spacing.xs,
+  paddingTop: spacing.sm,
+  paddingBottom: spacing.sm,
 });
 
 const $topBar: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -1071,33 +1074,33 @@ const $topBar: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   justifyContent: "space-between",
   alignItems: "center",
   gap: spacing.sm,
+  paddingTop: spacing.xs,
 });
 
 const $chromeButtonWrap: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  ...createMoldedSurface({
-    backgroundColor: colors.calculator.surfaceElevated,
-    radius: 24,
-  }),
-  minHeight: 52,
+  minHeight: 56,
   justifyContent: "center",
-  paddingHorizontal: spacing.md,
+  paddingHorizontal: spacing.lg,
+  borderRadius: 999,
+  overflow: "hidden",
   borderWidth: 1,
-  borderColor: colors.calculator.borderSubtle,
+  borderColor: "rgba(255, 154, 219, 0.18)",
+  backgroundColor: "rgba(20, 12, 26, 0.34)",
   ...createSoftShadow({
-    color: colors.calculator.shadowLg,
-    opacity: 0.24,
-    radius: 14,
+    color: colors.calculator.accentGlow,
+    opacity: 0.18,
+    radius: 18,
     offsetY: 8,
-    elevation: 5,
+    elevation: 6,
   }),
 });
 
 const $chromeGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  left: 14,
-  right: 14,
-  bottom: -14,
-  height: 42,
+  top: -8,
+  left: -8,
+  right: -8,
+  bottom: -8,
   borderRadius: 999,
   backgroundColor: colors.calculator.accentGlow,
   opacity: 0.12,
@@ -1105,9 +1108,9 @@ const $chromeGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
 
 const $chromeOutline: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
-  borderRadius: 24,
+  borderRadius: 999,
   borderWidth: 1,
-  borderColor: colors.calculator.borderSubtle,
+  borderColor: "rgba(255,255,255,0.04)",
 });
 
 const $chromePressed: ThemedStyle<ViewStyle> = () => ({
@@ -1116,21 +1119,23 @@ const $chromePressed: ThemedStyle<ViewStyle> = () => ({
 });
 
 const $historyTrigger: ThemedStyle<ViewStyle> = () => ({
-  flex: 1,
+  minWidth: 126,
+  maxWidth: 174,
 });
 
 const $menuTrigger: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   minWidth: 56,
+  minHeight: 56,
   paddingHorizontal: spacing.md,
   alignItems: "center",
 });
 
 const $chromeButtonText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
-  color: colors.calculator.textSecondary,
+  color: colors.calculator.accentPinkSoft,
   fontFamily: typography.primary.medium,
   fontSize: 15,
   lineHeight: 18,
-  letterSpacing: -0.2,
+  letterSpacing: 0.1,
   textAlign: "center",
 });
 
@@ -1140,65 +1145,60 @@ const $chromeButtonLabelLeft: ThemedStyle<TextStyle> = () => ({
 
 const $menuTriggerText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.calculator.accentPinkSoft,
-  fontSize: 28,
-  lineHeight: 30,
+  fontSize: 24,
+  lineHeight: 26,
 });
 
 const $upperSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
   justifyContent: "flex-end",
   gap: spacing.md,
+  paddingHorizontal: spacing.sm,
+  paddingBottom: spacing.md,
 });
 
 const $panelBase: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  ...createMoldedSurface({
-    backgroundColor: colors.calculator.surface,
-    radius: 28,
-  }),
+  borderRadius: 30,
+  overflow: "hidden",
+  backgroundColor: "rgba(18, 10, 24, 0.42)",
   borderWidth: 1,
-  borderColor: colors.calculator.borderSubtle,
+  borderColor: "rgba(255, 154, 219, 0.14)",
   ...createSoftShadow({
-    color: colors.calculator.shadowLg,
-    opacity: 0.34,
-    radius: 24,
-    offsetY: 14,
-    elevation: 8,
+    color: colors.calculator.accentGlow,
+    opacity: 0.14,
+    radius: 18,
+    offsetY: 8,
+    elevation: 5,
   }),
 });
 
 const $panelGloss: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.64,
+  opacity: 0.22,
 });
 
 const $panelEdge: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
-  borderRadius: 28,
-  borderTopWidth: 1,
-  borderLeftWidth: 1,
-  borderRightWidth: 1,
-  borderBottomWidth: 1,
-  borderTopColor: colors.calculator.surfaceHighlight,
-  borderLeftColor: colors.calculator.surfaceHighlight,
-  borderRightColor: colors.calculator.borderStrong,
-  borderBottomColor: colors.calculator.borderStrong,
-  opacity: 0.14,
+  borderRadius: 30,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.04)",
+  opacity: 1,
 });
 
 const $panelLine: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  top: 0,
-  left: 18,
-  right: 18,
+  top: 1,
+  left: 24,
+  right: 24,
   height: 1,
   backgroundColor: colors.calculator.accentPinkSoft,
-  opacity: 0.42,
+  opacity: 0.26,
 });
 
 const $historyPanel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
+  paddingHorizontal: spacing.md,
   paddingTop: spacing.md,
   paddingBottom: spacing.sm,
-  maxHeight: 220,
+  maxHeight: 232,
 });
 
 const $historyTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
@@ -1215,14 +1215,12 @@ const $historyScrollContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 });
 
 const $historyItem: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  ...createMoldedSurface({
-    backgroundColor: colors.calculator.surfaceElevated,
-    radius: 22,
-  }),
+  borderRadius: 22,
+  backgroundColor: "rgba(13, 9, 18, 0.78)",
   paddingHorizontal: spacing.md,
   paddingVertical: spacing.sm,
   borderWidth: 1,
-  borderColor: colors.calculator.borderSubtle,
+  borderColor: "rgba(255, 154, 219, 0.12)",
 });
 
 const $historyItemPressed: ThemedStyle<ViewStyle> = () => ({
@@ -1250,41 +1248,41 @@ const $historyEmptyText: ThemedStyle<TextStyle> = ({ colors }) => ({
 });
 
 const $keypadPanel: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
+  gap: spacing.lg,
+  paddingHorizontal: spacing.xs,
 });
 
 const $advancedToggle: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  ...createMoldedSurface({
-    backgroundColor: colors.calculator.surface,
-    radius: 22,
-  }),
   alignSelf: "flex-start",
-  minHeight: 48,
-  paddingHorizontal: spacing.lg,
+  minHeight: 40,
+  paddingHorizontal: spacing.md,
   justifyContent: "center",
+  borderRadius: 999,
+  overflow: "hidden",
   borderWidth: 1,
-  borderColor: colors.calculator.borderSubtle,
+  borderColor: "rgba(255, 154, 219, 0.14)",
+  backgroundColor: "rgba(16, 10, 22, 0.34)",
 });
 
 const $advancedToggleGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  left: 12,
-  right: 12,
-  bottom: -10,
-  height: 28,
+  left: -8,
+  right: -8,
+  bottom: -6,
+  top: -8,
   borderRadius: 999,
   backgroundColor: colors.calculator.accentGlow,
-  opacity: 0.12,
+  opacity: 0.1,
 });
 
 const $advancedToggleText: ThemedStyle<TextStyle> = ({
   colors,
   typography,
 }) => ({
-  color: colors.calculator.textSecondary,
+  color: colors.calculator.accentPinkSoft,
   fontFamily: typography.primary.medium,
-  fontSize: 14,
-  lineHeight: 18,
+  fontSize: 13,
+  lineHeight: 16,
   letterSpacing: 0.1,
 });
 
@@ -1299,6 +1297,7 @@ const $buttonGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   gap: spacing.md,
+  alignItems: "stretch",
 });
 
 const $menuBackdrop: ThemedStyle<ViewStyle> = ({ colors }) => ({
@@ -1320,10 +1319,8 @@ const $menuCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 });
 
 const $menuItem: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  ...createMoldedSurface({
-    backgroundColor: colors.transparent,
-    radius: 20,
-  }),
+  borderRadius: 20,
+  backgroundColor: colors.transparent,
   marginHorizontal: spacing.xs,
   paddingHorizontal: spacing.md,
   paddingVertical: spacing.sm,

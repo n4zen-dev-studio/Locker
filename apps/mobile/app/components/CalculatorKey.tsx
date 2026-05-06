@@ -17,7 +17,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Text } from "@/components/Text";
-import { createMoldedSurface, createSoftShadow } from "@/theme/calculatorStyling";
+import { createSoftShadow } from "@/theme/calculatorStyling";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 
@@ -167,19 +167,18 @@ export const CalculatorKey: FC<CalculatorKeyProps> = ({
   );
 };
 
-const OUTER_RADIUS = 22;
-const INNER_RADIUS = 17;
+const OUTER_RADIUS = 999;
+const INNER_RADIUS = 999;
 
 const $shell: ThemedStyle<ViewStyle> = ({ colors }) => ({
   flex: 1,
-  minHeight: 78,
+  minHeight: 84,
+  aspectRatio: 1,
   borderRadius: OUTER_RADIUS,
-  overflow: "hidden",
-  borderWidth: 1,
-  borderColor: colors.calculator.keyBorder,
+  overflow: "visible",
   ...createSoftShadow({
     color: colors.calculator.keyShadow,
-    opacity: 0.28,
+    opacity: 0.24,
     radius: 18,
     offsetY: 10,
     elevation: 6,
@@ -206,78 +205,79 @@ const $shellDisabled: ThemedStyle<ViewStyle> = () => ({
 });
 
 const $pressable: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  ...createMoldedSurface({
-    backgroundColor: colors.calculator.keyFallback,
-    radius: OUTER_RADIUS,
-  }),
   flex: 1,
+  borderRadius: OUTER_RADIUS,
+  overflow: "hidden",
   alignItems: "center",
   justifyContent: "center",
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.md,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+  backgroundColor: colors.calculator.keyFallback,
 });
 
 const $ambientGlow: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
-  left: 10,
-  right: 10,
-  bottom: -18,
-  height: 54,
+  left: -2,
+  right: -2,
+  bottom: -8,
+  top: -2,
   borderRadius: 999,
 });
 
 const $ambientGlowByVariant: Record<CalculatorKeyVariant, ThemedStyle<ViewStyle>> = {
   number: ({ colors }) => ({
-    backgroundColor: colors.calculator.surfaceGlow,
+    backgroundColor: "rgba(255, 77, 186, 0.12)",
   }),
   operator: ({ colors }) => ({
-    backgroundColor: colors.calculator.accentPurpleSoft,
+    backgroundColor: colors.calculator.accentGlow,
   }),
   utility: ({ colors }) => ({
-    backgroundColor: colors.calculator.accentPurpleSoft,
+    backgroundColor: "rgba(255, 77, 186, 0.1)",
   }),
   equals: ({ colors }) => ({
-    backgroundColor: colors.calculator.accentGlow,
+    backgroundColor: "rgba(255, 77, 186, 0.42)",
   }),
 };
 
 const $topRim: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  top: 0,
-  left: 8,
-  right: 8,
+  top: 1,
+  left: 16,
+  right: 16,
   height: 1,
   backgroundColor: colors.calculator.keyEdgeHighlight,
-  opacity: 0.9,
+  opacity: 0.62,
 });
 
 const $edgeRim: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  top: 8,
-  bottom: 10,
-  left: 0,
+  top: 12,
+  bottom: 12,
+  left: 8,
   width: 1,
   backgroundColor: colors.calculator.keyRimLight,
-  opacity: 0.6,
+  opacity: 0.3,
 });
 
 const $bottomDepth: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  left: 10,
-  right: 10,
-  bottom: 4,
-  height: 14,
+  left: 16,
+  right: 16,
+  bottom: 10,
+  height: 22,
   borderRadius: 999,
   backgroundColor: colors.calculator.keyBaseShadow,
-  opacity: 0.3,
+  opacity: 0.34,
 });
 
 const $face: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
-  top: 6,
-  right: 6,
-  bottom: 8,
-  left: 6,
+  top: 4,
+  right: 4,
+  bottom: 4,
+  left: 4,
   borderRadius: INNER_RADIUS,
   overflow: "hidden",
   backgroundColor: colors.calculator.keyFallback,
@@ -290,35 +290,35 @@ const $pearlescent: ThemedStyle<ViewStyle> = () => ({
 
 const $faceGloss: ThemedStyle<ViewStyle> = () => ({
   borderRadius: INNER_RADIUS,
-  opacity: 0.22,
+  opacity: 0.18,
 });
 
 const $faceTopRim: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  top: 0,
-  left: 7,
-  right: 7,
+  top: 1,
+  left: 14,
+  right: 14,
   height: 1,
   backgroundColor: colors.calculator.surfaceHighlight,
-  opacity: 0.72,
+  opacity: 0.52,
 });
 
 const $faceBottomShade: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  left: 10,
-  right: 10,
-  bottom: 0,
-  height: 14,
+  left: 18,
+  right: 18,
+  bottom: 8,
+  height: 26,
   borderRadius: 999,
   backgroundColor: colors.calculator.keyInnerShadow,
-  opacity: 0.22,
+  opacity: 0.3,
 });
 
 const $faceOutline: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
   borderRadius: INNER_RADIUS,
   borderWidth: 1,
-  borderColor: colors.calculator.keyInnerBorder,
+  borderColor: "rgba(255,255,255,0.06)",
 });
 
 const $label: ThemedStyle<TextStyle> = ({ typography }) => ({
@@ -330,25 +330,37 @@ const $label: ThemedStyle<TextStyle> = ({ typography }) => ({
 
 const $labelByVariant: Record<CalculatorKeyVariant, ThemedStyle<TextStyle>> = {
   number: ({ colors }) => ({
-    color: colors.calculator.keyText,
-    fontSize: 29,
+    color: colors.calculator.accentPinkSoft,
+    fontSize: 30,
     lineHeight: 34,
+    textShadowColor: "rgba(255, 77, 186, 0.26)",
+    textShadowRadius: 10,
+    textShadowOffset: { width: 0, height: 0 },
   }),
   operator: ({ colors }) => ({
-    color: colors.calculator.operatorText,
-    fontSize: 29,
-    lineHeight: 34,
+    color: "#2B0A1F",
+    fontSize: 34,
+    lineHeight: 38,
+    textShadowColor: "rgba(255,255,255,0.22)",
+    textShadowRadius: 10,
+    textShadowOffset: { width: 0, height: 0 },
   }),
   utility: ({ colors }) => ({
-    color: colors.calculator.utilityText,
-    fontSize: 18,
-    lineHeight: 22,
+    color: colors.calculator.accentPinkSoft,
+    fontSize: 22,
+    lineHeight: 26,
     letterSpacing: 0,
+    textShadowColor: "rgba(255, 77, 186, 0.22)",
+    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 0 },
   }),
   equals: ({ colors }) => ({
-    color: colors.calculator.equalsText,
-    fontSize: 33,
-    lineHeight: 38,
+    color: "#220817",
+    fontSize: 38,
+    lineHeight: 42,
+    textShadowColor: "rgba(255,255,255,0.28)",
+    textShadowRadius: 12,
+    textShadowOffset: { width: 0, height: 0 },
   }),
 };
 

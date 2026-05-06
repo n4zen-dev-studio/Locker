@@ -55,11 +55,11 @@ export const DotPatternBackground: FC<DotPatternBackgroundProps> = ({
           id={patternId}
           x="0"
           y="0"
-          width="4"
-          height="4"
+          width="5.2"
+          height="5.2"
           patternUnits="userSpaceOnUse"
         >
-          <Circle cx="1" cy="1" r="0.26" fill={color} opacity={opacity} />
+          <Circle cx="1.3" cy="1.3" r="0.2" fill={color} opacity={opacity} />
         </Pattern>
       </Defs>
       <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${patternId})`} />
@@ -161,10 +161,10 @@ export const AnimatedScreenBackground: FC<AnimatedScreenBackgroundProps> = ({
 
   const dotPatternStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: interpolate(dotShift.value, [-1, 1], [-5, 5]) },
-      { translateY: interpolate(dotShift.value, [-1, 1], [4, -4]) },
+      { translateX: interpolate(dotShift.value, [-1, 1], [-4, 4]) },
+      { translateY: interpolate(dotShift.value, [-1, 1], [3, -3]) },
     ],
-    opacity: interpolate(dotShift.value, [-1, 1], [0.24, 0.32]),
+    opacity: interpolate(dotShift.value, [-1, 1], [0.4, 0.52]),
   }));
 
   const orbAStyle = useAnimatedStyle(() => ({
@@ -219,6 +219,10 @@ export const AnimatedScreenBackground: FC<AnimatedScreenBackgroundProps> = ({
         <DotPatternBackground color={theme.colors.calculator.dotPattern} opacity={1} />
       </Animated.View>
 
+      <View style={styles.vignette} />
+      <View style={styles.edgeVignetteLeft} />
+      <View style={styles.edgeVignetteRight} />
+
       <Animated.View style={[styles.orbTopRight, orbAStyle]}>
         <GlowOrb
           size={420}
@@ -251,24 +255,50 @@ export const AnimatedScreenBackground: FC<AnimatedScreenBackgroundProps> = ({
 
 const styles = StyleSheet.create({
   dotPatternWrap: {
-    top: -12,
-    left: -12,
-    right: -12,
-    bottom: -12,
+    top: -6,
+    left: -6,
+    right: -6,
+    bottom: -6,
   },
   orbTopRight: {
     position: "absolute",
-    top: -84,
-    right: -120,
+    top: -110,
+    right: -148,
   },
   orbBottomLeft: {
     position: "absolute",
-    left: -110,
-    bottom: 112,
+    left: -150,
+    bottom: 98,
   },
   orbCenter: {
     position: "absolute",
-    right: -56,
-    top: "36%",
+    right: -96,
+    top: "34%",
+  },
+  vignette: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    shadowColor: "#000",
+    shadowOpacity: 0.45,
+    shadowRadius: 36,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  edgeVignetteLeft: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: -36,
+    width: 92,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.32)",
+  },
+  edgeVignetteRight: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: -36,
+    width: 92,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.32)",
   },
 });
