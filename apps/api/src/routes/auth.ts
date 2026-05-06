@@ -3,6 +3,7 @@ import { z } from "zod"
 import crypto from "crypto"
 import { getDb } from "../db/db"
 import { signToken } from "../auth/jwt"
+import { getApiEnv } from "@locker/config"
 
 const loginSchema = z.object({
   email: z.string().email()
@@ -23,7 +24,13 @@ function isRateLimited(ip: string): boolean {
 }
 
 export async function registerAuthRoutes(app: FastifyInstance) {
+  const env = getApiEnv()
+  const devAuthEnabled = env.DEV_AUTH_ENABLED
   app.post("/v1/auth/dev-login", async (request, reply) => {
+    if (!devAuthEnabled) {
+      reply.code(403).send({ error: "Dev auth disabled" })
+      return
+    }
     const ip = request.ip
     if (isRateLimited(ip)) {
       reply.code(429).send({ error: "Too many attempts" })
@@ -38,9 +45,21 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     const db = getDb()
     const now = new Date().toISOString()
-    const existing = db.prepare("SELECT id, email, createdAt FROM users WHERE email = ?").get(parse.data.email)
+    type UserRow = { id: string; email: string; createdAt: string }
 
-    let user = existing
+    const existing = db
+      .prepare("SELECT id, email, createdAt FROM users WHERE email = ?")
+      .get(parse.data.email) as UserRow | undefined
+
+    let user: UserRow
+    if (!existing) {
+      const id = crypto.randomUUID()
+      db.prepare("INSERT INTO users (id, email, createdAt) VALUES (?, ?, ?)").run(id, parse.data.email, now)
+      user = { id, email: parse.data.email, createdAt: now }
+    } else {
+      user = existing
+    }
+
     if (!user) {
       const id = crypto.randomUUID()
       db.prepare("INSERT INTO users (id, email, createdAt) VALUES (?, ?, ?)").run(id, parse.data.email, now)

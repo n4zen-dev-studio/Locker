@@ -1,5 +1,3 @@
-import "./env"
-
 import Fastify from "fastify"
 import cors from "@fastify/cors"
 import { getApiEnv } from "@locker/config"
@@ -8,18 +6,18 @@ import { registerDeviceRoutes } from "./routes/devices"
 import { registerVaultRoutes } from "./routes/vaults"
 import { registerBlobRoutes } from "./routes/blobs"
 import { registerChangeRoutes } from "./routes/changes"
+import { registerWebAuthnRoutes } from "./routes/webauthn"
 
 async function main() {
-   const env = getApiEnv() 
-   console.log("[api] getApiEnv JWT_SECRET length:", env.JWT_SECRET?.length)
+  const env = getApiEnv()
 
   const app = Fastify({
     logger: true
   })
 
   await app.register(cors, {
-    origin: env.CORS_ORIGIN,
-    credentials: true
+    origin: [env.ADMIN_ORIGIN, env.CORS_ORIGIN],
+    credentials: false
   })
 
   app.get("/health", async () => {
@@ -35,6 +33,7 @@ async function main() {
   })
 
   await registerAuthRoutes(app)
+  await registerWebAuthnRoutes(app)
   await registerDeviceRoutes(app)
   await registerVaultRoutes(app)
   await registerBlobRoutes(app)

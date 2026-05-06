@@ -20,6 +20,7 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
     const db = getDb()
     const now = new Date().toISOString()
     const id = crypto.randomUUID()
+    
     const device = {
       id,
       userId: user.id,
