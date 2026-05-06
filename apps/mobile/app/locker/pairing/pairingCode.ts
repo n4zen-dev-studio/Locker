@@ -15,7 +15,7 @@ type PairingPayload = {
 }
 
 export function normalizePairingCode(input: string): string {
-  return input.toUpperCase().replace(/[^A-Z2-7]/g, "")
+  return input.toUpperCase().replace(/[^A-Z2-9]/g, "")
 }
 
 export function formatPairingCode(input: string): string {

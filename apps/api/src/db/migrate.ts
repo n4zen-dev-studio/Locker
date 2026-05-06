@@ -171,6 +171,22 @@ export function runMigrations(db: Database.Database): void {
       PRIMARY KEY (deviceId, vaultId)
     );
 
+    CREATE TABLE IF NOT EXISTS vault_access_requests (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      vaultId TEXT NOT NULL,
+      requestingDeviceId TEXT NOT NULL,
+      requesterPublicKey TEXT NOT NULL,
+      wrappedVaultKeyB64 TEXT NULL,
+      status TEXT NOT NULL,
+      expiresAt TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      approvedAt TEXT NULL,
+      approvedByDeviceId TEXT NULL,
+      rejectedAt TEXT NULL,
+      redeemedAt TEXT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_vault_id ON audit_events (vaultId, id);
@@ -180,6 +196,8 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_user ON device_pairing_codes (userId, expiresAt);
     CREATE INDEX IF NOT EXISTS idx_device_vaults_device ON device_vaults (deviceId, enabledAt);
     CREATE INDEX IF NOT EXISTS idx_device_vaults_vault ON device_vaults (vaultId, enabledAt);
+    CREATE INDEX IF NOT EXISTS idx_vault_access_requests_user ON vault_access_requests (userId, status, expiresAt);
+    CREATE INDEX IF NOT EXISTS idx_vault_access_requests_vault ON vault_access_requests (vaultId, status, expiresAt);
   `)
 
   try {

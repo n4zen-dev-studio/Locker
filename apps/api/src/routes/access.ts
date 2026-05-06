@@ -31,3 +31,29 @@ export function deviceBelongsToUser(userId: string, deviceId: string): boolean {
     .get(deviceId, userId) as { id?: string } | undefined
   return !!row?.id
 }
+
+export function deviceHasVaultAccess(userId: string, deviceId: string, vaultId: string): boolean {
+  const db = getDb()
+  const row = db
+    .prepare(
+      `SELECT dv.deviceId
+       FROM device_vaults dv
+       INNER JOIN devices d ON d.id = dv.deviceId
+       INNER JOIN vaults v ON v.id = dv.vaultId
+       WHERE dv.deviceId = ? AND dv.vaultId = ? AND d.userId = ? AND v.ownerUserId = ? AND v.deletedAt IS NULL`
+    )
+    .get(deviceId, vaultId, userId, userId) as { deviceId?: string } | undefined
+  return !!row?.deviceId
+}
+
+export function ensureDeviceVaultAccess(request: FastifyRequest, reply: FastifyReply, vaultId: string): boolean {
+  const user = request.user!
+  const deviceId = getRequestDeviceId(request)
+  if (!deviceId || !deviceBelongsToUser(user.id, deviceId)) {
+    reply.code(403).send({ error: "Device not recognized" })
+    return false
+  }
+  if (deviceHasVaultAccess(user.id, deviceId, vaultId)) return true
+  reply.code(403).send({ error: "Vault not enabled on this device" })
+  return false
+}

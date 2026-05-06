@@ -180,6 +180,27 @@ export function setVaultEnabledOnDevice(
   if (prev !== next) listeners.forEach((listener) => listener(next, prev))
 }
 
+export function renameRemoteVault(vaultId: string, name: string): void {
+  const state = readState()
+  const existing = state.vaults[vaultId]
+  if (!existing) return
+  state.vaults[vaultId] = { ...existing, name }
+  writeState(state)
+}
+
+export function removeRemoteVaultRecord(vaultId: string): void {
+  const prev = getRemoteVaultId()
+  const state = readState()
+  if (!state.vaults[vaultId]) return
+  delete state.vaults[vaultId]
+  if (state.currentVaultId === vaultId) {
+    state.currentVaultId = chooseFallbackCurrentVault(state)
+  }
+  writeState(state)
+  const next = getRemoteVaultId()
+  if (prev !== next) listeners.forEach((listener) => listener(next, prev))
+}
+
 export function markVaultSynced(vaultId: string, syncedAt: string): void {
   const state = readState()
   const existing = state.vaults[vaultId]

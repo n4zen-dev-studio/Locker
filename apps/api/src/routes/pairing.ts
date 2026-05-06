@@ -3,7 +3,7 @@ import { z } from "zod"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
 import { recordAuditEvent } from "../db/audit"
-import { userOwnsVault } from "./access"
+import { ensureDeviceVaultAccess, userOwnsVault } from "./access"
 
 const createSchema = z.object({
   pairingCode: z.string().min(8).max(9),
@@ -32,6 +32,9 @@ export async function registerPairingRoutes(app: FastifyInstance) {
       const db = getDb()
       if (!userOwnsVault(user.id, vaultId)) {
         reply.code(403).send({ error: "Forbidden" })
+        return
+      }
+      if (!ensureDeviceVaultAccess(request, reply, vaultId)) {
         return
       }
 
@@ -137,5 +140,5 @@ export async function registerPairingRoutes(app: FastifyInstance) {
 }
 
 function normalizePairingCode(value: string): string {
-  return value.toUpperCase().replace(/[^A-Z2-7]/g, "")
+  return value.toUpperCase().replace(/[^A-Z2-9]/g, "")
 }

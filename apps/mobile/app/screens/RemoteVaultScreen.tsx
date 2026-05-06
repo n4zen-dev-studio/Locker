@@ -1,34 +1,46 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react"
 import { Alert, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
+import QRCode from "qrcode"
+import { SvgXml } from "react-native-svg"
 
-import { DeviceDTO, VaultDTO } from "@locker/types"
+import { DeviceDTO, VaultAccessRequestDTO, VaultDTO } from "@locker/types"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
-import { clearVaultAttachmentCache } from "@/locker/attachments/attachmentCache"
 import { getAccount } from "@/locker/storage/accountRepo"
 import { fetchJson } from "@/locker/net/apiClient"
-import { clearRemoteVaultKey, getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
-import { provisionVaultForCurrentUser } from "@/locker/keys/userKeyApi"
+import { getRemoteVaultKey, setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import {
   getRemoteVaultId,
   listRemoteVaults,
+  renameRemoteVault,
   setRemoteVaultCatalog,
   setRemoteVaultId,
   setVaultEnabledOnDevice,
 } from "@/locker/storage/remoteVaultRepo"
-import { requestSync, cancelVault } from "@/locker/sync/syncCoordinator"
+import { provisionVaultForCurrentUser } from "@/locker/keys/userKeyApi"
+import { buildVaultKeyEnvelope } from "@/locker/keys/userKeyApi"
+import { requestSync } from "@/locker/sync/syncCoordinator"
 import { getSyncStatus } from "@/locker/sync/syncEngine"
-import { clearVaultSyncState } from "@/locker/sync/syncStateRepo"
-import { removeNotesForVault } from "@/locker/storage/notesRepo"
-import { clearSearchIndex } from "@/locker/search/searchRepo"
 import { vaultSession } from "@/locker/session"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import { generatePairingCode, buildWrappedVaultKeyPayload } from "@/locker/pairing/pairingCode"
+import { createVaultAccessRequestKeypair, clearVaultAccessRequestKeypair, getVaultAccessRequestPrivateKey, storeVaultAccessRequestKeypair } from "@/locker/linking/vaultAccessRequestRepo"
+import { decodeEnvelopeFromBase64, openSealedBoxEnvelope } from "@/locker/crypto/sealedBox"
+import { encodeVaultAccessQrPayload } from "@/locker/linking/qrPayload"
+import { removeVaultFromCurrentDevice, forgetDeletedVaultLocally } from "@/locker/vaults/deviceVaultCleanup"
 
 const PERSONAL_VAULT_NAME = "Personal"
+
+type GeneratedVaultAccess = {
+  vaultId: string
+  code: string
+  expiresAt: string
+  qrXml: string | null
+}
 
 export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = function RemoteVaultScreen(props) {
   const { navigation } = props
@@ -37,6 +49,8 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
 
   const [vaults, setVaults] = useState<VaultDTO[]>([])
   const [devices, setDevices] = useState<DeviceDTO[]>([])
+  const [requests, setRequests] = useState<VaultAccessRequestDTO[]>([])
+  const [vaultAccessDevices, setVaultAccessDevices] = useState<Record<string, DeviceDTO[]>>({})
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -45,8 +59,9 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
   const [creatingVault, setCreatingVault] = useState(false)
   const [newVaultName, setNewVaultName] = useState("")
   const [vaultKeyPresence, setVaultKeyPresence] = useState<Record<string, boolean>>({})
-  const [activeAccessCode, setActiveAccessCode] = useState<{ vaultId: string; code: string; expiresAt: string } | null>(null)
-  const [, setRefreshClock] = useState(0)
+  const [generatedAccess, setGeneratedAccess] = useState<GeneratedVaultAccess | null>(null)
+  const [editingVaultId, setEditingVaultId] = useState<string | null>(null)
+  const [editingVaultName, setEditingVaultName] = useState("")
 
   const refresh = useCallback(async () => {
     const acct = getAccount()
@@ -55,26 +70,21 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     if (!acct) {
       setVaults([])
       setDevices([])
+      setRequests([])
       return
     }
 
     setLoading(true)
     try {
-      const [vaultData, deviceData] = await Promise.all([
+      const [vaultData, deviceData, requestData] = await Promise.all([
         fetchJson<{ vaults: VaultDTO[] }>("/v1/vaults"),
         fetchJson<{ devices: DeviceDTO[] }>("/v1/devices"),
+        fetchJson<{ requests: VaultAccessRequestDTO[] }>("/v1/vault-access-requests"),
       ])
-      let nextVaults = vaultData.vaults ?? []
-      if (nextVaults.length === 0) {
-        const created = await fetchJson<{ vault: VaultDTO }>("/v1/vaults", {
-          method: "POST",
-          body: JSON.stringify({ name: PERSONAL_VAULT_NAME }),
-        })
-        await provisionVaultForCurrentUser(created.vault.id)
-        nextVaults = [created.vault]
-      }
+      const nextVaults = vaultData.vaults ?? []
       setVaults(nextVaults)
       setDevices(deviceData.devices ?? [])
+      setRequests(requestData.requests ?? [])
       setRemoteVaultCatalog(nextVaults)
       setCurrentVaultId(getRemoteVaultId())
       const keyStatusEntries = await Promise.all(
@@ -99,14 +109,37 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
   )
 
   useEffect(() => {
-    const timer = setInterval(() => setRefreshClock((value) => value + 1), 2000)
+    const timer = setInterval(() => {
+      void refresh()
+    }, 10_000)
     return () => clearInterval(timer)
-  }, [])
+  }, [refresh])
 
   const currentDevice = useMemo(
     () => devices.find((device) => device.current) ?? devices.find((device) => device.id === account?.device.id) ?? null,
     [account?.device.id, devices],
   )
+
+  const pendingApprovals = useMemo(
+    () =>
+      requests.filter((request) => {
+        if (request.status !== "pending") return false
+        if (!currentDevice || request.requestingDeviceId === currentDevice.id) return false
+        return vaultKeyPresence[request.vaultId] === true
+      }),
+    [currentDevice, requests, vaultKeyPresence],
+  )
+
+  const myVaultRequestsByVaultId = useMemo(() => {
+    const map = new Map<string, VaultAccessRequestDTO>()
+    if (!currentDevice) return map
+    for (const request of requests) {
+      if (request.requestingDeviceId !== currentDevice.id) continue
+      if (!["pending", "approved"].includes(request.status)) continue
+      map.set(request.vaultId, request)
+    }
+    return map
+  }, [currentDevice, requests])
 
   const handleCreateVault = useCallback(async () => {
     setError(null)
@@ -135,7 +168,16 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     }
   }, [newVaultName, refresh])
 
-  const handleGenerateVaultAccessCode = useCallback(
+  const buildVaultQr = useCallback(async (vault: VaultDTO, pairingCode: string) => {
+    const payload = encodeVaultAccessQrPayload({
+      vaultId: vault.id,
+      vaultName: vault.name,
+      pairingCode,
+    })
+    return QRCode.toString(payload, { type: "svg", margin: 1, width: 220 })
+  }, [])
+
+  const handleGenerateVaultAccess = useCallback(
     async (vault: VaultDTO) => {
       setError(null)
       setStatus(null)
@@ -145,39 +187,28 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
           setError(`${vault.name} is not provisioned on this device yet.`)
           return
         }
-        const { buildWrappedVaultKeyPayload, generatePairingCode } = await import("@/locker/pairing/pairingCode")
         const pairingCode = generatePairingCode()
         const wrappedVaultKeyB64 = buildWrappedVaultKeyPayload({ pairingCode, vaultId: vault.id, rvk })
         const data = await fetchJson<{ pairingCode: string; expiresAt: string }>(`/v1/vaults/${vault.id}/pairing-codes`, {
           method: "POST",
           body: JSON.stringify({ pairingCode, wrappedVaultKeyB64 }),
         })
-        setActiveAccessCode({ vaultId: vault.id, code: data.pairingCode, expiresAt: data.expiresAt })
-        setStatus(`Access code ready for ${vault.name}.`)
+        const qrXml = await buildVaultQr(vault, data.pairingCode)
+        setGeneratedAccess({ vaultId: vault.id, code: data.pairingCode, expiresAt: data.expiresAt, qrXml })
+        setStatus(`Vault access ready for ${vault.name}.`)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create access code")
       }
     },
-    [],
+    [buildVaultQr],
   )
 
-  const disableVaultLocally = useCallback(async (vault: VaultDTO) => {
-    cancelVault(vault.id)
-    await clearRemoteVaultKey(vault.id)
-    clearVaultSyncState(vault.id)
-    removeNotesForVault(vault.id)
-    clearSearchIndex(vault.id)
-    await clearVaultAttachmentCache(vault.id)
-    setVaultEnabledOnDevice(vault.id, false, { name: vault.name })
-    setCurrentVaultId(getRemoteVaultId())
-  }, [])
-
-  const handleDisableVault = useCallback(
+  const handleRemoveFromDevice = useCallback(
     (vault: VaultDTO) => {
-      if (!account) return
+      if (!account?.device.id) return
       Alert.alert(
         "Remove from this device",
-        `Remove ${vault.name} from this device? Its local key, cached content, and search index will be cleared here.`,
+        `Remove ${vault.name} from this device? Its local key, cache, and search index will be cleared here.`,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -186,7 +217,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
             onPress: async () => {
               try {
                 await fetchJson(`/v1/devices/${account.device.id}/vaults/${vault.id}`, { method: "DELETE" })
-                await disableVaultLocally(vault)
+                await removeVaultFromCurrentDevice(vault.id, vault.name)
                 setStatus(`${vault.name} removed from this device.`)
                 await refresh()
               } catch (err) {
@@ -197,7 +228,108 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         ],
       )
     },
-    [account, disableVaultLocally, refresh],
+    [account?.device.id, refresh],
+  )
+
+  const handleRenameVault = useCallback(
+    async (vault: VaultDTO) => {
+      const nextName = editingVaultName.trim()
+      if (!nextName) {
+        setError("Enter a vault name")
+        return
+      }
+      try {
+        await fetchJson<{ vault: VaultDTO }>(`/v1/vaults/${vault.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: nextName }),
+        })
+        renameRemoteVault(vault.id, nextName)
+        setEditingVaultId(null)
+        setEditingVaultName("")
+        setStatus(`Renamed vault to ${nextName}.`)
+        await refresh()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to rename vault")
+      }
+    },
+    [editingVaultName, refresh],
+  )
+
+  const handleDeleteVault = useCallback(
+    (vault: VaultDTO) => {
+      Alert.alert(
+        "Delete vault",
+        `Delete ${vault.name}? This removes it from all of your devices and stops sync for that vault.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete vault",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await fetchJson(`/v1/vaults/${vault.id}`, { method: "DELETE" })
+                await forgetDeletedVaultLocally(vault.id)
+                setStatus(`${vault.name} deleted.`)
+                await refresh()
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to delete vault")
+              }
+            },
+          },
+        ],
+      )
+    },
+    [refresh],
+  )
+
+  const handleLoadVaultDevices = useCallback(async (vault: VaultDTO) => {
+    let shouldFetch = true
+    setVaultAccessDevices((current) => {
+      if (current[vault.id]) {
+        shouldFetch = false
+        const next = { ...current }
+        delete next[vault.id]
+        return next
+      }
+      return current
+    })
+    if (!shouldFetch) return
+    try {
+      const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vault.id}/devices`)
+      setVaultAccessDevices((current) => ({ ...current, [vault.id]: data.devices ?? [] }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load vault devices")
+    }
+  }, [])
+
+  const handleRevokeVaultFromDevice = useCallback(
+    (vault: VaultDTO, device: DeviceDTO) => {
+      Alert.alert(
+        "Revoke vault access",
+        `Revoke ${vault.name} from ${device.name}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Revoke",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await fetchJson(`/v1/devices/${device.id}/vaults/${vault.id}`, { method: "DELETE" })
+                if (device.id === account?.device.id) {
+                  await removeVaultFromCurrentDevice(vault.id, vault.name)
+                }
+                setStatus(`${vault.name} revoked from ${device.name}.`)
+                await refresh()
+                await handleLoadVaultDevices(vault)
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to revoke vault")
+              }
+            },
+          },
+        ],
+      )
+    },
+    [account?.device.id, handleLoadVaultDevices, refresh],
   )
 
   const handleSyncNow = useCallback(
@@ -209,7 +341,6 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         setStatus(
           `Sync complete for ${vaults.find((vault) => vault.id === vaultId)?.name ?? "vault"}: pushed ${result?.pushed ?? 0}, pulled ${result?.pulled ?? 0}.`,
         )
-        setRefreshClock((value) => value + 1)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Sync failed")
       }
@@ -240,9 +371,106 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     [refresh],
   )
 
-  const handleRequestApproval = useCallback((vault: VaultDTO) => {
-    setStatus(`Approval flow is scaffolded for ${vault.name}; use the vault access code path for now.`)
-  }, [])
+  const handleRequestAccess = useCallback(
+    async (vault: VaultDTO) => {
+      if (!account?.device.id) return
+      try {
+        const { requesterPublicKey, privateKey } = createVaultAccessRequestKeypair(vault.id)
+        const data = await fetchJson<{ request: { id: string; requesterPublicKey: string } }>(
+          `/v1/vaults/${vault.id}/access-requests`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              requestingDeviceId: account.device.id,
+              requesterPublicKey,
+            }),
+          },
+        )
+        storeVaultAccessRequestKeypair({
+          requestId: data.request.id,
+          vaultId: vault.id,
+          requesterPublicKey: data.request.requesterPublicKey,
+          privateKey,
+        })
+        setStatus(`Access request sent for ${vault.name}. Approve it from another linked device that already has this vault.`)
+        await refresh()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to request access")
+      }
+    },
+    [account?.device.id, refresh],
+  )
+
+  const handleApproveRequest = useCallback(
+    async (request: VaultAccessRequestDTO) => {
+      try {
+        const rvk = await getRemoteVaultKey(request.vaultId)
+        if (!rvk || !request.requesterPublicKey) {
+          setError("This device cannot approve that request.")
+          return
+        }
+        const wrappedVaultKeyB64 = buildVaultKeyEnvelope(request.requesterPublicKey, rvk)
+        await fetchJson(`/v1/vault-access-requests/${request.id}/approve`, {
+          method: "POST",
+          body: JSON.stringify({ wrappedVaultKeyB64 }),
+        })
+        setStatus(`Approved ${request.vaultName ?? "vault"} for ${request.requestingDeviceName ?? "device"}.`)
+        await refresh()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to approve request")
+      }
+    },
+    [refresh],
+  )
+
+  const handleRejectRequest = useCallback(
+    async (request: VaultAccessRequestDTO) => {
+      try {
+        await fetchJson(`/v1/vault-access-requests/${request.id}/reject`, { method: "POST" })
+        setStatus(`Rejected request for ${request.vaultName ?? "vault"}.`)
+        await refresh()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to reject request")
+      }
+    },
+    [refresh],
+  )
+
+  const redeemApprovedRequest = useCallback(
+    async (request: VaultAccessRequestDTO) => {
+      const privateKey = getVaultAccessRequestPrivateKey(request.id)
+      if (!privateKey) return
+      try {
+        const data = await fetchJson<{ vaultId: string; wrappedVaultKeyB64: string; enabledAt: string }>(
+          `/v1/vault-access-requests/${request.id}/redeem`,
+          { method: "POST" },
+        )
+        const envelope = decodeEnvelopeFromBase64(data.wrappedVaultKeyB64)
+        const rvk = openSealedBoxEnvelope(privateKey, envelope)
+        await setRemoteVaultKey(data.vaultId, rvk)
+        setVaultEnabledOnDevice(data.vaultId, true, {
+          name: request.vaultName,
+          enabledAt: data.enabledAt,
+        })
+        clearVaultAccessRequestKeypair(request.id)
+        setStatus(`${request.vaultName ?? "Vault"} added to this device.`)
+        void requestSync("vault_enabled", data.vaultId)
+        await refresh()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to redeem access request")
+      }
+    },
+    [refresh],
+  )
+
+  useEffect(() => {
+    const approved = requests.filter((request) => {
+      if (!currentDevice) return false
+      return request.requestingDeviceId === currentDevice.id && request.status === "approved"
+    })
+    if (approved.length === 0) return
+    void Promise.all(approved.map((request) => redeemApprovedRequest(request))).catch(() => {})
+  }, [currentDevice, redeemApprovedRequest, requests])
 
   return (
     <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
@@ -251,7 +479,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
           Vaults & Devices
         </Text>
         <Text preset="subheading" style={themed($subtitle)}>
-          Same-user sync across your devices. Each vault keeps its own key and device availability.
+          Manage your vaults, linked devices, and same-user vault access approvals.
         </Text>
       </View>
 
@@ -278,7 +506,7 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
                 Add Another Device
               </Text>
             </Pressable>
-            <Pressable style={themed($secondaryButton)} onPress={refresh}>
+            <Pressable style={themed($secondaryButton)} onPress={() => void refresh()}>
               <Text preset="bold" style={themed($secondaryButtonText)}>
                 Refresh
               </Text>
@@ -287,12 +515,40 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
         )}
       </View>
 
+      {pendingApprovals.length > 0 ? (
+        <View style={themed($card)}>
+          <Text preset="bold" style={themed($sectionTitle)}>
+            Pending Approvals
+          </Text>
+          {pendingApprovals.map((request) => (
+            <View key={request.id} style={themed($rowCard)}>
+              <Text preset="bold" style={themed($rowTitle)}>
+                {request.vaultName ?? "Vault"} requested by {request.requestingDeviceName ?? "device"}
+              </Text>
+              <Text style={themed($metaText)}>
+                Expires: {new Date(request.expiresAt).toLocaleTimeString()}
+              </Text>
+              <Pressable style={themed($secondaryButton)} onPress={() => void handleApproveRequest(request)}>
+                <Text preset="bold" style={themed($secondaryButtonText)}>
+                  Approve request
+                </Text>
+              </Pressable>
+              <Pressable style={themed($secondaryButton)} onPress={() => void handleRejectRequest(request)}>
+                <Text preset="bold" style={themed($secondaryButtonText)}>
+                  Reject request
+                </Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       <View style={themed($card)}>
         <Text preset="bold" style={themed($sectionTitle)}>
           Vaults
         </Text>
         <Text style={themed($bodyText)}>
-          Personal is created automatically. Use this screen to enable additional vaults on this device or add more vaults to your account.
+          Personal is automatic. Additional vaults stay explicit per device and need real provisioning before they sync.
         </Text>
 
         {creatingVault ? (
@@ -309,10 +565,13 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
                 Create Vault
               </Text>
             </Pressable>
-            <Pressable style={themed($secondaryButton)} onPress={() => {
-              setCreatingVault(false)
-              setNewVaultName("")
-            }}>
+            <Pressable
+              style={themed($secondaryButton)}
+              onPress={() => {
+                setCreatingVault(false)
+                setNewVaultName("")
+              }}
+            >
               <Text preset="bold" style={themed($secondaryButtonText)}>
                 Cancel
               </Text>
@@ -326,75 +585,154 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
           </Pressable>
         )}
 
-        {activeAccessCode ? (
-          <View style={themed($createVaultCard)}>
-            <Text preset="bold" style={themed($rowTitle)}>Access code</Text>
-            <Text style={themed($metaText)}>{activeAccessCode.code}</Text>
-            <Text style={themed($metaText)}>Expires: {new Date(activeAccessCode.expiresAt).toLocaleTimeString()}</Text>
-          </View>
-        ) : null}
-
         {vaults.map((vault) => {
           const syncStatus = getSyncStatus(vault.id)
           const enabled = listRemoteVaults().find((item) => item.id === vault.id)?.enabledOnDevice ?? !!vault.enabledOnDevice
           const provisioned = vaultKeyPresence[vault.id] === true
           const isPersonal = vault.name === PERSONAL_VAULT_NAME
+          const request = myVaultRequestsByVaultId.get(vault.id) ?? null
+          const accessDevices = vaultAccessDevices[vault.id] ?? []
+          const isEditing = editingVaultId === vault.id
+
           return (
             <View key={vault.id} style={themed($rowCard)}>
               <Text preset="bold" style={themed($rowTitle)}>
                 {vault.name}
               </Text>
               <Text style={themed($metaText)}>
-                {enabled
-                  ? provisioned
-                    ? "Available on this device"
-                    : "Access code required"
-                  : "Not on this device"}
+                {currentVaultId === vault.id && enabled && provisioned
+                  ? "Current vault"
+                  : enabled
+                    ? provisioned
+                      ? "Available on this device"
+                      : "Access code required"
+                    : "Not on this device"}
               </Text>
               <Text style={themed($metaText)}>
                 Last synced: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : "Not yet"}
               </Text>
               <Text style={themed($metaText)}>
-                {provisioned ? `Queue: ${syncStatus.queueSize}` : "This device does not have the vault key yet"}
+                {request?.status === "pending"
+                  ? "Awaiting approval"
+                  : request?.status === "approved"
+                    ? "Approval ready"
+                    : provisioned
+                      ? `Queue: ${syncStatus.queueSize}`
+                      : "This device does not have the vault key yet"}
               </Text>
               {syncStatus.lastError ? <Text style={themed($errorText)}>{syncStatus.lastError}</Text> : null}
+
+              {generatedAccess?.vaultId === vault.id ? (
+                <View style={themed($qrCard)}>
+                  <Text preset="bold" style={themed($rowTitle)}>
+                    One-time access ready
+                  </Text>
+                  <Text style={themed($metaText)}>{generatedAccess.code}</Text>
+                  <Text style={themed($metaText)}>
+                    Expires: {new Date(generatedAccess.expiresAt).toLocaleTimeString()}
+                  </Text>
+                  {generatedAccess.qrXml ? <SvgXml xml={generatedAccess.qrXml} width={220} height={220} /> : null}
+                </View>
+              ) : null}
+
+              {isEditing ? (
+                <View style={themed($createVaultCard)}>
+                  <TextInput
+                    value={editingVaultName}
+                    onChangeText={setEditingVaultName}
+                    placeholder="Vault name"
+                    placeholderTextColor="#9aa0a6"
+                    style={themed($input)}
+                  />
+                  <Pressable style={themed($primaryButton)} onPress={() => void handleRenameVault(vault)}>
+                    <Text preset="bold" style={themed($primaryButtonText)}>
+                      Save name
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={themed($secondaryButton)}
+                    onPress={() => {
+                      setEditingVaultId(null)
+                      setEditingVaultName("")
+                    }}
+                  >
+                    <Text preset="bold" style={themed($secondaryButtonText)}>
+                      Cancel
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
               <View style={themed($buttonRow)}>
                 {enabled && provisioned ? (
-                  <Pressable style={themed($secondaryButton)} onPress={() => {
-                    setRemoteVaultId(vault.id, vault.name)
-                    setCurrentVaultId(vault.id)
-                  }}>
+                  <Pressable
+                    style={themed($secondaryButton)}
+                    onPress={() => {
+                      setRemoteVaultId(vault.id, vault.name)
+                      setCurrentVaultId(vault.id)
+                    }}
+                  >
                     <Text preset="bold" style={themed($secondaryButtonText)}>
                       {currentVaultId === vault.id ? "Current vault" : "Switch to this vault"}
                     </Text>
                   </Pressable>
                 ) : null}
-                {enabled && provisioned && !isPersonal ? (
-                  <Pressable style={themed($secondaryButton)} onPress={() => void handleGenerateVaultAccessCode(vault)}>
-                    <Text preset="bold" style={themed($secondaryButtonText)}>
-                      Generate access code
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {activeAccessCode && activeAccessCode.vaultId === vault.id ? (
-                  <View style={themed($createVaultCard)}>
-                    <Text preset="bold" style={themed($rowTitle)}>Access code</Text>
-                    <Text style={themed($metaText)}>{activeAccessCode.code}</Text>
-                    <Text style={themed($metaText)}>Expires: {new Date(activeAccessCode.expiresAt).toLocaleTimeString()}</Text>
-                  </View>
-                ) : null}
+
                 {enabled && provisioned ? (
-                  <Pressable style={themed($secondaryButton)} onPress={() => handleSyncNow(vault.id)}>
+                  <Pressable style={themed($secondaryButton)} onPress={() => void handleSyncNow(vault.id)}>
                     <Text preset="bold" style={themed($secondaryButtonText)}>
                       Sync now
                     </Text>
                   </Pressable>
                 ) : null}
-                {!enabled && isPersonal ? (
-                  <Text style={themed($metaText)}>Personal is enabled automatically when a device is linked.</Text>
+
+                <Pressable style={themed($secondaryButton)} onPress={() => void handleLoadVaultDevices(vault)}>
+                  <Text preset="bold" style={themed($secondaryButtonText)}>
+                    {vaultAccessDevices[vault.id] ? "Hide device access" : "View device access"}
+                  </Text>
+                </Pressable>
+
+                {!isPersonal && enabled && provisioned ? (
+                  <>
+                    <Pressable style={themed($secondaryButton)} onPress={() => void handleGenerateVaultAccess(vault)}>
+                      <Text preset="bold" style={themed($secondaryButtonText)}>
+                        Generate code / QR
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={themed($secondaryButton)}
+                      onPress={() => {
+                        setEditingVaultId(vault.id)
+                        setEditingVaultName(vault.name)
+                      }}
+                    >
+                      <Text preset="bold" style={themed($secondaryButtonText)}>
+                        Rename vault
+                      </Text>
+                    </Pressable>
+                    <Pressable style={themed($secondaryButton)} onPress={() => handleRemoveFromDevice(vault)}>
+                      <Text preset="bold" style={themed($secondaryButtonText)}>
+                        Remove from this device
+                      </Text>
+                    </Pressable>
+                    <Pressable style={themed($secondaryButton)} onPress={() => handleDeleteVault(vault)}>
+                      <Text preset="bold" style={themed($secondaryButtonText)}>
+                        Delete vault
+                      </Text>
+                    </Pressable>
+                  </>
                 ) : null}
+
                 {!enabled && !isPersonal ? (
                   <>
+                    <Pressable
+                      style={themed($primaryButton)}
+                      onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
+                    >
+                      <Text preset="bold" style={themed($primaryButtonText)}>
+                        Add to this device
+                      </Text>
+                    </Pressable>
                     <Pressable
                       style={themed($secondaryButton)}
                       onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
@@ -403,32 +741,67 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
                         Enter access code
                       </Text>
                     </Pressable>
-                    <Pressable style={themed($secondaryButton)} onPress={() => handleRequestApproval(vault)}>
+                    <Pressable
+                      style={themed($secondaryButton)}
+                      onPress={() => navigation.navigate("VaultQrScanner", { mode: "vault-access", vaultId: vault.id, vaultName: vault.name })}
+                    >
                       <Text preset="bold" style={themed($secondaryButtonText)}>
-                        Request approval
+                        Scan QR
+                      </Text>
+                    </Pressable>
+                    <Pressable style={themed($secondaryButton)} onPress={() => void handleRequestAccess(vault)}>
+                      <Text preset="bold" style={themed($secondaryButtonText)}>
+                        Request access
                       </Text>
                     </Pressable>
                   </>
                 ) : null}
+
                 {enabled && !provisioned && !isPersonal ? (
-                  <Pressable
-                    style={themed($primaryButton)}
-                    onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
-                  >
-                    <Text preset="bold" style={themed($primaryButtonText)}>
-                      Enter access code
-                    </Text>
-                  </Pressable>
+                  <>
+                    <Pressable
+                      style={themed($primaryButton)}
+                      onPress={() => navigation.navigate("VaultImportPairing", { vaultId: vault.id, vaultName: vault.name })}
+                    >
+                      <Text preset="bold" style={themed($primaryButtonText)}>
+                        Enter access code
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={themed($secondaryButton)}
+                      onPress={() => navigation.navigate("VaultQrScanner", { mode: "vault-access", vaultId: vault.id, vaultName: vault.name })}
+                    >
+                      <Text preset="bold" style={themed($secondaryButtonText)}>
+                        Scan QR
+                      </Text>
+                    </Pressable>
+                  </>
                 ) : null}
-                {enabled && provisioned && !isPersonal ? (
-                  <Pressable style={themed($secondaryButton)} onPress={() => handleDisableVault(vault)}>
-                    <Text preset="bold" style={themed($secondaryButtonText)}>
-                      Remove from this device
-                    </Text>
-                  </Pressable>
-                ) : null}
-                
               </View>
+
+              {vaultAccessDevices[vault.id] ? (
+                <View style={themed($deviceList)}>
+                  {accessDevices.map((device) => (
+                    <View key={device.id} style={themed($deviceAccessRow)}>
+                      <View style={themed($deviceAccessMeta)}>
+                        <Text preset="bold" style={themed($metaStrong)}>
+                          {device.name} {device.id === account?.device.id ? "• This device" : ""}
+                        </Text>
+                        <Text style={themed($metaText)}>
+                          Last active: {device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "Unknown"}
+                        </Text>
+                      </View>
+                      {!isPersonal ? (
+                        <Pressable style={themed($miniButton)} onPress={() => handleRevokeVaultFromDevice(vault, device)}>
+                          <Text preset="bold" style={themed($secondaryButtonText)}>
+                            Revoke
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
             </View>
           )
         })}
@@ -508,6 +881,10 @@ const $metaText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral300,
 })
 
+const $metaStrong: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral100,
+})
+
 const $bodyText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral200,
   lineHeight: 22,
@@ -515,6 +892,12 @@ const $bodyText: ThemedStyle<TextStyle> = ({ colors }) => ({
 
 const $createVaultCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
+})
+
+const $qrCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+  alignItems: "center",
+  paddingVertical: spacing.sm,
 })
 
 const $input: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
@@ -552,8 +935,36 @@ const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   borderColor: "rgba(255,255,255,0.12)",
 })
 
+const $miniButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  backgroundColor: "rgba(255,255,255,0.08)",
+  borderRadius: 12,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.12)",
+})
+
 const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
+})
+
+const $deviceList: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+  marginTop: spacing.xs,
+})
+
+const $deviceAccessRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: spacing.sm,
+  paddingVertical: spacing.xs,
+})
+
+const $deviceAccessMeta: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+  gap: 4,
 })
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({

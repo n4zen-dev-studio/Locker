@@ -20,6 +20,7 @@ import { VaultLinkDeviceScreen } from "@/screens/VaultLinkDeviceScreen"
 import { RemoteVaultScreen } from "@/screens/RemoteVaultScreen"
 import { VaultPairDeviceScreen } from "@/screens/VaultPairDeviceScreen"
 import { VaultImportPairingScreen } from "@/screens/VaultImportPairingScreen"
+import { VaultQrScannerScreen } from "@/screens/VaultQrScannerScreen"
 import { ServerUrlScreen } from "@/screens/ServerUrlScreen"
 import { VaultDiagnosticsScreen } from "@/screens/VaultDiagnosticsScreen"
 import { ThreatModelScreen } from "@/screens/ThreatModelScreen"
@@ -65,6 +66,7 @@ const AppStack = () => {
       <Stack.Screen name="RemoteVault" component={RemoteVaultScreen} />
       <Stack.Screen name="VaultPairDevice" component={VaultPairDeviceScreen} />
       <Stack.Screen name="VaultImportPairing" component={VaultImportPairingScreen} />
+      <Stack.Screen name="VaultQrScanner" component={VaultQrScannerScreen} />
       <Stack.Screen name="VaultDiagnostics" component={VaultDiagnosticsScreen} />
       <Stack.Screen name="ThreatModel" component={ThreatModelScreen} />
       <Stack.Screen name="ServerUrl" component={ServerUrlScreen} />
