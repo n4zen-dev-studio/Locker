@@ -43,6 +43,19 @@ import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { SecureItemViewerModal } from "@/components/vault/SecureItemViewerModal"
 import { VaultHubBackground } from "@/components/VaultHubBackground"
+import { AttachmentRow } from "@/components/vault-note/AttachmentRow"
+import { EmptyAttachmentState } from "@/components/vault-note/EmptyAttachmentState"
+import { GhostButton } from "@/components/vault-note/GhostButton"
+import { GhostDangerButton } from "@/components/vault-note/GhostDangerButton"
+import { GlassChip } from "@/components/vault-note/GlassChip"
+import { GlassSection } from "@/components/vault-note/GlassSection"
+import { GradientPrimaryButton } from "@/components/vault-note/GradientPrimaryButton"
+import { HeroCard } from "@/components/vault-note/HeroCard"
+import { IconTextInput } from "@/components/vault-note/IconTextInput"
+import { ImageAttachmentCard } from "@/components/vault-note/ImageAttachmentCard"
+import { MetaChip } from "@/components/vault-note/MetaChip"
+import { MiniIconButton } from "@/components/vault-note/MiniIconButton"
+import { VoiceStudioCard } from "@/components/vault-note/VoiceStudioCard"
 import type { VaultStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
@@ -61,6 +74,7 @@ import { getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { base64ToBytes, bytesToBase64, bytesToUtf8, utf8ToBytes } from "@/locker/crypto/encoding"
+import { randomBytes } from "@/locker/crypto/random"
 import {
   buildAttachmentBlobBytes,
   buildAttachmentBlobId,
@@ -68,8 +82,8 @@ import {
   parseAttachmentBlobBytes,
 } from "@/locker/attachments/attachmentCodec"
 import {
+  AttachmentCacheUnavailableError,
   deleteEncryptedAttachment,
-  hasEncryptedAttachment,
   readEncryptedAttachment,
   writeEncryptedAttachment,
 } from "@/locker/attachments/attachmentCache"
@@ -119,12 +133,13 @@ type ViewerState = {
   sourceUri?: string
   dataUri?: string
   html?: string
+  imageItems?: Array<{ id: string; title: string; uri: string }>
+  initialImageIndex?: number
   fallbackMessage?: string
 }
 
 const LOCAL_ATTACHMENT_SCOPE = "__local__"
 const MAX_ATTACHMENT_BYTES = 20_000_000
-const AUTO_DOWNLOAD_MAX_BYTES = 1_500_000
 const VOICE_MIME = "audio/m4a"
 
 const fileSystemCompat = FileSystem as any
@@ -183,15 +198,34 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     return attachments[0] ?? null
   }, [attachments, selectedAttachmentId])
 
+  const lockedAttachmentType = useMemo<VaultItemType | null>(() => {
+    if (attachments.length > 0) return getVaultItemTypeFromMime(attachments[0].mime)
+    if (itemType === "image" || itemType === "pdf" || itemType === "doc") return itemType
+    if (itemType === "voice") return "voice"
+    return null
+  }, [attachments, itemType])
+
   const effectiveItemType = useMemo<VaultItemType>(() => {
+    if (lockedAttachmentType) return lockedAttachmentType
     if (selectedAttachment) return getVaultItemTypeFromMime(selectedAttachment.mime)
     return itemType
-  }, [itemType, selectedAttachment])
+  }, [itemType, lockedAttachmentType, selectedAttachment])
 
   const isFileFirstItem =
     effectiveItemType === "image" || effectiveItemType === "pdf" || effectiveItemType === "doc"
   const isVoiceItem = effectiveItemType === "voice"
   const saveLabel = noteId ? "Update Secure Item" : "Save Secure Item"
+  const titleTrimmed = title.trim()
+  const bodyTrimmed = body.trim()
+  const validationMessage = useMemo(() => {
+    if (isVoiceItem) return attachments.length === 0 ? "Record or import a voice attachment first." : null
+    if (isFileFirstItem) return attachments.length === 0 ? "Add at least one attachment before saving." : null
+    if (!titleTrimmed && !bodyTrimmed && attachments.length === 0) {
+      return "Add a title or note content before saving."
+    }
+    return null
+  }, [attachments.length, bodyTrimmed, isFileFirstItem, isVoiceItem, titleTrimmed])
+  const canSaveItem = !validationMessage
 
   const pulseStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }],
@@ -212,14 +246,15 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   const hydrateFromNote = useCallback(
     (note: Note) => {
+      const inferredItemType = inferItemTypeFromNote(note)
       setTitle(note.title)
       setBody(note.body)
       setVaultId(note.vaultId ?? null)
       setClassification(note.classification ?? DEFAULT_VAULT_CLASSIFICATION)
       setDeletedAt(note.deletedAt ?? null)
       setAttachments(note.attachments ?? [])
-      setItemType(note.itemType ?? "note")
-      setPrimaryAttachmentId(note.primaryAttachmentId ?? null)
+      setItemType(inferredItemType)
+      setPrimaryAttachmentId(note.primaryAttachmentId ?? note.attachments?.[0]?.id ?? null)
       setVoiceDurationMs(note.voiceDurationMs ?? null)
       const routeAttachmentId = route.params?.attachmentId ?? null
       setActiveAttachmentId(routeAttachmentId ?? note.primaryAttachmentId ?? note.attachments?.[0]?.id ?? null)
@@ -228,21 +263,37 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   )
 
   const syncSavedAttachmentNote = useCallback(
-    async (saved: Note, blobBytes: Uint8Array, attachmentId: string, vaultKey: Uint8Array) => {
+    async (
+      saved: Note,
+      blobs: Array<{ attachmentId: string; bytes: Uint8Array }>,
+      vaultKey: Uint8Array,
+    ) => {
       const deviceId = getAccount()?.device.id
       if (!deviceId || !saved.vaultId) return
       enqueueUpdateIndexData(listNoteIds(saved.vaultId), saved.vaultId, vaultKey, deviceId)
       enqueueUpsertNoteData(saved, saved.vaultId, vaultKey, deviceId)
-      enqueueUpsertAttachmentBlob({
-        vaultId: saved.vaultId,
-        bytes: blobBytes,
-        noteId: saved.id,
-        attId: attachmentId,
+      blobs.forEach((blob) => {
+        enqueueUpsertAttachmentBlob({
+          vaultId: saved.vaultId!,
+          bytes: blob.bytes,
+          noteId: saved.id,
+          attId: blob.attachmentId,
+        })
       })
       await requestSync("note_change", saved.vaultId)
     },
     [],
   )
+
+  const syncSavedNoteOnly = useCallback(async (saved: Note) => {
+    const deviceId = getAccount()?.device.id
+    if (!deviceId || !saved.vaultId) return
+    const vaultKey = await getRemoteVaultKey(saved.vaultId)
+    if (!vaultKey) return
+    enqueueUpdateIndexData(listNoteIds(saved.vaultId), saved.vaultId, vaultKey, deviceId)
+    enqueueUpsertNoteData(saved, saved.vaultId, vaultKey, deviceId)
+    await requestSync("note_change", saved.vaultId)
+  }, [])
 
   const upsertAttachment = useCallback((list: NoteAttachment[], next: NoteAttachment) => {
     const existingIndex = list.findIndex((attachment) => attachment.id === next.id)
@@ -263,13 +314,42 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     return path
   }, [])
 
+  const resolveAttachmentKeyContext = useCallback(
+    async (targetVaultId: string | null, options?: { preferRemote?: boolean }) => {
+      const sessionKey = vaultSession.getKey()
+      if (!sessionKey) return null
+
+      if (options?.preferRemote && targetVaultId) {
+        const remoteKey = await getRemoteVaultKey(targetVaultId)
+        if (remoteKey) {
+          return {
+            key: remoteKey,
+            syncKey: remoteKey,
+            scope: targetVaultId,
+            mode: "remote" as const,
+          }
+        }
+      }
+
+      return {
+        key: sessionKey,
+        syncKey: null,
+        scope: targetVaultId ?? LOCAL_ATTACHMENT_SCOPE,
+        mode: "local" as const,
+      }
+    },
+    [],
+  )
+
   const resolveAttachment = useCallback(
     async (att: NoteAttachment, options?: { silent?: boolean }) => {
       const existingState = attachmentStates[att.id]
       if (existingState?.status === "ready" && existingState.localUri) return existingState
 
-      const key = vaultId ? await getRemoteVaultKey(vaultId) : vaultSession.getKey()
-      if (!key) {
+      const context = await resolveAttachmentKeyContext(vaultId, {
+        preferRemote: Boolean(noteId && isExisting && vaultId),
+      })
+      if (!context?.key) {
         if (!options?.silent) setError("Missing attachment key")
         return null
       }
@@ -277,13 +357,13 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       setAttachmentStates((prev) => ({ ...prev, [att.id]: { status: "downloading" } }))
 
       try {
-        let encryptedBytes = await readEncryptedAttachment(attachmentScope, att.id)
+        let encryptedBytes = await readEncryptedAttachment(context.scope, att.id)
         if (!encryptedBytes) {
-          if (!vaultId) throw new Error("Attachment not cached on this device")
+          if (!vaultId || !context.syncKey) throw new Error("Attachment not cached on this device")
           const token = await getToken()
           if (!token) throw new Error("Link device first")
           encryptedBytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${att.blobId}`, {}, { token })
-          await writeEncryptedAttachment(attachmentScope, att.id, encryptedBytes)
+          await writeEncryptedAttachment(context.scope, att.id, encryptedBytes)
         }
 
         if (att.sha256 && sha256Hex(encryptedBytes) !== att.sha256) {
@@ -292,7 +372,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           return nextState
         }
 
-        const payload = parseAttachmentBlobBytes(encryptedBytes, key)
+        const payload = parseAttachmentBlobBytes(encryptedBytes, context.key)
         if (payload.attId !== att.id) throw new Error("Attachment mismatch")
 
         const filename = payload.filename ?? att.filename ?? `${effectiveItemType}-${att.id}`
@@ -319,7 +399,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         return null
       }
     },
-    [attachmentScope, attachmentStates, effectiveItemType, vaultId, writeTempFile],
+    [attachmentStates, effectiveItemType, isExisting, noteId, resolveAttachmentKeyContext, vaultId, writeTempFile],
   )
 
   const exportCurrentItem = useCallback(async () => {
@@ -348,40 +428,79 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     }
   }, [body, effectiveItemType, resolveAttachment, selectedAttachment, title, writeTempFile])
 
-  const openSelectedViewer = useCallback(async () => {
-    if (!selectedAttachment) return
-    const prepared = await resolveAttachment(selectedAttachment)
-    if (!prepared || !prepared.localUri) return
+  const openAttachmentViewer = useCallback(
+    async (attachment: NoteAttachment) => {
+      setActiveAttachmentId(attachment.id)
 
-    const subtitle = [selectedAttachment.filename ?? "Secure file", formatBytes(selectedAttachment.sizeBytes)]
-      .filter(Boolean)
-      .join(" · ")
+      if (getVaultItemTypeFromMime(attachment.mime) === "image") {
+        const preparedImages = await Promise.all(
+          attachments.map(async (item) => ({
+            attachment: item,
+            prepared: await resolveAttachment(item, { silent: true }),
+          })),
+        )
+        const imageItems = preparedImages
+          .filter(
+            (entry): entry is { attachment: NoteAttachment; prepared: AttachmentUiState } =>
+              !!entry.prepared?.dataUri || !!entry.prepared?.localUri,
+          )
+          .map((entry) => ({
+            id: entry.attachment.id,
+            title: entry.attachment.filename ?? "Secure image",
+            uri: entry.prepared.dataUri ?? entry.prepared.localUri ?? "",
+          }))
 
-    setViewer({
-      visible: true,
-      title: selectedAttachment.filename ?? getVaultItemLabel(effectiveItemType),
-      subtitle,
-      itemType: effectiveItemType,
-      sourceUri: prepared.localUri,
-      dataUri: prepared.dataUri,
-      html:
-        effectiveItemType === "doc" && prepared.previewText
-          ? buildTextViewerHtml(prepared.previewText, selectedAttachment.filename ?? "Secure document")
-          : undefined,
-      fallbackMessage:
-        effectiveItemType === "doc"
-          ? "This document format does not have a native in-app renderer in the current stack. Export it from the vault to open it elsewhere."
-          : undefined,
-    })
-  }, [effectiveItemType, resolveAttachment, selectedAttachment])
+        const initialImageIndex = Math.max(
+          0,
+          imageItems.findIndex((item) => item.id === attachment.id),
+        )
+
+        setViewer({
+          visible: true,
+          title: getVaultItemLabel("image"),
+          subtitle: `${imageItems.length} secure image${imageItems.length === 1 ? "" : "s"}`,
+          itemType: "image",
+          imageItems,
+          initialImageIndex,
+        })
+        return
+      }
+
+      const prepared = await resolveAttachment(attachment)
+      if (!prepared || !prepared.localUri) return
+      const attachmentType = getVaultItemTypeFromMime(attachment.mime)
+
+      setViewer({
+        visible: true,
+        title: attachment.filename ?? getVaultItemLabel(attachmentType),
+        subtitle: [formatBytes(attachment.sizeBytes), attachment.mime].join(" · "),
+        itemType: attachmentType,
+        sourceUri: prepared.localUri,
+        dataUri: prepared.dataUri,
+        html:
+          attachmentType === "doc" && prepared.previewText
+            ? buildTextViewerHtml(prepared.previewText, attachment.filename ?? "Secure document")
+            : undefined,
+        fallbackMessage:
+          attachmentType === "doc"
+            ? "This document format cannot be rendered natively here. Export remains available from the secure viewer."
+            : undefined,
+      })
+    },
+    [attachments, resolveAttachment],
+  )
 
   const handleSave = useCallback(() => {
     const key = vaultSession.getKey()
     if (!key) return
-    saveNote(
+    if (validationMessage) {
+      setError(validationMessage)
+      return
+    }
+    const saved = saveNote(
       {
         id: noteId,
-        title: title.trim(),
+        title: titleTrimmed,
         body,
         classification,
         itemType,
@@ -393,8 +512,25 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       },
       key,
     )
+    if (saved.vaultId) {
+      void syncSavedNoteOnly(saved)
+    }
     navigation.goBack()
-  }, [attachments, body, classification, deletedAt, itemType, navigation, noteId, primaryAttachmentId, title, vaultId, voiceDurationMs])
+  }, [
+    attachments,
+    body,
+    classification,
+    deletedAt,
+    itemType,
+    navigation,
+    noteId,
+    primaryAttachmentId,
+    syncSavedNoteOnly,
+    titleTrimmed,
+    validationMessage,
+    vaultId,
+    voiceDurationMs,
+  ])
 
   const handleMoveToTrash = useCallback(() => {
     if (!noteId) return
@@ -470,256 +606,309 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   const handleImportAttachment = useCallback(
     async (kind: VaultImportType) => {
-      if (!vaultSession.isUnlocked()) return
-      if (!canEdit) {
-        setError("Viewer role cannot modify this item")
-        return
-      }
+      try {
+        if (!vaultSession.isUnlocked()) return
+        if (!canEdit) {
+          setError("Viewer role cannot modify this item")
+          return
+        }
 
-      const vmk = vaultSession.getKey()
-      if (!vmk) return
+        const vmk = vaultSession.getKey()
+        if (!vmk) return
 
-      const picked = await DocumentPicker.getDocumentAsync({
-        multiple: false,
-        copyToCacheDirectory: true,
-        type:
-          kind === "image"
-            ? "image/*"
-            : kind === "pdf"
-              ? "application/pdf"
-              : kind === "voice"
-                ? "audio/*"
-                : "*/*",
-      })
-      if (picked.canceled) return
+        const picked = await DocumentPicker.getDocumentAsync({
+          multiple: true,
+          copyToCacheDirectory: true,
+          type:
+            kind === "image"
+              ? "image/*"
+              : kind === "pdf"
+                ? "application/pdf"
+                : kind === "voice"
+                  ? "audio/*"
+                  : "*/*",
+        })
+        if (picked.canceled) return
 
-      const asset = picked.assets?.[0]
-      if (!asset?.uri) return
+        const pickedAssets = picked.assets?.filter((asset) => !!asset.uri) ?? []
+        if (pickedAssets.length === 0) return
 
-      const fileBase64 = await FileSystem.readAsStringAsync(asset.uri, {
-        encoding: fileSystemCompat.EncodingType.Base64,
-      })
-      const fileBytes = base64ToBytes(fileBase64)
+        const firstType = getVaultItemTypeFromMime(
+          pickedAssets[0]?.mimeType ?? "application/octet-stream",
+        )
+        const nextLockedType = lockedAttachmentType ?? firstType
 
-      if (fileBytes.length > MAX_ATTACHMENT_BYTES) {
-        setError(`Attachment exceeds ${formatBytes(MAX_ATTACHMENT_BYTES)} limit`)
-        return
-      }
+        if (nextLockedType === "voice") {
+          setError("Voice items only accept secure voice recordings.")
+          return
+        }
 
-      let activeNoteId = noteId
-      if (!activeNoteId) {
+        if (isFileFirstItem && lockedAttachmentType && lockedAttachmentType !== firstType) {
+          setError(`This secure item only accepts ${getFamilyLabel(lockedAttachmentType)} attachments.`)
+          return
+        }
+
+        if (!pickedAssets.every((asset) => getVaultItemTypeFromMime(asset.mimeType ?? "application/octet-stream") === nextLockedType)) {
+          setError(`All attachments in this item must be ${getFamilyLabel(nextLockedType)} files.`)
+          return
+        }
+
+        if (kind === "image" && nextLockedType !== "image") {
+          setError("Only image attachments can be added here.")
+          return
+        }
+        if (kind === "pdf" && nextLockedType !== "pdf") {
+          setError("Only PDF attachments can be added here.")
+          return
+        }
+        if (kind === "file" && nextLockedType !== "doc") {
+          setError(`This secure item only accepts ${getFamilyLabel(nextLockedType)} files.`)
+          return
+        }
+
+        const nextVaultId = noteId ? vaultId : (vaultId ?? getRemoteVaultId())
+        const nextNoteId = noteId ?? generateVaultNoteId()
+        const keyContext = await resolveAttachmentKeyContext(nextVaultId, {
+          preferRemote: Boolean(noteId && isExisting && nextVaultId),
+        })
+        if (!keyContext?.key) {
+          setError("Missing attachment key for this item")
+          return
+        }
+
+        const newAttachments: NoteAttachment[] = []
+        const queuedBlobs: Array<{ attachmentId: string; bytes: Uint8Array }> = []
+        const nextAttachmentStates: Record<string, AttachmentUiState> = {}
+
+        for (const asset of pickedAssets) {
+          const fileBase64 = await FileSystem.readAsStringAsync(asset.uri!, {
+            encoding: fileSystemCompat.EncodingType.Base64,
+          })
+          const fileBytes = base64ToBytes(fileBase64)
+          if (fileBytes.length > MAX_ATTACHMENT_BYTES) {
+            setError(`Attachment exceeds ${formatBytes(MAX_ATTACHMENT_BYTES)} limit`)
+            return
+          }
+
+          const mime = asset.mimeType ?? "application/octet-stream"
+          const attId = generateAttachmentId()
+          const blobBytes = buildAttachmentBlobBytes({
+            rvk: keyContext.key,
+            noteId: nextNoteId,
+            attId,
+            fileBytes,
+            filename: asset.name ?? null,
+            mime,
+          })
+
+          const record: NoteAttachment = {
+            id: attId,
+            filename: asset.name ?? null,
+            mime,
+            sizeBytes: fileBytes.length,
+            sha256: sha256Hex(blobBytes),
+            blobId: buildAttachmentBlobId(nextNoteId, attId),
+            createdAt: new Date().toISOString(),
+          }
+
+          await writeEncryptedAttachment(keyContext.scope, attId, blobBytes)
+          newAttachments.push(record)
+          queuedBlobs.push({ attachmentId: attId, bytes: blobBytes })
+          nextAttachmentStates[attId] = {
+            status: "ready",
+            localUri: asset.uri,
+            mime,
+            filename: asset.name ?? undefined,
+            dataUri: mime.startsWith("image/") ? `data:${mime};base64,${fileBase64}` : undefined,
+          }
+        }
+
+        const nextAttachments = [...attachments, ...newAttachments]
+        const nextPrimaryAttachmentId = primaryAttachmentId ?? newAttachments[0]?.id ?? attachments[0]?.id ?? null
         const saved = saveNote(
           {
-            title: title.trim() || stripExtension(asset.name) || getVaultItemLabel(getVaultItemTypeFromMime(asset.mimeType ?? "application/octet-stream")),
-            body,
+            id: nextNoteId,
+            title:
+              titleTrimmed ||
+              stripExtension(pickedAssets[0]?.name) ||
+              getVaultItemLabel(nextLockedType),
+            body: "",
             classification,
-            itemType: getVaultItemTypeFromMime(asset.mimeType ?? "application/octet-stream"),
+            itemType: nextLockedType,
             deletedAt,
-            vaultId,
-            attachments: [],
-            primaryAttachmentId: null,
+            vaultId: nextVaultId,
+            attachments: nextAttachments,
+            primaryAttachmentId: nextPrimaryAttachmentId,
             voiceDurationMs: null,
           },
           vmk,
+          { suppressSync: true },
         )
-        activeNoteId = saved.id
-        setIsExisting(true)
+
         hydrateFromNote(saved)
-        navigation.replace("VaultNote", { noteId: saved.id })
-      }
+        setAttachmentStates((prev) => ({ ...prev, ...nextAttachmentStates }))
+        setIsExisting(true)
+        setError(null)
 
-      const nextType = getVaultItemTypeFromMime(asset.mimeType ?? "application/octet-stream")
-      const attachmentKey = vaultId ? await getRemoteVaultKey(vaultId) : vmk
-      if (!attachmentKey) {
-        setError("Missing attachment key for this item")
-        return
-      }
+        if (saved.vaultId && keyContext.syncKey) {
+          await syncSavedAttachmentNote(saved, queuedBlobs, keyContext.syncKey)
+        }
 
-      const attId = primaryAttachmentId && itemType === nextType ? primaryAttachmentId : generateAttachmentId()
-      const mime = asset.mimeType ?? "application/octet-stream"
-      const blobBytes = buildAttachmentBlobBytes({
-        rvk: attachmentKey,
-        noteId: activeNoteId,
-        attId,
-        fileBytes,
-        filename: asset.name ?? null,
-        mime,
-      })
-
-      const record: NoteAttachment = {
-        id: attId,
-        filename: asset.name ?? null,
-        mime,
-        sizeBytes: fileBytes.length,
-        sha256: sha256Hex(blobBytes),
-        blobId: buildAttachmentBlobId(activeNoteId, attId),
-        createdAt: new Date().toISOString(),
-      }
-
-      await writeEncryptedAttachment(attachmentScope, attId, blobBytes)
-
-      const nextAttachments = upsertAttachment(attachments, record)
-      const saved = saveNote(
-        {
-          id: activeNoteId,
-          title: title.trim() || stripExtension(asset.name) || getVaultItemLabel(nextType),
-          body: nextType === "note" ? body : "",
-          classification,
-          itemType: nextType,
-          deletedAt,
-          vaultId,
-          attachments: nextAttachments,
-          primaryAttachmentId: attId,
-          voiceDurationMs: nextType === "voice" ? null : voiceDurationMs,
-        },
-        vmk,
-        { suppressSync: true },
-      )
-
-      hydrateFromNote(saved)
-      setAttachmentStates((prev) => ({
-        ...prev,
-        [attId]: {
-          status: "ready",
-          localUri: asset.uri,
-          mime,
-          filename: asset.name ?? undefined,
-          dataUri: mime.startsWith("image/") ? `data:${mime};base64,${fileBase64}` : undefined,
-        },
-      }))
-
-      if (saved.vaultId) {
-        await syncSavedAttachmentNote(saved, blobBytes, attId, attachmentKey)
+        if (!noteId) {
+          navigation.replace("VaultNote", {
+            noteId: saved.id,
+            attachmentId: nextPrimaryAttachmentId ?? undefined,
+          })
+        }
+      } catch (err) {
+        const message =
+          err instanceof AttachmentCacheUnavailableError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Attachment import failed"
+        setError(message)
       }
     },
     [
-      attachmentScope,
       attachments,
-      body,
       canEdit,
       classification,
       deletedAt,
       hydrateFromNote,
-      itemType,
+      isFileFirstItem,
+      lockedAttachmentType,
       navigation,
       noteId,
       primaryAttachmentId,
+      resolveAttachmentKeyContext,
       syncSavedAttachmentNote,
-      title,
-      upsertAttachment,
+      titleTrimmed,
       vaultId,
-      voiceDurationMs,
     ],
   )
 
   const persistVoiceRecording = useCallback(
     async (uri: string, durationMs: number) => {
-      const vmk = vaultSession.getKey()
-      if (!vmk) return
+      try {
+        const vmk = vaultSession.getKey()
+        if (!vmk) return
 
-      const fileBase64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: fileSystemCompat.EncodingType.Base64,
-      })
-      const fileBytes = base64ToBytes(fileBase64)
-      if (fileBytes.length > MAX_ATTACHMENT_BYTES) {
-        setError(`Recording exceeds ${formatBytes(MAX_ATTACHMENT_BYTES)} limit`)
-        return
-      }
+        const fileBase64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: fileSystemCompat.EncodingType.Base64,
+        })
+        const fileBytes = base64ToBytes(fileBase64)
+        if (fileBytes.length > MAX_ATTACHMENT_BYTES) {
+          setError(`Recording exceeds ${formatBytes(MAX_ATTACHMENT_BYTES)} limit`)
+          return
+        }
 
-      let activeNoteId = noteId
-      if (!activeNoteId) {
-        const draft = saveNote(
+        let activeNoteId = noteId
+        if (!activeNoteId) {
+          const draft = saveNote(
+            {
+              title: title.trim() || "Voice recording",
+              body: "",
+              classification,
+              itemType: "voice",
+              deletedAt,
+              vaultId,
+              attachments: [],
+              primaryAttachmentId: null,
+              voiceDurationMs: durationMs,
+            },
+            vmk,
+          )
+          activeNoteId = draft.id
+          setIsExisting(true)
+          hydrateFromNote(draft)
+          navigation.replace("VaultNote", { noteId: draft.id, createType: "voice" })
+        }
+
+        const keyContext = await resolveAttachmentKeyContext(vaultId, {
+          preferRemote: Boolean(noteId && isExisting && vaultId),
+        })
+        if (!keyContext?.key) {
+          setError("Missing attachment key for voice item")
+          return
+        }
+
+        const attId = primaryAttachmentId ?? generateAttachmentId()
+        const filename = `${(title.trim() || "voice-recording").replace(/[\\/]/g, "_")}.m4a`
+        const blobBytes = buildAttachmentBlobBytes({
+          rvk: keyContext.key,
+          noteId: activeNoteId,
+          attId,
+          fileBytes,
+          filename,
+          mime: VOICE_MIME,
+        })
+
+        const record: NoteAttachment = {
+          id: attId,
+          filename,
+          mime: VOICE_MIME,
+          sizeBytes: fileBytes.length,
+          sha256: sha256Hex(blobBytes),
+          blobId: buildAttachmentBlobId(activeNoteId, attId),
+          createdAt: new Date().toISOString(),
+          durationMs,
+        }
+
+        await writeEncryptedAttachment(keyContext.scope, attId, blobBytes)
+
+        const saved = saveNote(
           {
+            id: activeNoteId,
             title: title.trim() || "Voice recording",
             body: "",
             classification,
             itemType: "voice",
+            primaryAttachmentId: attId,
+            voiceDurationMs: durationMs,
             deletedAt,
             vaultId,
-            attachments: [],
-            primaryAttachmentId: null,
-            voiceDurationMs: durationMs,
+            attachments: upsertAttachment(attachments, record),
           },
           vmk,
+          { suppressSync: true },
         )
-        activeNoteId = draft.id
-        setIsExisting(true)
-        hydrateFromNote(draft)
-        navigation.replace("VaultNote", { noteId: draft.id, createType: "voice" })
-      }
 
-      const attachmentKey = vaultId ? await getRemoteVaultKey(vaultId) : vmk
-      if (!attachmentKey) {
-        setError("Missing attachment key for voice item")
-        return
-      }
+        hydrateFromNote(saved)
+        setAttachmentStates((prev) => ({
+          ...prev,
+          [attId]: {
+            status: "ready",
+            localUri: uri,
+            mime: VOICE_MIME,
+            filename,
+            dataUri: `data:${VOICE_MIME};base64,${fileBase64}`,
+          },
+        }))
 
-      const attId = primaryAttachmentId ?? generateAttachmentId()
-      const filename = `${(title.trim() || "voice-recording").replace(/[\\/]/g, "_")}.m4a`
-      const blobBytes = buildAttachmentBlobBytes({
-        rvk: attachmentKey,
-        noteId: activeNoteId,
-        attId,
-        fileBytes,
-        filename,
-        mime: VOICE_MIME,
-      })
-
-      const record: NoteAttachment = {
-        id: attId,
-        filename,
-        mime: VOICE_MIME,
-        sizeBytes: fileBytes.length,
-        sha256: sha256Hex(blobBytes),
-        blobId: buildAttachmentBlobId(activeNoteId, attId),
-        createdAt: new Date().toISOString(),
-        durationMs,
-      }
-
-      await writeEncryptedAttachment(attachmentScope, attId, blobBytes)
-
-      const saved = saveNote(
-        {
-          id: activeNoteId,
-          title: title.trim() || "Voice recording",
-          body: "",
-          classification,
-          itemType: "voice",
-          primaryAttachmentId: attId,
-          voiceDurationMs: durationMs,
-          deletedAt,
-          vaultId,
-          attachments: upsertAttachment(attachments, record),
-        },
-        vmk,
-        { suppressSync: true },
-      )
-
-      hydrateFromNote(saved)
-      setAttachmentStates((prev) => ({
-        ...prev,
-        [attId]: {
-          status: "ready",
-          localUri: uri,
-          mime: VOICE_MIME,
-          filename,
-          dataUri: `data:${VOICE_MIME};base64,${fileBase64}`,
-        },
-      }))
-
-      if (saved.vaultId) {
-        await syncSavedAttachmentNote(saved, blobBytes, attId, attachmentKey)
+        if (saved.vaultId && keyContext.syncKey) {
+          await syncSavedAttachmentNote(saved, [{ attachmentId: attId, bytes: blobBytes }], keyContext.syncKey)
+        }
+      } catch (err) {
+        const message =
+          err instanceof AttachmentCacheUnavailableError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Voice attachment storage failed"
+        setError(message)
       }
     },
     [
-      attachmentScope,
       attachments,
       classification,
       deletedAt,
       hydrateFromNote,
+      isExisting,
       navigation,
       noteId,
       primaryAttachmentId,
+      resolveAttachmentKeyContext,
       syncSavedAttachmentNote,
       title,
       upsertAttachment,
@@ -843,6 +1032,85 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     }
   }, [resolveAttachment, selectedAttachment, voiceDurationMs])
 
+  const removeAttachment = useCallback(
+    async (attachment: NoteAttachment) => {
+      if (!canEdit) {
+        setError("Viewer role cannot modify this item")
+        return
+      }
+
+      const vmk = vaultSession.getKey()
+      if (!vmk) return
+
+      const nextAttachments = attachments.filter((item) => item.id !== attachment.id)
+      const nextPrimaryAttachmentId =
+        primaryAttachmentId === attachment.id ? nextAttachments[0]?.id ?? null : primaryAttachmentId
+      const nextActiveAttachmentId =
+        activeAttachmentId === attachment.id ? nextAttachments[0]?.id ?? null : activeAttachmentId
+
+      await deleteEncryptedAttachment(attachmentScope, attachment.id)
+      setAttachmentStates((prev) => {
+        const copy = { ...prev }
+        delete copy[attachment.id]
+        return copy
+      })
+
+      if (viewer.visible && selectedAttachment?.id === attachment.id) {
+        setViewer((prev) => ({ ...prev, visible: false }))
+      }
+
+      setAttachments(nextAttachments)
+      setPrimaryAttachmentId(nextPrimaryAttachmentId)
+      setActiveAttachmentId(nextActiveAttachmentId)
+      if (isVoiceItem) {
+        setVoiceDurationMs(nextAttachments[0]?.durationMs ?? null)
+      }
+
+      if (!noteId) return
+
+      const saved = saveNote(
+        {
+          id: noteId,
+          title: titleTrimmed,
+          body,
+          classification,
+          itemType,
+          deletedAt,
+          vaultId,
+          attachments: nextAttachments,
+          primaryAttachmentId: nextPrimaryAttachmentId,
+          voiceDurationMs: nextAttachments[0]?.durationMs ?? null,
+        },
+        vmk,
+        { suppressSync: true },
+      )
+
+      hydrateFromNote(saved)
+      if (saved.vaultId) {
+        await syncSavedNoteOnly(saved)
+      }
+    },
+    [
+      activeAttachmentId,
+      attachmentScope,
+      attachments,
+      body,
+      canEdit,
+      classification,
+      deletedAt,
+      hydrateFromNote,
+      isVoiceItem,
+      itemType,
+      noteId,
+      primaryAttachmentId,
+      selectedAttachment?.id,
+      syncSavedNoteOnly,
+      titleTrimmed,
+      vaultId,
+      viewer.visible,
+    ],
+  )
+
   useFocusEffect(
     useCallback(() => {
       if (!vaultSession.isUnlocked()) {
@@ -913,9 +1181,20 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     }
   }, [])
 
-  const selectedAttachmentState = selectedAttachment
-    ? attachmentStates[selectedAttachment.id] ?? { status: "idle" as const }
-    : null
+  const attachmentSectionSubtitle = useMemo(() => {
+    if (attachments.length === 0) {
+      return isFileFirstItem
+        ? `No ${getFamilyLabel(effectiveItemType)} attachments yet`
+        : "No attachments yet"
+    }
+    return `${attachments.length} secure ${getFamilyLabel(effectiveItemType)} attachment${attachments.length === 1 ? "" : "s"}`
+  }, [attachments.length, effectiveItemType, isFileFirstItem])
+
+  const attachmentActionLabel = useMemo(() => {
+    if (effectiveItemType === "image") return "Add Image"
+    if (effectiveItemType === "pdf") return "Add PDF"
+    return "Add Document"
+  }, [effectiveItemType])
 
   const heroSubtitle = useMemo(() => {
     if (deletedAt) return "Item is currently in trash"
@@ -959,82 +1238,125 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           </View>
         ) : null}
 
-        <GlassSection
-          themed={themed}
-          title={isVoiceItem ? "Voice Details" : isFileFirstItem ? "Item Details" : "Content"}
-          subtitle={isVoiceItem ? "Name and secure audio metadata" : isFileFirstItem ? "Title and protected file information" : "Title and note body"}
-          icon={isVoiceItem ? <Mic size={14} color="#FFC8F3" /> : <NotebookPen size={14} color="#FFC8F3" />}
-        >
-          <IconTextInput
+        {!isFileFirstItem && !isVoiceItem ? (
+          <GlassSection
             themed={themed}
-            theme={theme}
-            placeholder="Title"
-            value={title}
-            onChangeText={setTitle}
-            icon={<NotebookPen size={15} color="rgba(255,255,255,0.75)" />}
-            multiline={false}
-            inputStyle={themed($titleInput)}
-          />
+            title="Content"
+            subtitle="Title and note body"
+            icon={<NotebookPen size={14} color="#FFC8F3" />}
+          >
+            <IconTextInput
+              themed={themed}
+              theme={theme}
+              placeholder="Title"
+              value={title}
+              onChangeText={setTitle}
+              icon={<NotebookPen size={15} color="rgba(255,255,255,0.75)" />}
+              multiline={false}
+              inputStyle={themed($titleInput)}
+            />
 
-          {!isFileFirstItem && !isVoiceItem ? (
-            <>
-              <View style={themed($inputGap)} />
-              <IconTextInput
-                themed={themed}
-                theme={theme}
-                placeholder="Write a note..."
-                value={body}
-                onChangeText={setBody}
-                icon={<FileText size={15} color="rgba(255,255,255,0.75)" />}
-                multiline
-                inputStyle={themed($bodyInput)}
-                containerStyle={themed($bodyInputWrap)}
-              />
-            </>
-          ) : null}
-        </GlassSection>
+            <View style={themed($inputGap)} />
 
-        {isFileFirstItem && selectedAttachment ? (
-          <PreviewCard
-            themed={themed}
-            itemType={effectiveItemType}
-            attachment={selectedAttachment}
-            state={selectedAttachmentState}
-            onOpen={() => void openSelectedViewer()}
-            onLoad={() => void resolveAttachment(selectedAttachment)}
-          />
+            <IconTextInput
+              themed={themed}
+              theme={theme}
+              placeholder="Write a note..."
+              value={body}
+              onChangeText={setBody}
+              icon={<FileText size={15} color="rgba(255,255,255,0.75)" />}
+              multiline
+              inputStyle={themed($bodyInput)}
+              containerStyle={themed($bodyInputWrap)}
+            />
+          </GlassSection>
         ) : null}
 
         {isVoiceItem ? (
-          <VoiceStudioCard
-            themed={themed}
-            pulseStyle={pulseStyle}
-            isRecording={isRecording}
-            isRecordingPaused={isRecordingPaused}
-            isPlaying={isPlayingVoice}
-            durationLabel={formatDuration(recordingDurationMs || voiceDurationMs || 0)}
-            playbackLabel={formatDuration(playbackPositionMs)}
-            canRecord={canEdit}
-            hasVoice={!!selectedAttachment}
-            onStartRecord={() => void startRecording()}
-            onPauseRecord={() => void pauseOrResumeRecording()}
-            onStopRecord={() => void stopRecording()}
-            onPlayPause={() => void playOrPauseVoice()}
-            onStopPlayback={() => void stopVoicePlayback()}
-            onExport={() => void exportCurrentItem()}
-          />
+          <>
+            <GlassSection
+              themed={themed}
+              title="Voice Name"
+              subtitle="Optional title used as the secure item name"
+              icon={<NotebookPen size={14} color="#FFC8F3" />}
+            >
+              <IconTextInput
+                themed={themed}
+                theme={theme}
+                placeholder="Voice item title"
+                value={title}
+                onChangeText={setTitle}
+                icon={<NotebookPen size={15} color="rgba(255,255,255,0.75)" />}
+                multiline={false}
+                inputStyle={themed($titleInput)}
+              />
+            </GlassSection>
+
+            <VoiceStudioCard
+              themed={themed}
+              title={titleTrimmed || "Voice Studio"}
+              pulseStyle={pulseStyle}
+              isRecording={isRecording}
+              isRecordingPaused={isRecordingPaused}
+              isPlaying={isPlayingVoice}
+              durationLabel={formatDuration(recordingDurationMs || voiceDurationMs || 0)}
+              playbackLabel={formatDuration(playbackPositionMs)}
+              canRecord={canEdit}
+              hasVoice={!!selectedAttachment}
+              onStartRecord={() => void startRecording()}
+              onPauseRecord={() => void pauseOrResumeRecording()}
+              onStopRecord={() => void stopRecording()}
+              onPlayPause={() => void playOrPauseVoice()}
+              onStopPlayback={() => void stopVoicePlayback()}
+              onExport={() => void exportCurrentItem()}
+            />
+          </>
         ) : null}
 
         {isFileFirstItem ? (
           <GlassSection
             themed={themed}
             title="Attachments"
-            subtitle={attachments.length === 0 ? "No secure file attached yet" : `${attachments.length} secure attachment${attachments.length === 1 ? "" : "s"}`}
+            subtitle={attachmentSectionSubtitle}
             icon={<Paperclip size={14} color="#FFC8F3" />}
-            rightSlot={<Text style={themed($tinyMetaText)}>{canEdit ? "Tap a row to switch preview" : "Viewer mode"}</Text>}
+            rightSlot={<Text style={themed($tinyMetaText)}>{canEdit ? "Secure file surface" : "Viewer mode"}</Text>}
           >
+            <View style={themed($fileTitleBar)}>
+              <IconTextInput
+                themed={themed}
+                theme={theme}
+                placeholder="Item title"
+                value={title}
+                onChangeText={setTitle}
+                icon={<NotebookPen size={15} color="rgba(255,255,255,0.75)" />}
+                multiline={false}
+                inputStyle={themed($titleInput)}
+                containerStyle={themed($compactInput)}
+              />
+              <Text style={themed($tinyMetaText)}>
+                Only {getFamilyLabel(effectiveItemType)} files are allowed in this secure item.
+              </Text>
+            </View>
+
             {attachments.length === 0 ? (
               <EmptyAttachmentState themed={themed} label="Import an image, PDF, or document to secure it inside the vault." />
+            ) : effectiveItemType === "image" ? (
+              <View style={themed($imageGrid)}>
+                {attachments.map((attachment) => (
+                  <ImageAttachmentCard
+                    key={attachment.id}
+                    themed={themed}
+                    att={attachment}
+                    state={attachmentStates[attachment.id] ?? { status: "idle" }}
+                    selected={attachment.id === selectedAttachment?.id}
+                    onOpen={() => void openAttachmentViewer(attachment)}
+                    onPrepare={() => void resolveAttachment(attachment)}
+                    onSelect={() => setActiveAttachmentId(attachment.id)}
+                    onRemove={() => void removeAttachment(attachment)}
+                    canEdit={canEdit}
+                  />
+                ))}
+              </View>
             ) : (
               <View style={themed($attachmentList)}>
                 {attachments.map((attachment) => (
@@ -1045,8 +1367,10 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
                     state={attachmentStates[attachment.id] ?? { status: "idle" }}
                     selected={attachment.id === selectedAttachment?.id}
                     onSelect={() => setActiveAttachmentId(attachment.id)}
-                    onOpen={() => void openSelectedViewer()}
+                    onOpen={() => void openAttachmentViewer(attachment)}
                     onDownload={() => void resolveAttachment(attachment)}
+                    onRemove={() => void removeAttachment(attachment)}
+                    canEdit={canEdit}
                   />
                 ))}
               </View>
@@ -1055,23 +1379,25 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
             <View style={themed($quickActionGrid)}>
               <MiniIconButton
                 themed={themed}
-                label="Image"
-                icon={<LucideImage size={14} color="#FFE8FD" />}
-                onPress={() => void handleImportAttachment("image")}
-                disabled={!canEdit}
-              />
-              <MiniIconButton
-                themed={themed}
-                label="PDF"
-                icon={<FileText size={14} color="#FFE8FD" />}
-                onPress={() => void handleImportAttachment("pdf")}
-                disabled={!canEdit}
-              />
-              <MiniIconButton
-                themed={themed}
-                label="Document"
-                icon={<Upload size={14} color="#FFE8FD" />}
-                onPress={() => void handleImportAttachment("file")}
+                label={attachmentActionLabel}
+                icon={
+                  effectiveItemType === "image" ? (
+                    <LucideImage size={14} color="#FFE8FD" />
+                  ) : effectiveItemType === "pdf" ? (
+                    <FileText size={14} color="#FFE8FD" />
+                  ) : (
+                    <Upload size={14} color="#FFE8FD" />
+                  )
+                }
+                onPress={() =>
+                  void handleImportAttachment(
+                    effectiveItemType === "image"
+                      ? "image"
+                      : effectiveItemType === "pdf"
+                        ? "pdf"
+                        : "file",
+                  )
+                }
                 disabled={!canEdit}
               />
             </View>
@@ -1120,6 +1446,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           icon={<Save size={15} color="#1D0820" />}
           onPress={handleSave}
           themed={themed}
+          disabled={!canSaveItem}
         />
 
         {isExisting && !deletedAt ? (
@@ -1164,472 +1491,13 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         sourceUri={viewer.sourceUri}
         dataUri={viewer.dataUri}
         html={viewer.html}
+        imageItems={viewer.imageItems}
+        initialImageIndex={viewer.initialImageIndex}
         fallbackMessage={viewer.fallbackMessage}
         onClose={() => setViewer((prev) => ({ ...prev, visible: false }))}
         onExport={() => void exportCurrentItem()}
       />
     </Screen>
-  )
-}
-
-function HeroCard(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  title: string
-  subtitle: string
-  itemType: VaultItemType
-  role: string
-  canExport: boolean
-  onExport: () => void
-  icon: React.ReactNode
-}) {
-  const { themed, title, subtitle, itemType, role, canExport, onExport, icon } = props
-  return (
-    <View style={themed($heroCard)}>
-      <View style={themed($heroTopRow)}>
-        <View style={themed($heroBadge)}>
-          <Shield size={13} color="#FFD8FA" />
-          <Text style={themed($heroBadgeText)}>{itemType.toUpperCase()}</Text>
-        </View>
-        <View style={themed($heroControls)}>
-          <View style={themed($rolePill)}>
-            <LockKeyhole size={12} color="#FCE7FF" />
-            <Text style={themed($rolePillText)}>{role}</Text>
-          </View>
-          <Pressable onPress={onExport} disabled={!canExport} style={themed($downloadPill)}>
-            <Download size={14} color="#0d0a14" />
-            <Text style={themed($downloadPillText)}>Export</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <View style={themed($heroTitleRow)}>
-        <View style={themed($heroIconWrap)}>{icon}</View>
-        <View style={themed($heroTextWrap)}>
-          <Text style={themed($heroTitle)}>{title}</Text>
-          <Text style={themed($heroSubtitle)}>{subtitle}</Text>
-        </View>
-      </View>
-    </View>
-  )
-}
-
-function GlassSection(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  title: string
-  subtitle?: string
-  icon?: React.ReactNode
-  rightSlot?: React.ReactNode
-  children: React.ReactNode
-}) {
-  const { themed, title, subtitle, icon, rightSlot, children } = props
-  return (
-    <View style={themed($sectionCard)}>
-      <View style={themed($sectionHeader)}>
-        <View style={themed($sectionHeaderLeft)}>
-          {icon ? <View style={themed($sectionIconWrap)}>{icon}</View> : null}
-          <View style={themed($sectionHeaderText)}>
-            <Text style={themed($sectionTitle)}>{title}</Text>
-            {subtitle ? <Text style={themed($sectionSubtitle)}>{subtitle}</Text> : null}
-          </View>
-        </View>
-        {rightSlot}
-      </View>
-      {children}
-    </View>
-  )
-}
-
-function IconTextInput(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  theme: ReturnType<typeof useAppTheme>["theme"]
-  placeholder: string
-  value: string
-  onChangeText: (value: string) => void
-  icon: React.ReactNode
-  multiline?: boolean
-  inputStyle?: TextStyle
-  containerStyle?: ViewStyle
-}) {
-  const { themed, theme, icon, inputStyle, containerStyle, multiline, ...rest } = props
-  return (
-    <View style={[themed($glassInput), containerStyle]}>
-      <View style={themed($glassInputIconWrap)}>{icon}</View>
-      <TextInput
-        {...rest}
-        multiline={multiline}
-        placeholderTextColor={theme.colors.textDim}
-        style={[themed($glassInputField), inputStyle]}
-        textAlignVertical={multiline ? "top" : "center"}
-      />
-    </View>
-  )
-}
-
-function GlassChip(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  label: string
-  selected?: boolean
-  onPress?: () => void
-}) {
-  const { themed, label, selected, onPress } = props
-  if (selected) {
-    return (
-      <Pressable onPress={onPress} style={themed($chipPressable)}>
-        <LinearGradient
-          colors={["#FF8AE2", "#D85CFF", "#A857FF"]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={themed($chipSelected)}
-        >
-          <Text style={themed($chipTextSelected)}>{label}</Text>
-        </LinearGradient>
-      </Pressable>
-    )
-  }
-  return (
-    <Pressable onPress={onPress} style={themed($chip)}>
-      <Text style={themed($chipText)}>{label}</Text>
-    </Pressable>
-  )
-}
-
-function MetaChip(props: { themed: ReturnType<typeof useAppTheme>["themed"]; label: string }) {
-  const { themed, label } = props
-  return (
-    <View style={themed($metaChip)}>
-      <Text style={themed($metaChipText)} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  )
-}
-
-function PreviewCard(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  itemType: VaultItemType
-  attachment: NoteAttachment
-  state: AttachmentUiState | null
-  onOpen: () => void
-  onLoad: () => void
-}) {
-  const { themed, itemType, attachment, state, onOpen, onLoad } = props
-  const isReady = state?.status === "ready"
-  const canPreviewImage = itemType === "image" && !!state?.dataUri
-
-  return (
-    <Pressable onPress={isReady ? onOpen : onLoad} style={themed($previewCard)}>
-      {canPreviewImage ? (
-        <Image source={{ uri: state.dataUri }} style={themed($previewImage)} />
-      ) : (
-        <LinearGradient
-          colors={["rgba(255,255,255,0.07)", "rgba(255,255,255,0.03)"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={themed($previewFallback)}
-        >
-          <View style={themed($previewIconWrap)}>
-            {itemType === "pdf" ? (
-              <FileText size={20} color="#fff" />
-            ) : itemType === "doc" ? (
-              <Paperclip size={20} color="#fff" />
-            ) : (
-              <LucideImage size={20} color="#fff" />
-            )}
-          </View>
-          <View style={themed($previewCopy)}>
-            <Text style={themed($previewTitle)}>{attachment.filename ?? getVaultItemLabel(itemType)}</Text>
-            <Text style={themed($previewMeta)}>
-              {state?.status === "downloading"
-                ? "Decrypting secure preview..."
-                : itemType === "pdf"
-                  ? "Tap to open secure PDF viewer"
-                  : itemType === "doc"
-                    ? "Tap to inspect secure document"
-                    : "Tap to load secure preview"}
-            </Text>
-          </View>
-        </LinearGradient>
-      )}
-      <View style={themed($previewFooter)}>
-        <Text style={themed($previewFooterText)}>
-          {isReady ? "Open secure viewer" : "Load secure preview"}
-        </Text>
-        <Ionicons name="expand-outline" size={18} color="#fff" />
-      </View>
-    </Pressable>
-  )
-}
-
-function EmptyAttachmentState(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  label: string
-}) {
-  const { themed, label } = props
-  return (
-    <View style={themed($emptyAttachmentState)}>
-      <View style={themed($emptyAttachmentIconWrap)}>
-        <Paperclip size={18} color="#F7D3FF" />
-      </View>
-      <Text style={themed($emptyAttachmentTitle)}>No attachments yet</Text>
-      <Text style={themed($emptyAttachmentSubtitle)}>{label}</Text>
-    </View>
-  )
-}
-
-function MiniIconButton(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  label: string
-  icon: React.ReactNode
-  onPress?: () => void
-  disabled?: boolean
-}) {
-  const { themed, label, icon, onPress, disabled } = props
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={themed([$miniActionButton, disabled && $disabledButton])}
-    >
-      <View style={themed($miniActionIconWrap)}>{icon}</View>
-      <Text style={themed($miniActionText)}>{label}</Text>
-    </Pressable>
-  )
-}
-
-function GradientPrimaryButton(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  label: string
-  icon?: React.ReactNode
-  onPress?: () => void
-}) {
-  const { themed, label, onPress } = props
-  return (
-    <Pressable onPress={onPress} style={themed($buttonBlock)}>
-      <LinearGradient
-        colors={["#FFA2EA", "#F06DFF", "#BF69FF"]}
-        start={{ x: 0, y: 0.4 }}
-        end={{ x: 1, y: 0.7 }}
-        style={themed($primaryButton)}
-      >
-        <View style={themed($primaryButtonContent)}>
-          <Text style={themed($primaryButtonText)}>{label}</Text>
-        </View>
-      </LinearGradient>
-    </Pressable>
-  )
-}
-
-function GhostButton(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  label: string
-  icon?: React.ReactNode
-  onPress?: () => void
-}) {
-  const { themed, label, icon, onPress } = props
-  return (
-    <Pressable onPress={onPress} style={themed($ghostButton)}>
-      <View style={themed($ghostButtonContent)}>
-        {icon}
-        <Text style={themed($ghostButtonText)}>{label}</Text>
-      </View>
-    </Pressable>
-  )
-}
-
-function GhostDangerButton(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  label: string
-  icon?: React.ReactNode
-  onPress?: () => void
-}) {
-  const { themed, label, icon, onPress } = props
-  return (
-    <Pressable onPress={onPress} style={themed($dangerButton)}>
-      <View style={themed($ghostButtonContent)}>
-        {icon}
-        <Text style={themed($dangerButtonText)}>{label}</Text>
-      </View>
-    </Pressable>
-  )
-}
-
-function AttachmentRow(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  att: NoteAttachment
-  state: AttachmentUiState
-  selected?: boolean
-  onSelect: () => void
-  onOpen: () => void
-  onDownload: () => void
-}) {
-  const { themed, att, state, selected, onSelect, onOpen, onDownload } = props
-  const itemType = getVaultItemTypeFromMime(att.mime)
-
-  return (
-    <Pressable onPress={onSelect} style={themed([$attachmentCard, selected && $attachmentCardSelected])}>
-      {state.dataUri ? (
-        <Image source={{ uri: state.dataUri }} style={themed($attachmentImage)} />
-      ) : (
-        <View style={themed($attachmentPlaceholder)}>
-          {itemType === "image" ? (
-            <LucideImage size={18} color="#F5D8FF" />
-          ) : itemType === "pdf" ? (
-            <FileText size={18} color="#F5D8FF" />
-          ) : itemType === "voice" ? (
-            <Mic size={18} color="#F5D8FF" />
-          ) : (
-            <Paperclip size={18} color="#F5D8FF" />
-          )}
-        </View>
-      )}
-
-      <View style={themed($attachmentBody)}>
-        <Text numberOfLines={1} style={themed($attachmentName)}>
-          {att.filename ?? "Attachment"}
-        </Text>
-        <Text numberOfLines={1} style={themed($attachmentMeta)}>
-          {formatBytes(att.sizeBytes)} · {att.mime}
-        </Text>
-        {state.status === "corrupt" || state.status === "error" ? (
-          <Text style={themed($attachmentError)}>{state.error ?? "Unreadable attachment"}</Text>
-        ) : null}
-      </View>
-
-      <Pressable style={themed($attachmentButton)} onPress={state.status === "ready" ? onOpen : onDownload}>
-        <Text style={themed($attachmentButtonText)}>
-          {state.status === "downloading" ? "Loading..." : state.status === "ready" ? "Open" : "Get"}
-        </Text>
-      </Pressable>
-    </Pressable>
-  )
-}
-
-function VoiceStudioCard(props: {
-  themed: ReturnType<typeof useAppTheme>["themed"]
-  pulseStyle: ViewStyle
-  isRecording: boolean
-  isRecordingPaused: boolean
-  isPlaying: boolean
-  durationLabel: string
-  playbackLabel: string
-  canRecord: boolean
-  hasVoice: boolean
-  onStartRecord: () => void
-  onPauseRecord: () => void
-  onStopRecord: () => void
-  onPlayPause: () => void
-  onStopPlayback: () => void
-  onExport: () => void
-}) {
-  const {
-    themed,
-    pulseStyle,
-    isRecording,
-    isRecordingPaused,
-    isPlaying,
-    durationLabel,
-    playbackLabel,
-    canRecord,
-    hasVoice,
-    onStartRecord,
-    onPauseRecord,
-    onStopRecord,
-    onPlayPause,
-    onStopPlayback,
-    onExport,
-  } = props
-
-  return (
-    <View style={themed($voiceCard)}>
-      <View style={themed($voiceHeader)}>
-        <View>
-          <Text style={themed($voiceTitle)}>Voice Studio</Text>
-          <Text style={themed($voiceSubtitle)}>
-            {isRecording ? (isRecordingPaused ? "Recording paused" : "Recording live") : hasVoice ? "Encrypted playback ready" : "Create a secure voice item"}
-          </Text>
-        </View>
-        <View style={themed($voiceBadge)}>
-          <Mic size={14} color="#120913" />
-          <Text style={themed($voiceBadgeText)}>{durationLabel}</Text>
-        </View>
-      </View>
-
-      <View style={themed($voiceOrbShell)}>
-        <Animated.View style={[themed($voicePulseRing), pulseStyle]} />
-        <View style={themed($voiceOrbCore)}>
-          <Mic size={28} color="#fff" />
-        </View>
-      </View>
-
-      <View style={themed($waveRow)}>
-        {VOICE_BARS.map((height, index) => (
-          <View
-            key={index}
-            style={[
-              themed($waveBar),
-              {
-                height,
-                opacity: isRecording || isPlaying ? 1 : 0.45,
-              },
-            ]}
-          />
-        ))}
-      </View>
-
-      <View style={themed($voiceMetaRow)}>
-        <MetaChip themed={themed} label={`Duration ${durationLabel}`} />
-        <MetaChip themed={themed} label={`Playback ${playbackLabel}`} />
-      </View>
-
-      <View style={themed($voiceControls)}>
-        {!isRecording ? (
-          <MiniIconButton
-            themed={themed}
-            label="Record"
-            icon={<Mic size={14} color="#FFE8FD" />}
-            onPress={onStartRecord}
-            disabled={!canRecord}
-          />
-        ) : (
-          <>
-            <MiniIconButton
-              themed={themed}
-              label={isRecordingPaused ? "Resume" : "Pause"}
-              icon={<Ionicons name={isRecordingPaused ? "play" : "pause"} size={14} color="#FFE8FD" />}
-              onPress={onPauseRecord}
-            />
-            <MiniIconButton
-              themed={themed}
-              label="Stop"
-              icon={<Ionicons name="stop" size={14} color="#FFE8FD" />}
-              onPress={onStopRecord}
-            />
-          </>
-        )}
-
-        <MiniIconButton
-          themed={themed}
-          label={isPlaying ? "Pause" : "Play"}
-          icon={<Ionicons name={isPlaying ? "pause" : "play"} size={14} color="#FFE8FD" />}
-          onPress={onPlayPause}
-          disabled={!hasVoice}
-        />
-        <MiniIconButton
-          themed={themed}
-          label="Stop"
-          icon={<Ionicons name="square" size={14} color="#FFE8FD" />}
-          onPress={onStopPlayback}
-          disabled={!hasVoice}
-        />
-        <MiniIconButton
-          themed={themed}
-          label="Export"
-          icon={<Download size={14} color="#FFE8FD" />}
-          onPress={onExport}
-          disabled={!hasVoice}
-        />
-      </View>
-    </View>
   )
 }
 
@@ -1660,6 +1528,27 @@ function stripExtension(filename?: string | null): string {
   if (!filename) return ""
   const index = filename.lastIndexOf(".")
   return index > 0 ? filename.slice(0, index) : filename
+}
+
+function inferItemTypeFromNote(note: Note): VaultItemType {
+  if (note.itemType && note.itemType !== "note") return note.itemType
+  if ((note.attachments?.length ?? 0) > 0 && !(note.body ?? "").trim()) {
+    return getVaultItemTypeFromMime(note.attachments?.[0]?.mime ?? "application/octet-stream")
+  }
+  return note.itemType ?? "note"
+}
+
+function getFamilyLabel(itemType: VaultItemType): string {
+  if (itemType === "image") return "image"
+  if (itemType === "pdf") return "PDF"
+  if (itemType === "voice") return "voice"
+  return "document"
+}
+
+function generateVaultNoteId(): string {
+  const bytes = randomBytes(12)
+  const base64 = bytesToBase64(bytes)
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")
 }
 
 const VOICE_BARS = [18, 28, 36, 22, 42, 30, 18, 34, 24, 16]
@@ -1941,9 +1830,9 @@ const $metaChip: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   borderRadius: 999,
   paddingHorizontal: spacing.sm,
   paddingVertical: 6,
-  backgroundColor: "rgba(255,255,255,0.045)",
-  borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.08)",
+  backgroundColor: "rgba(17, 17, 17, 0.75)",
+  // borderWidth: 1,
+  // borderColor: "rgba(255,255,255,0.08)",
 })
 
 const $metaChipText: ThemedStyle<TextStyle> = () => ({
@@ -2016,6 +1905,14 @@ const $tinyMetaText: ThemedStyle<TextStyle> = () => ({
   fontSize: 11,
 })
 
+const $fileTitleBar: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $compactInput: ThemedStyle<ViewStyle> = () => ({
+  minHeight: 0,
+})
+
 const $emptyAttachmentState: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   alignItems: "center",
   justifyContent: "center",
@@ -2048,6 +1945,76 @@ const $emptyAttachmentSubtitle: ThemedStyle<TextStyle> = () => ({
 
 const $attachmentList: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
+})
+
+const $imageGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $imageTile: ThemedStyle<ViewStyle> = () => ({
+  width: "48%",
+  minHeight: 170,
+  borderRadius: 16,
+  overflow: "hidden",
+  backgroundColor: "rgba(255,255,255,0.045)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+})
+
+const $imageTileSelected: ThemedStyle<ViewStyle> = () => ({
+  borderColor: "rgba(255, 154, 219, 0.36)",
+})
+
+const $imageTilePreview: ThemedStyle<ImageStyle> = () => ({
+  width: "100%",
+  height: 118,
+})
+
+const $imageTilePlaceholder: ThemedStyle<ViewStyle> = () => ({
+  width: "100%",
+  height: 118,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(255,255,255,0.08)",
+  gap: 6,
+})
+
+const $imageTileHint: ThemedStyle<TextStyle> = () => ({
+  color: "rgba(228,227,234,0.72)",
+  fontSize: 11,
+})
+
+const $imageTileFooter: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingHorizontal: spacing.xs,
+  paddingVertical: spacing.xs,
+  gap: 3,
+})
+
+const $imageTileTitle: ThemedStyle<TextStyle> = () => ({
+  color: "#fff",
+  fontWeight: "700",
+  fontSize: 12,
+})
+
+const $imageTileMeta: ThemedStyle<TextStyle> = () => ({
+  color: "rgba(228,227,234,0.66)",
+  fontSize: 10,
+})
+
+const $imageTileRemove: ThemedStyle<ViewStyle> = () => ({
+  position: "absolute",
+  top: 8,
+  right: 8,
+  width: 26,
+  height: 26,
+  borderRadius: 13,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(10,10,16,0.72)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.12)",
 })
 
 const $attachmentCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -2114,6 +2081,17 @@ const $attachmentButtonText: ThemedStyle<TextStyle> = () => ({
   color: "#fff",
   fontSize: 11,
   fontWeight: "700",
+})
+
+const $attachmentRemoveButton: ThemedStyle<ViewStyle> = () => ({
+  width: 34,
+  height: 34,
+  borderRadius: 10,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(255, 110, 148, 0.08)",
+  borderWidth: 1,
+  borderColor: "rgba(255, 110, 148, 0.18)",
 })
 
 const $quickActionGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({

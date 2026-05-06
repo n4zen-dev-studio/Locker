@@ -841,9 +841,9 @@ function SecurityTileTint({
       line: "rgba(255,210,210,0.52)",
     },
     accent: {
-      edgeA: "#8B4DFF",
-      edgeB: "#62237c",
-      edgeC: "#4a2184",
+      edgeA: "#d177b0",
+      edgeB: "#af2766",
+      edgeC: "#842156",
       line: "rgba(235,216,255,0.55)",
     },
     violet: {
