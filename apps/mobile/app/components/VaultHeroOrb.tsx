@@ -109,7 +109,7 @@ const ORB_THEMES: Record<
     // halo: "rgba(81, 36, 65, 0.91)",
     shellTop: "#FF4DBA",
     shellBottom: "#050209",
-    glow: "#FFF7FD",
+    glow: "#ffffff",
     glowSoft: "#FF9ADB",
     icon: "#FFF0FA",
     ring: "rgba(136, 110, 126, 0.82)",
@@ -454,18 +454,19 @@ function SatelliteOrb({
         >
           <LinearGradient
             colors={[
-              "rgba(255, 255, 255, 0.12)",
-              "rgba(255, 255, 255, 0.01)",
+              "rgba(241, 241, 241, 0.5)",
+              "rgba(255, 255, 255, 0.003)",
               "rgba(0, 0, 0, 0.12)",
             ]}
             start={{ x: 0.15, y: 0.08 }}
             end={{ x: 0.9, y: 1 }}
             style={styles.satelliteShell}
           >
+            </LinearGradient>
             <LinearGradient
               colors={[palette.shellTop, palette.shellBottom]}
-              start={{ x: 0.18, y: 0.14 }}
-              end={{ x: 0.82, y: 1 }}
+              start={{ x: 0.28, y: 0.40 }}
+              end={{ x: 0.72, y: 1 }}
               style={styles.satelliteCore}
             >
               <AnimatedView
@@ -478,9 +479,9 @@ function SatelliteOrb({
                 <View style={styles.satelliteTopHighlight} />
               </AnimatedView>
 
-              <View style={styles.satelliteBlobWrap}>
+              {/* <View style={styles.satelliteBlobWrap}>
                 <GlowBlob size={70} color={palette.glow} opacity={0.3} />
-              </View>
+              </View> */}
 
               <AnimatedView style={iconUprightStyle}>
                 <MaterialCommunityIcons
@@ -490,7 +491,7 @@ function SatelliteOrb({
                 />
               </AnimatedView>
             </LinearGradient>
-          </LinearGradient>
+          
         </View>
       </AnimatedView>
     </AnimatedPressable>
@@ -567,7 +568,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
                   cy="30%"
                   r="75%"
                 >
-                  <Stop offset="0%" stopColor="rgba(110, 19, 19, 0.2)" />
+                  <Stop offset="0%" stopColor="rgba(105, 19, 110, 0.2)" />
                   <Stop offset="35%" stopColor="rgba(36, 19, 19, 0.08)" />
                   <Stop offset="100%" stopColor="rgba(60, 26, 26, 0)" />
                 </SvgRadialGradient>
@@ -829,7 +830,10 @@ const styles = StyleSheet.create({
   satelliteShell: {
     flex: 1,
     borderRadius: SATELLITE_RADIUS,
-    padding: 3,
+    // padding: 1.5,
+     zIndex: 1,
+  ...StyleSheet.absoluteFillObject,
+    opacity: 0.7
   },
   satelliteCore: {
     flex: 1,
@@ -837,6 +841,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 0,
+  ...StyleSheet.absoluteFillObject, 
+  margin: 2,
+  opacity: 0.98
+
   },
   satelliteHighlightOverlay: {
     ...StyleSheet.absoluteFillObject,

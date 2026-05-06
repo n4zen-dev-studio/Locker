@@ -12,6 +12,7 @@ import {
   AppState,
   Dimensions,
   InteractionManager,
+  LayoutChangeEvent,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -83,6 +84,18 @@ function logVaultHome(message: string, meta?: Record<string, unknown>) {
   console.log(`[VaultHome] ${message}`, meta ?? "");
 }
 
+type VaultHomeSyncStatus = ReturnType<typeof getSyncStatus>;
+
+function syncStatusEqual(left: VaultHomeSyncStatus, right: VaultHomeSyncStatus) {
+  return (
+    left.state === right.state &&
+    left.queueSize === right.queueSize &&
+    left.lastSyncAt === right.lastSyncAt &&
+    left.lastError === right.lastError &&
+    left.lastErrors === right.lastErrors
+  );
+}
+
 function enabledVaultListsEqual(
   left: ReturnType<typeof listRemoteVaults>,
   right: ReturnType<typeof listRemoteVaults>,
@@ -144,6 +157,20 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
     const shouldAnimateIntro = useSessionIntroAnimation(
       "vault-home-intro",
       !reducedMotion,
+    );
+    const setSyncStatusIfChanged = useCallback(
+      (next: VaultHomeSyncStatus, source: string) => {
+        setSyncStatus((current) => {
+          if (syncStatusEqual(current, next)) return current;
+          logVaultHome("sync status changed", {
+            source,
+            state: next.state,
+            queueSize: next.queueSize,
+          });
+          return next;
+        });
+      },
+      [],
     );
 
     const refreshActiveVault = useCallback(() => {
@@ -305,11 +332,14 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
       if (!isFocused) return;
 
       const timer = setInterval(() => {
-        setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
+        setSyncStatusIfChanged(
+          getSyncStatus(activeVaultId ?? undefined),
+          "poll",
+        );
       }, 2000);
 
       return () => clearInterval(timer);
-    }, [activeVaultId, isFocused]);
+    }, [activeVaultId, isFocused, setSyncStatusIfChanged]);
 
     const syncReason = useMemo(() => {
       if (!activeVaultId) return "Select a remote vault";
@@ -319,7 +349,7 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
       return null;
     }, [activeVaultId, rvkPresent, tokenPresent, unlocked]);
 
-    const handleSyncNow = async () => {
+    const handleSyncNow = useCallback(async () => {
       if (syncReason) return;
 
       setError(null);
@@ -337,18 +367,21 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
         setError(err instanceof Error ? err.message : "Sync failed");
       } finally {
         setRefreshing(false);
-        setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
+        setSyncStatusIfChanged(
+          getSyncStatus(activeVaultId ?? undefined),
+          "manual_sync",
+        );
       }
-    };
+    }, [activeVaultId, refreshNotes, setSyncStatusIfChanged, syncReason]);
 
-    const handleLock = () => {
+    const handleLock = useCallback(() => {
       vaultSession.clear();
-    };
+    }, []);
 
-    const handleDisablePasskey = async () => {
+    const handleDisablePasskey = useCallback(async () => {
       await disablePasskeyDevOnly();
       refreshMeta().catch(() => undefined);
-    };
+    }, [refreshMeta]);
 
     const items = useMemo(() => {
       const noteMap = new Map<string, Note>();
@@ -522,9 +555,9 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
         refreshActiveVault();
         refreshNotes(true);
         refreshSyncPrereqs(vaultId).catch(() => undefined);
-        setSyncStatus(getSyncStatus(vaultId));
+        setSyncStatusIfChanged(getSyncStatus(vaultId), "vault_switch");
       },
-      [refreshActiveVault, refreshNotes, refreshSyncPrereqs],
+      [refreshActiveVault, refreshNotes, refreshSyncPrereqs, setSyncStatusIfChanged],
     );
 
     const handleScrollToVault = useCallback(() => {
@@ -541,16 +574,28 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
       });
     }, [vaultSectionY]);
 
+    const handleVaultSectionLayout = useCallback((event: LayoutChangeEvent) => {
+      const nextY = event.nativeEvent.layout.y;
+      setVaultSectionY((current) => (current === nextY ? current : nextY));
+    }, []);
+
+    const handleSortCycle = useCallback(() => {
+      setSort((current) => nextVaultSort(current));
+    }, []);
+
+    const handleClearQuery = useCallback(() => {
+      setQuery("");
+    }, []);
+
     return (
       <Screen
         preset="fixed"
         backgroundColor={theme.colors.vaultHub.vaultHubBg}
-        contentContainerStyle={themed([$screen, $insets])}
+        contentContainerStyle={themed([$screen, ])}
         keyboardAvoidingEnabled={false}
         systemBarStyle="light"
       >
         <VaultHubBackground active={isFocused} reducedMotion={true} />
-
         <ScrollView
           ref={scrollRef}
           bounces={false}
@@ -559,6 +604,7 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
           contentContainerStyle={themed([
             $content,
             { paddingBottom: spacing.xl * 3 + safeInsets.bottom },
+            $insets,
           ])}
           refreshControl={
             <RefreshControl
@@ -731,10 +777,10 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
             sort={sort}
             viewMode={viewMode}
             reducedMotion={true}
-            onLayout={(event) => setVaultSectionY(event.nativeEvent.layout.y)}
+            onLayout={handleVaultSectionLayout}
             onChangeFilter={setFilter}
             onChangeViewMode={setViewMode}
-            onSortCycle={() => setSort(nextVaultSort(sort))}
+            onSortCycle={handleSortCycle}
             onOpenItem={handleOpenVaultItem}
           >
             <View style={themed($searchSurface)}>
@@ -752,14 +798,14 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
                   size={18}
                   color={"#fff"}
                   style={{ paddingVertical: 5 }}
-                  onPress={() => setQuery("")}
+                  onPress={handleClearQuery}
                 />
               )}
             </View>
           </VaultSection>
 
           <GlowFab
-            onPress={() => handleScrollToTop()}
+            onPress={handleScrollToTop}
             style={{
               position: "absolute",
               left: 20,
