@@ -3,8 +3,9 @@ import { getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { vaultSession } from "@/locker/session"
 import { syncNow } from "./syncEngine"
+import { clearPendingUpdatesForVault } from "@/locker/bg/pendingUpdatesRepo"
 
-export type SyncReason = "app_active" | "note_change" | "manual" | "vault_switch"
+export type SyncReason = "app_active" | "note_change" | "manual" | "vault_switch" | "push"
 
 type SyncState = {
   syncing: boolean
@@ -73,6 +74,7 @@ async function runSync(vaultId: string, reason: SyncReason): Promise<any> {
     const result = await runPromise
     entry.state.lastRunAt = new Date().toISOString()
     entry.state.lastError = undefined
+    clearPendingUpdatesForVault(vaultId)
     return result
   } catch (err) {
     entry.state.lastRunAt = new Date().toISOString()

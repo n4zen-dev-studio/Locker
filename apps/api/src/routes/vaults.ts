@@ -7,6 +7,7 @@ import fs from "fs/promises"
 import path from "path"
 import { authMiddleware } from "../middleware/auth"
 import { recordAuditEvent } from "../db/audit"
+import { sendVaultChangedPush } from "../push/pushService"
 
 const vaultSchema = z.object({
   name: z.string().min(1)
@@ -75,6 +76,9 @@ export async function registerVaultRoutes(app: FastifyInstance) {
         vaultId,
         type: "vault_delete",
         meta: { deletedAt: now },
+      })
+      void sendVaultChangedPush(db, { vaultId }).catch((err) => {
+        request.log.error({ err }, "Failed to send push notifications")
       })
 
       reply.send({ ok: true })
@@ -257,6 +261,9 @@ export async function registerVaultRoutes(app: FastifyInstance) {
         type: "member_revoke",
         meta: { targetUserId: userId },
       })
+      void sendVaultChangedPush(db, { vaultId }).catch((err) => {
+        request.log.error({ err }, "Failed to send push notifications")
+      })
 
       reply.send({ ok: true })
     }
@@ -364,6 +371,9 @@ export async function registerVaultRoutes(app: FastifyInstance) {
 
       tx()
       recordAuditEvent(db, { userId: user.id, vaultId, type: "rvk_rotate_request", meta: { requestedAt: now } })
+      void sendVaultChangedPush(db, { vaultId }).catch((err) => {
+        request.log.error({ err }, "Failed to send push notifications")
+      })
       reply.send({ ok: true })
     }
   )
@@ -389,6 +399,9 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       db.prepare("INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)")
         .run(vaultId, "vault_meta", null, now)
       recordAuditEvent(db, { userId: user.id, vaultId, type: "envelope_resend_request", meta: { requestedAt: now } })
+      void sendVaultChangedPush(db, { vaultId }).catch((err) => {
+        request.log.error({ err }, "Failed to send push notifications")
+      })
       reply.send({ ok: true })
     }
   )

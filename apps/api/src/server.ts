@@ -11,6 +11,8 @@ import { registerUserKeyRoutes } from "./routes/userKeys"
 import { registerInviteRoutes } from "./routes/invites"
 import { registerKeyEnvelopeRoutes } from "./routes/keyEnvelopes"
 import { registerKeyBackupRoutes } from "./routes/keyBackups"
+import { registerPushTokenRoutes } from "./routes/pushTokens"
+import { registerDevPushRoutes } from "./routes/devPush"
 
 async function main() {
   const env = getApiEnv()
@@ -49,6 +51,8 @@ async function main() {
   await registerInviteRoutes(app)
   await registerKeyEnvelopeRoutes(app)
   await registerKeyBackupRoutes(app)
+  await registerPushTokenRoutes(app)
+  await registerDevPushRoutes(app)
 
   const address = await app.listen({ port: env.PORT, host: "0.0.0.0" })
   app.log.info(`listening at ${address}`)

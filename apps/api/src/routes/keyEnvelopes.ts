@@ -4,6 +4,7 @@ import crypto from "crypto"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
 import { recordAuditEvent } from "../db/audit"
+import { sendVaultChangedPush } from "../push/pushService"
 
 const upsertEnvelopeSchema = z.object({
   userId: z.string().min(1),
@@ -57,6 +58,9 @@ export async function registerKeyEnvelopeRoutes(app: FastifyInstance) {
         vaultId,
         type: "key_envelope_upsert",
         meta: { targetUserId: parse.data.userId, alg: parse.data.alg },
+      })
+      void sendVaultChangedPush(db, { vaultId }).catch((err) => {
+        request.log.error({ err }, "Failed to send push notifications")
       })
 
       reply.send({ ok: true })
