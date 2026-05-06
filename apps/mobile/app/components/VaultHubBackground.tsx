@@ -1,3 +1,165 @@
+// import { FC, useEffect, useMemo } from "react";
+// import { StyleSheet, View } from "react-native";
+// import { LinearGradient } from "expo-linear-gradient";
+// import Svg, { Circle, Defs, Pattern, Rect } from "react-native-svg";
+// import Animated, {
+//   Easing,
+//   interpolate,
+//   useAnimatedStyle,
+//   useSharedValue,
+//   withRepeat,
+//   withSequence,
+//   withTiming,
+// } from "react-native-reanimated";
+
+// import { useAppTheme } from "@/theme/context";
+
+// type VaultHubBackgroundProps = {
+//   reducedMotion?: boolean;
+// };
+
+// export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
+//   reducedMotion = false,
+// }) => {
+//   const { theme } = useAppTheme();
+//   const patternId = useMemo(
+//     () => `vault-hub-pattern-${Math.random().toString(36).slice(2, 10)}`,
+//     [],
+//   );
+
+//   const drift = useSharedValue(0);
+//   const pulse = useSharedValue(reducedMotion ? 0.9 : 0.82);
+
+//   useEffect(() => {
+//     if (reducedMotion) {
+//       return;
+//     }
+
+//     const ease = Easing.inOut(Easing.quad);
+
+//     drift.value = withRepeat(
+//       withSequence(
+//         withTiming(1, { duration: 12000, easing: ease }),
+//         withTiming(-1, { duration: 12000, easing: ease }),
+//       ),
+//       -1,
+//       true,
+//     );
+//     pulse.value = withRepeat(
+//       withSequence(
+//         withTiming(1, { duration: 4200, easing: ease }),
+//         withTiming(0.82, { duration: 4200, easing: ease }),
+//       ),
+//       -1,
+//       true,
+//     );
+//   }, [drift, pulse, reducedMotion]);
+
+//   const dotStyle = useAnimatedStyle(() => ({
+//     opacity: interpolate(drift.value, [-1, 1], [0.18, 0.3]),
+//     transform: [
+//       { translateX: interpolate(drift.value, [-1, 1], [-4, 4]) },
+//       { translateY: interpolate(drift.value, [-1, 1], [3, -3]) },
+//     ],
+//   }));
+
+//   const glowAStyle = useAnimatedStyle(() => ({
+//     opacity: interpolate(pulse.value, [0.82, 1], [0.16, 0.3]),
+//     transform: [{ scale: interpolate(pulse.value, [0.82, 1], [0.96, 1.04]) }],
+//   }));
+
+//   const glowBStyle = useAnimatedStyle(() => ({
+//     opacity: interpolate(drift.value, [-1, 1], [0.08, 0.18]),
+//     transform: [{ scale: interpolate(drift.value, [-1, 1], [0.96, 1.06]) }],
+//   }));
+
+//   return (
+//     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+//       <LinearGradient
+//         colors={[theme.colors.vaultHub.vaultHubBg, theme.colors.vaultHub.vaultHubBgTint]}
+//         start={{ x: 0.08, y: 0 }}
+//         end={{ x: 0.82, y: 1 }}
+//         style={StyleSheet.absoluteFillObject}
+//       />
+
+//       <Animated.View style={[StyleSheet.absoluteFillObject, dotStyle]}>
+//         <Svg
+//           width="100%"
+//           height="100%"
+//           viewBox="0 0 100 100"
+//           preserveAspectRatio="none"
+//           style={StyleSheet.absoluteFillObject}
+//         >
+//           <Defs>
+//             <Pattern
+//               id={patternId}
+//               x="0"
+//               y="0"
+//               width="4"
+//               height="4"
+//               patternUnits="userSpaceOnUse"
+//             >
+//               <Circle
+//                 cx="1"
+//                 cy="1"
+//                 r="0.24"
+//                 fill={theme.colors.vaultHub.vaultHubAccentPinkSoft}
+//                 opacity={0.18}
+//               />
+//             </Pattern>
+//           </Defs>
+//           <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${patternId})`} />
+//         </Svg>
+//       </Animated.View>
+
+//       <Animated.View style={[styles.heroGlow, glowAStyle]}>
+//         <View
+//           style={[
+//             styles.orb,
+//             {
+//               width: 420,
+//               height: 420,
+//               backgroundColor: theme.colors.vaultHub.vaultHubGlow,
+//             },
+//           ]}
+//         />
+//       </Animated.View>
+
+//       <Animated.View style={[styles.secondaryGlow, glowBStyle]}>
+//         <View
+//           style={[
+//             styles.orb,
+//             {
+//               width: 300,
+//               height: 300,
+//               backgroundColor: theme.colors.vaultHub.vaultHubGlow,
+//             },
+//           ]}
+//         />
+//       </Animated.View>
+//     </View>
+//   );
+// };
+
+// const styles = StyleSheet.create({
+//   heroGlow: {
+//     position: "absolute",
+//     top: 140,
+//     left: "50%",
+//     marginLeft: -210,
+//   },
+//   secondaryGlow: {
+//     position: "absolute",
+//     bottom: 120,
+//     right: -90,
+//   },
+//   orb: {
+//     borderRadius: 999,
+//   },
+// });
+
+
+
 import { FC, useEffect, useMemo } from "react";
 import { Dimensions, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,14 +176,14 @@ import Animated, {
 
 import { useAppTheme } from "@/theme/context";
 
-type VaultLockBackgroundProps = {
+type VaultHubBackgroundProps = {
   reducedMotion?: boolean;
 };
 
 const AnimatedView = Animated.View;
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-export const VaultLockBackground: FC<VaultLockBackgroundProps> = ({
+export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
   reducedMotion = false,
 }) => {
   const { theme } = useAppTheme();
@@ -117,12 +279,12 @@ export const VaultLockBackground: FC<VaultLockBackgroundProps> = ({
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-      <LinearGradient
+      {/* <LinearGradient
         colors={[theme.colors.vault.vaultBg, theme.colors.vault.vaultBgTint]}
         start={{ x: 0.08, y: 0 }}
         end={{ x: 0.82, y: 1 }}
         style={StyleSheet.absoluteFillObject}
-      />
+      /> */}
 
       <AnimatedView style={[StyleSheet.absoluteFillObject, primaryDotsStyle]}>
         <Svg
@@ -241,10 +403,10 @@ export const VaultLockBackground: FC<VaultLockBackgroundProps> = ({
         fx="50%"
         fy="50%"
       >
-        <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="1" />
-        <Stop offset="34%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.18" />
-        <Stop offset="68%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.08" />
-        <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0" />
+        <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="1" />
+        <Stop offset="34%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0.18" />
+        <Stop offset="68%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0.08" />
+        <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0" />
       </RadialGradient>
     </Defs>
     <Circle
@@ -256,7 +418,7 @@ export const VaultLockBackground: FC<VaultLockBackgroundProps> = ({
   </Svg>
 </AnimatedView>
 
-<AnimatedView style={[styles.centerGlow, centerGlowStyle]}>
+{/* <AnimatedView style={[styles.centerGlow, centerGlowStyle]}>
   <Svg
     width={styles.centerGlowOrb.width}
     height={styles.centerGlowOrb.height}
@@ -285,7 +447,7 @@ export const VaultLockBackground: FC<VaultLockBackgroundProps> = ({
       fill="url(#centerGlowGradient)"
     />
   </Svg>
-</AnimatedView>
+</AnimatedView> */}
 
       <View style={styles.vignetteOverlay} />
     </View>
