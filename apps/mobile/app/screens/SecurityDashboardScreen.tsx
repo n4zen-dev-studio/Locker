@@ -608,7 +608,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
   <SecurityTileCard
     title="Tamper Indicators"
     subtitle="Recent signals that deserve a closer look."
-    tone="blue"
+    tone="accent"
     icon="pulse-outline"
   >
     {tamperIndicators.length === 0 ? (
@@ -626,7 +626,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
     <SecurityTileCard
       title="Developer Controls"
       subtitle="Development-only safety and testing controls."
-      tone="default"
+      tone="violet"
       icon="settings-outline"
     >
       <ActionButton

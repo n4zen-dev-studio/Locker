@@ -406,6 +406,7 @@ refreshControl={
         >
 <VaultHeroOrb
   actions={heroActions}
+  reducedMotion={reducedMotion}
   onOrbitDragStateChange={(dragging) => setScrollEnabled(!dragging)}
 />
         </Animated.View>
@@ -425,27 +426,18 @@ refreshControl={
              
             </Pressable>
             <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={handleScrollToVault}>
-              {/* <Ionicons
-              name={"arrow-down"}
-              size={18}
-              color={'#fff'}
-              style={{ paddingVertical: 5 }}
-            /> */}
               <Ionicons
               name={"wallet"}
               size={18}
               color={'#fff'}
               style={{ paddingVertical: 5 }}
             />
-              {/* <Text style={themed($jumpButtonText)}>Jump to Vault</Text> */}
             </Pressable>
           </View>
 
          
 
-          {/* <Text style={themed($toolbarHint)}>
-            Search first, then browse in stack mode or switch back to list mode when you need density.
-          </Text> */}
+
         </Animated.View>
 
         {/* {syncReason ? (
@@ -489,18 +481,10 @@ refreshControl={
               color={'#fff'}
               style={{ paddingVertical: 5 }}
               onPress={() => setQuery('')}
-            />}
+            />
+            }
 
           </View>
-
-        {/* {__DEV__ && metaVersion === 2 ? (
-          <Pressable style={themed($devButton)} onPress={handleDisablePasskey}>
-            <Text preset="bold" style={themed($devText)}>
-              Disable Passkey (Dev)
-            </Text>
-          </Pressable>
-        ) : null} */}
-
          <GlowFab onPress={() => handleScrollToTop()} style={{position: 'absolute', right: 20, bottom: 90}}/>
       </ScrollView>
     </Screen>

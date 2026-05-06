@@ -77,6 +77,7 @@ import {
 } from "@/locker/vault/types"
 import { ensureElevatedSession } from "@/locker/security/stepUp"
 import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
+import { VaultHubBackground } from "@/components/VaultHubBackground"
 
 type VaultMemberRecord = {
   userId: string
@@ -178,7 +179,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       { id: noteId, title: title.trim(), body, classification, deletedAt, vaultId, attachments },
       key,
     )
-    navigation.replace("VaultNote", { noteId: saved.id })
+    navigation.goBack()
   }
 
   const handleMoveToTrash = () => {
@@ -595,8 +596,9 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   return (
     <Screen preset="scroll" contentContainerStyle={themed([$insets, $screen])}>
-      <View style={themed($backgroundGlowTop)} pointerEvents="none" />
-      <View style={themed($backgroundGlowMiddle)} pointerEvents="none" />
+      <VaultHubBackground reducedMotion={true} dimmed/>
+      {/* <View style={themed($backgroundGlowTop)} pointerEvents="none" />
+      <View style={themed($backgroundGlowMiddle)} pointerEvents="none" /> */}
 
       <View style={themed($heroCard)}>
         <View style={themed($heroTopRow)}>
