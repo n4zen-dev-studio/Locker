@@ -95,7 +95,7 @@ import {
 } from "@/locker/sync/queue"
 import { getAccount } from "@/locker/storage/accountRepo"
 import { requestSync } from "@/locker/sync/syncCoordinator"
-import { fetchJson, fetchRaw } from "@/locker/net/apiClient"
+import { fetchRaw } from "@/locker/net/apiClient"
 import { getToken } from "@/locker/auth/tokenStore"
 import {
   DEFAULT_VAULT_CLASSIFICATION,
@@ -109,11 +109,7 @@ import {
 } from "@/locker/vault/types"
 import { ensureElevatedSession } from "@/locker/security/stepUp"
 import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
-
-type VaultMemberRecord = {
-  userId: string
-  role?: "owner" | "admin" | "editor" | "viewer"
-}
+import { MAX_BLOB_BYTES } from "@/locker/constants"
 
 type AttachmentUiState = {
   status: "idle" | "downloading" | "ready" | "error" | "corrupt"
@@ -139,7 +135,6 @@ type ViewerState = {
 }
 
 const LOCAL_ATTACHMENT_SCOPE = "__local__"
-const MAX_ATTACHMENT_BYTES = 20_000_000
 const VOICE_MIME = "audio/m4a"
 
 const fileSystemCompat = FileSystem as any
@@ -164,7 +159,6 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const [deletedAt, setDeletedAt] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<NoteAttachment[]>([])
   const [attachmentStates, setAttachmentStates] = useState<Record<string, AttachmentUiState>>({})
-  const [role, setRole] = useState<"owner" | "admin" | "editor" | "viewer" | "unknown">("unknown")
   const [error, setError] = useState<string | null>(null)
   const [isExisting, setIsExisting] = useState(false)
   const [itemType, setItemType] = useState<VaultItemType>(requestedType)
@@ -188,7 +182,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const pulse = useSharedValue(1)
 
   const attachmentScope = vaultId ?? LOCAL_ATTACHMENT_SCOPE
-  const canEdit = role !== "viewer"
+  const canEdit = true
   const selectedAttachmentId = activeAttachmentId ?? route.params?.attachmentId ?? primaryAttachmentId
 
   const selectedAttachment = useMemo(() => {
@@ -585,25 +579,6 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     })()
   }, [attachmentScope, attachments, navigation, noteId])
 
-  const loadRole = useCallback(async () => {
-    if (!vaultId) {
-      setRole("unknown")
-      return
-    }
-    const account = getAccount()
-    if (!account) {
-      setRole("unknown")
-      return
-    }
-    try {
-      const data = await fetchJson<{ members: VaultMemberRecord[] }>(`/v1/vaults/${vaultId}/members`)
-      const member = data.members?.find((m) => m.userId === account.user.id)
-      setRole((member?.role as VaultMemberRecord["role"]) || "unknown")
-    } catch {
-      setRole("unknown")
-    }
-  }, [vaultId])
-
   const handleImportAttachment = useCallback(
     async (kind: VaultImportType) => {
       try {
@@ -685,8 +660,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
             encoding: fileSystemCompat.EncodingType.Base64,
           })
           const fileBytes = base64ToBytes(fileBase64)
-          if (fileBytes.length > MAX_ATTACHMENT_BYTES) {
-            setError(`Attachment exceeds ${formatBytes(MAX_ATTACHMENT_BYTES)} limit`)
+          if (fileBytes.length > MAX_BLOB_BYTES) {
+            setError(`Attachment exceeds ${formatBytes(MAX_BLOB_BYTES)} limit`)
             return
           }
 
@@ -798,8 +773,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           encoding: fileSystemCompat.EncodingType.Base64,
         })
         const fileBytes = base64ToBytes(fileBase64)
-        if (fileBytes.length > MAX_ATTACHMENT_BYTES) {
-          setError(`Recording exceeds ${formatBytes(MAX_ATTACHMENT_BYTES)} limit`)
+        if (fileBytes.length > MAX_BLOB_BYTES) {
+          setError(`Recording exceeds ${formatBytes(MAX_BLOB_BYTES)} limit`)
           return
         }
 
@@ -1146,12 +1121,6 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     }, [navigation]),
   )
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadRole()
-    }, [loadRole]),
-  )
-
   useEffect(() => {
     if (selectedAttachment) {
       void resolveAttachment(selectedAttachment, { silent: true })
@@ -1213,7 +1182,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           title={getVaultItemLabel(effectiveItemType)}
           subtitle={heroSubtitle}
           itemType={effectiveItemType}
-          role={role}
+          scopeLabel={vaultId ? "Synced vault" : "Local vault"}
           canExport={!isExporting}
           onExport={() => void exportCurrentItem()}
           icon={

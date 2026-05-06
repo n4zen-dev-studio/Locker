@@ -119,7 +119,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
           Link Device
         </Text>
         <Text preset="subheading" style={themed($subtitle)}>
-          Paste the trusted-device payload or code
+          Link this phone to your Locker account
         </Text>
       </View>
 
@@ -147,7 +147,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
 
       <Pressable style={themed($primaryButton)} onPress={handleRedeem}>
         <Text preset="bold" style={themed($primaryButtonText)}>
-          Redeem Link
+          Link This Device
         </Text>
       </Pressable>
 

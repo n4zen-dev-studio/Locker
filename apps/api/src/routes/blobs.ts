@@ -41,7 +41,11 @@ export async function registerBlobRoutes(app: FastifyInstance) {
       if (member.role === "viewer") return reply.code(403).send({ error: "Insufficient role" })
 
       const body = await readBody(request)
-      if (body.length > env.MAX_BLOB_BYTES) return reply.code(413).send({ error: "Payload too large" })
+      if (body.length > env.MAX_BLOB_BYTES) {
+        return reply.code(413).send({
+          error: `Payload too large. Limit is ${env.MAX_BLOB_BYTES} bytes.`,
+        })
+      }
 
       const hash = crypto.createHash("sha256").update(body).digest("hex")
       if (hash !== sha256) return reply.code(400).send({ error: "sha256 mismatch" })
