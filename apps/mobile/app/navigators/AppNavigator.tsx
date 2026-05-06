@@ -27,6 +27,7 @@ import { VaultShareScreen } from "@/screens/VaultShareScreen"
 import { VaultInvitesScreen } from "@/screens/VaultInvitesScreen"
 import { VaultDiagnosticsScreen } from "@/screens/VaultDiagnosticsScreen"
 import { VaultSearchScreen } from "@/screens/VaultSearchScreen"
+import { VaultRecoveryScreen } from "@/screens/VaultRecoveryScreen"
 import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
@@ -73,6 +74,7 @@ const AppStack = () => {
       <Stack.Screen name="VaultShare" component={VaultShareScreen} />
       <Stack.Screen name="VaultInvites" component={VaultInvitesScreen} />
       <Stack.Screen name="VaultDiagnostics" component={VaultDiagnosticsScreen} />
+      <Stack.Screen name="VaultRecovery" component={VaultRecoveryScreen} />
       <Stack.Screen name="VaultSearch" component={VaultSearchScreen} />
       <Stack.Screen name="ServerUrl" component={ServerUrlScreen} />
       {/** 🔥 Your screens go here */}
