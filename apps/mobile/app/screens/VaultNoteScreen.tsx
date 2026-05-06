@@ -7,7 +7,7 @@ import * as Sharing from "expo-sharing"
 
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { VaultStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
@@ -26,7 +26,7 @@ import { fetchJson, fetchRaw } from "@/locker/net/apiClient"
 import { getToken } from "@/locker/auth/tokenStore"
 import type { VaultMemberDTO } from "@locker/types"
 
-export const VaultNoteScreen: FC<AppStackScreenProps<"VaultNote">> = function VaultNoteScreen(
+export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function VaultNoteScreen(
   props,
 ) {
   const { navigation, route } = props

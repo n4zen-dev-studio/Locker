@@ -392,7 +392,7 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
               setLastCursor(0)
               setOutbox([])
               setStatus("Remote vault deleted")
-              navigation.replace("VaultHome")
+              navigation.replace("VaultTabs", { screen: "Vault" })
             } catch (err) {
               const message = err instanceof Error ? err.message : "Delete failed"
               setError(message)

@@ -61,7 +61,7 @@ export const VaultSwitcherScreen: FC<AppStackScreenProps<"VaultSwitcher">> = fun
         await uploadSyncKeyCheck(data.vault.id, rvk)
       }
       setStatus("Vault created and set active")
-      navigation.replace("VaultHome")
+      navigation.replace("VaultTabs", { screen: "Vault" })
     } catch (err) {
       const message = err instanceof Error ? err.message : "Create vault failed"
       setError(message)
@@ -104,7 +104,7 @@ export const VaultSwitcherScreen: FC<AppStackScreenProps<"VaultSwitcher">> = fun
   const handleSelect = (vault: VaultDTO) => {
     setRemoteVaultId(vault.id, vault.name)
     setStatus(`Active vault set: ${vault.name}`)
-    navigation.replace("VaultHome")
+    navigation.replace("VaultTabs", { screen: "Vault" })
   }
 
   const handleManage = (vault: VaultDTO) => {
