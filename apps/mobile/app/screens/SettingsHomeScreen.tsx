@@ -25,6 +25,7 @@ import type { ThemedStyle } from "@/theme/types"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { spacing } from "@/theme/spacing"
 import { useSessionIntroAnimation } from "@/utils/useSessionIntroAnimation"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
   function SettingsHomeScreen(props) {
@@ -76,7 +77,7 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
         keyboardAware={false}
         keyboardAvoidingEnabled={false}
         style={themed($screen)}
-        contentContainerStyle={themed([$content, $insets, { paddingBottom: spacing.xxxl + 28 }])}
+        contentContainerStyle={themed([$content, $insets, { paddingBottom: 105 + useSafeAreaInsets().bottom  }])}
         systemBarStyle="light"
       >
         {/* <VaultHubBackground /> */}
@@ -350,7 +351,7 @@ const $screen: ThemedStyle<ViewStyle> = ({ colors }) => ({
 const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.md,
   paddingTop: spacing.sm,
-  paddingBottom: spacing.xl * 2,
+  paddingBottom: spacing.xl * 3,
   gap: spacing.md,
 })
 

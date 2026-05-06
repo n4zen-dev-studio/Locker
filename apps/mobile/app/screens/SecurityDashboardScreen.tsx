@@ -58,6 +58,7 @@ import Svg, {
   Line,
 } from "react-native-svg"
 import { useSessionIntroAnimation } from "@/utils/useSessionIntroAnimation";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 
 type RecoveryState = {
@@ -302,7 +303,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
       keyboardAware={false}
       keyboardAvoidingEnabled={false}
       style={themed($screen)}
-      contentContainerStyle={themed([$content, $insets, { paddingBottom: spacing.xxxl + 30 }])}
+      contentContainerStyle={themed([$content, $insets, { paddingBottom:  105 + useSafeAreaInsets().bottom   }])}
       systemBarStyle="light"
     >
       <VaultHubBackground reducedMotion={reducedMotion} />

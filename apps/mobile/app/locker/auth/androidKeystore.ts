@@ -1,4 +1,5 @@
-import { NativeModules, Platform } from "react-native"
+import { requireNativeModule } from "expo-modules-core"
+import { Platform } from "react-native"
 
 import { base64ToBytes, bytesToBase64 } from "../crypto/encoding"
 
@@ -24,7 +25,15 @@ type KeystoreModule = {
   deleteKey(alias: string): Promise<void>
 }
 
-const nativeModule: KeystoreModule | undefined = NativeModules[MODULE_NAME]
+let nativeModule: KeystoreModule | undefined
+
+if (Platform.OS === "android") {
+  try {
+    nativeModule = requireNativeModule<KeystoreModule>(MODULE_NAME)
+  } catch {
+    nativeModule = undefined
+  }
+}
 
 export async function isSupported(): Promise<boolean> {
   if (Platform.OS !== "android" || !nativeModule) return false

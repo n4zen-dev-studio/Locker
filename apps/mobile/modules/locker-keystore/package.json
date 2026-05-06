@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "@n4zen/locker-keystore",
   "version": "0.0.1",
   "private": true,
@@ -12,4 +13,10 @@
   "peerDependencies": {
     "react-native": "*"
   }
+=======
+  "name": "locker-keystore",
+  "version": "0.0.1",
+  "private": true,
+  "main": "src/index.ts"
+>>>>>>> 0dff7ef (locker-keystore Expo Module)
 }

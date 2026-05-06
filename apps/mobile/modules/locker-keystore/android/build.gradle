@@ -1,18 +1,28 @@
-apply plugin: "com.android.library"
-apply plugin: "org.jetbrains.kotlin.android"
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.n4zen.calculator'
+version = '0.0.1'
+
+def safeExtGet = { name, fallback ->
+  rootProject.ext.has(name) ? rootProject.ext.get(name) : fallback
+}
 
 android {
   namespace "com.n4zen.calculator.locker"
-
-  compileSdk rootProject.ext.compileSdkVersion
+  compileSdkVersion safeExtGet("compileSdkVersion", 35)
 
   defaultConfig {
-    minSdkVersion rootProject.ext.minSdkVersion
-    targetSdkVersion rootProject.ext.targetSdkVersion
+    minSdkVersion safeExtGet("minSdkVersion", 24)
+    targetSdkVersion safeExtGet("targetSdkVersion", 35)
+    versionCode 1
+    versionName project.version.toString()
   }
 }
 
 dependencies {
-  implementation("com.facebook.react:react-android")
-  implementation("androidx.biometric:biometric:1.1.0")
+  implementation 'com.facebook.react:react-android'
+  implementation 'androidx.biometric:biometric:1.1.0'
 }
