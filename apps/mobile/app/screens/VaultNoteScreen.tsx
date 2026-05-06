@@ -686,3 +686,15 @@ const $attachmentButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
 const $disabledButton: ThemedStyle<ViewStyle> = () => ({
   opacity: 0.5,
 })
+const $secondaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  backgroundColor: colors.glass,
+  borderRadius: 14,
+  paddingVertical: spacing.md,
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: colors.glassBorder,
+})
+
+const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textStrong,
+})
