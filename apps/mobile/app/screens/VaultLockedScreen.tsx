@@ -1,191 +1,297 @@
-import { FC, useCallback, useEffect, useState } from "react"
-import { Pressable, TextStyle, View, ViewStyle } from "react-native"
+import { FC, useCallback, useEffect, useState } from "react";
+import {
+  AccessibilityInfo,
+  Pressable,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native";
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+} from "react-native-reanimated";
 
-import { Screen } from "@/components/Screen"
-import { Text } from "@/components/Text"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
-import { useAppTheme } from "@/theme/context"
-import type { ThemedStyle } from "@/theme/types"
-import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
-import { isPasskeyEnabled, unlockWithPasskey } from "@/locker/auth/passkey"
-import { getMeta } from "@/locker/storage/vaultMetaRepo"
-import { vaultSession } from "@/locker/session"
-import { getPostUnlockRoute } from "@/navigators/postUnlockRoute"
-import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
+import { BiometricUnlockOrb } from "@/components/BiometricUnlockOrb";
+import { Screen } from "@/components/Screen";
+import { Text } from "@/components/Text";
+import { VaultLockBackground } from "@/components/VaultLockBackground";
+import { isPasskeyEnabled, unlockWithPasskey } from "@/locker/auth/passkey";
+import { recordSecurityEvent } from "@/locker/security/auditLogRepo";
+import { vaultSession } from "@/locker/session";
+import { getMeta } from "@/locker/storage/vaultMetaRepo";
+import { getPostUnlockRoute } from "@/navigators/postUnlockRoute";
+import type { AppStackScreenProps } from "@/navigators/navigationTypes";
+import { useAppTheme } from "@/theme/context";
+import type { ThemedStyle } from "@/theme/types";
+import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 
-export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = function VaultLockedScreen(
-  props,
-) {
-  const { navigation } = props
-  const { themed } = useAppTheme()
-  const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
+export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> =
+  function VaultLockedScreen(props) {
+    const { navigation } = props;
+    const { themed } = useAppTheme();
+    const $insets = useSafeAreaInsetsStyle(["top", "bottom"]);
 
-  const [metaVersion, setMetaVersion] = useState<1 | 2 | null>(null)
-  const [passkeyReady, setPasskeyReady] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+    const [metaVersion, setMetaVersion] = useState<1 | 2 | null>(null);
+    const [passkeyReady, setPasskeyReady] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [reducedMotion, setReducedMotion] = useState(false);
+    const [authenticating, setAuthenticating] = useState(false);
 
-  const refreshState = useCallback(async () => {
-    const meta = getMeta()
-    setMetaVersion(meta ? meta.v : null)
-    const enabled = await isPasskeyEnabled()
-    setPasskeyReady(enabled)
-  }, [])
+    const refreshState = useCallback(async () => {
+      const meta = getMeta();
+      setMetaVersion(meta ? meta.v : null);
+      const enabled = await isPasskeyEnabled();
+      setPasskeyReady(enabled);
+    }, []);
 
-  useEffect(() => {
-    refreshState()
-  }, [refreshState])
+    useEffect(() => {
+      refreshState();
+    }, [refreshState]);
 
-  const handlePasskey = async () => {
-    setError(null)
-    const meta = getMeta()
-    if (!meta) {
-      navigation.navigate("VaultPasskeySetup", { mode: "fresh" })
-      return
-    }
+    useEffect(() => {
+      AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
+      const subscription = AccessibilityInfo.addEventListener(
+        "reduceMotionChanged",
+        setReducedMotion,
+      );
 
-    if (meta.v === 1) {
+      return () => subscription.remove();
+    }, []);
+
+    const handlePasskey = async () => {
+      setError(null);
+      setAuthenticating(true);
+      const meta = getMeta();
+      if (!meta) {
+        setAuthenticating(false);
+        navigation.navigate("VaultPasskeySetup", { mode: "fresh" });
+        return;
+      }
+
+      if (meta.v === 1) {
+        if (!passkeyReady) {
+          setAuthenticating(false);
+          setError("Passkey not supported on this device");
+          return;
+        }
+        setAuthenticating(false);
+        navigation.navigate("VaultPasskeySetup", { mode: "migrate" });
+        return;
+      }
+
       if (!passkeyReady) {
-        setError("Passkey not supported on this device")
-        return
+        setAuthenticating(false);
+        setError("Passkey not supported on this device");
+        return;
       }
-      navigation.navigate("VaultPasskeySetup", { mode: "migrate" })
-      return
-    }
 
-    if (!passkeyReady) {
-      setError("Passkey not supported on this device")
-      return
-    }
-
-    try {
-      const vmk = await unlockWithPasskey()
-      vaultSession.setKey(vmk)
-      recordSecurityEvent({
-        type: "unlock_success",
-        message: "Vault unlocked successfully.",
-        severity: "info",
-      })
-      const next = getPostUnlockRoute()
-      if (next.name === "VaultOnboarding") {
-        navigation.replace("VaultOnboarding")
-      } else {
-        navigation.replace(next.name, next.params)
+      try {
+        const vmk = await unlockWithPasskey();
+        vaultSession.setKey(vmk);
+        recordSecurityEvent({
+          type: "unlock_success",
+          message: "Vault unlocked successfully.",
+          severity: "info",
+        });
+        const next = getPostUnlockRoute();
+        if (next.name === "VaultOnboarding") {
+          navigation.replace("VaultOnboarding");
+        } else {
+          navigation.replace(next.name, next.params);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unable to unlock";
+        recordSecurityEvent({
+          type: "unlock_failure",
+          message: "Vault unlock failed.",
+          severity: "warning",
+          meta: { message },
+        });
+        setError(message);
+      } finally {
+        setAuthenticating(false);
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to unlock"
-      recordSecurityEvent({
-        type: "unlock_failure",
-        message: "Vault unlock failed.",
-        severity: "warning",
-        meta: { message },
-      })
-      setError(message)
-    }
-  }
+    };
 
-  return (
-    <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
-      <View style={themed($card)}>
-        <Text preset="heading" style={themed($title)}>
-          Locker
-        </Text>
-        <Text preset="subheading" style={themed($subtitle)}>
-          Vault Locked
-        </Text>
-        <Text style={themed($body)}>Passkey uses your device biometrics / screen lock.</Text>
+    return (
+      <Screen
+        preset="fixed"
+        contentContainerStyle={themed([$screen, $insets])}
+        systemBarStyle="light"
+      >
+        <VaultLockBackground reducedMotion={reducedMotion} />
 
-        {error ? <Text style={themed($errorText)}>{error}</Text> : null}
+        <Animated.View
+          entering={
+            reducedMotion
+              ? undefined
+              : FadeInDown.duration(420).easing(Easing.bezier(0.22, 1, 0.36, 1))
+          }
+          style={themed($headerRow)}
+        >
+          {/* <Pressable style={themed($backButton)} onPress={() => navigation.goBack()}>
+            <Text style={themed($backButtonText)}>‹ Back</Text>
+          </Pressable> */}
 
-        <Pressable style={themed($primaryButton)} onPress={handlePasskey}>
-          <Text preset="bold" style={themed($primaryButtonText)}>
-            Unlock with Passkey
-          </Text>
-        </Pressable>
-
-        {metaVersion === 1 ? (
-          <Pressable style={themed($button)} onPress={() => navigation.navigate("VaultPin")}>
-            <Text preset="bold" style={themed($buttonText)}>
-              Migrate Legacy Vault
+          <View style={themed($headerCopy)}>
+            <Text size="xs" style={themed($eyebrow)}>
+              Locker
             </Text>
-          </Pressable>
-        ) : null}
+            {/* <Text preset="heading" style={themed($title)}>
+              Vault Locked
+            </Text> */}
+          </View>
+        </Animated.View>
 
-        <Pressable style={themed($linkButton)} onPress={() => navigation.goBack()}>
-          <Text preset="bold" style={themed($linkText)}>
-            Back to Calculator
-          </Text>
-        </Pressable>
-      </View>
-    </Screen>
-  )
-}
+        <View style={themed($centerStage)}>
+          <Animated.View
+            entering={
+              reducedMotion
+                ? undefined
+                : FadeIn.duration(340).easing(Easing.bezier(0.22, 1, 0.36, 1))
+            }
+          >
+            <BiometricUnlockOrb
+              onPress={handlePasskey}
+              authenticating={authenticating}
+              reducedMotion={reducedMotion}
+              label={authenticating ? "Authenticating..." : "Unlock with biometrics"}
+            />
+          </Animated.View>
+        </View>
+
+        <Animated.View
+          entering={
+            reducedMotion
+              ? undefined
+              : FadeInUp.duration(420).easing(Easing.bezier(0.22, 1, 0.36, 1))
+          }
+          style={themed($footer)}
+        >
+          {/* <Text style={themed($helperText)}>
+            {authenticating
+              ? "Authenticating..."
+              : "Use Face ID, Touch ID, or your device lock"}
+          </Text> */}
+
+          
+
+          {error ? <Text style={themed($errorText)}>{error}</Text> : null}
+
+          <Pressable
+              style={themed($backButton)}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={themed($backButtonText)}>‹ Back</Text>
+            </Pressable>
+
+          {metaVersion === 1 ? (
+            <Pressable
+              style={themed($migrationButton)}
+              onPress={() => navigation.navigate("VaultPin")}
+            >
+              <Text style={themed($migrationButtonText)}>Migrate legacy vault</Text>
+            </Pressable>
+          ) : null}
+        </Animated.View>
+      </Screen>
+    );
+  };
 
 const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flex: 1,
-  backgroundColor: colors.palette.neutral900,
+  backgroundColor: colors.vault.vaultBg,
+  paddingHorizontal: spacing.lg,
+  paddingTop: spacing.sm,
+  paddingBottom: spacing.lg,
+  justifyContent: "space-between",
+  overflow: "hidden",
+});
+
+const $headerRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: spacing.md,
+});
+
+const $backButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  borderRadius: 999,
+  backgroundColor: colors.vault.vaultBg,
+  borderWidth: 1,
+  borderColor: colors.vault.vaultRing,
+});
+
+const $backButtonText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vault.vaultAccentPinkSoft,
+  fontFamily: typography.primary.medium,
+  fontSize: 13,
+  lineHeight: 16,
+});
+
+const $headerCopy: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+  alignItems: "flex-end",
+});
+
+const $eyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vault.vaultTextPrimary,
+  fontFamily: typography.primary.medium,
+  textTransform: "uppercase",
+  letterSpacing: 1.3,
+  marginBottom: 6,
+});
+
+const $title: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vault.vaultTextPrimary,
+  fontFamily: typography.primary.bold,
+  textAlign: "right",
+});
+
+const $centerStage: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+  alignItems: "center",
   justifyContent: "center",
-  paddingHorizontal: spacing.xl,
-})
+});
 
-const $card: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: "rgba(255, 255, 255, 0.08)",
-  borderRadius: 24,
-  padding: spacing.xl,
+const $footer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  gap: spacing.sm,
+  paddingBottom: spacing.md,
+});
+
+const $helperText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vault.vaultTextSecondary,
+  fontFamily: typography.primary.normal,
+  textAlign: "center",
+  fontSize: 13
+});
+
+const $errorText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vault.vaultError,
+  fontFamily: typography.primary.medium,
+  textAlign: "center",
+});
+
+const $migrationButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  marginTop: spacing.xs,
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.sm,
+  borderRadius: 999,
+  backgroundColor: colors.vault.vaultSurface,
   borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.2)",
-})
+  borderColor: colors.vault.vaultBorderSubtle,
+});
 
-const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-  marginBottom: 8,
-})
-
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral200,
-  marginBottom: 12,
-})
-
-const $body: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-  marginBottom: 16,
-})
-
-const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.angry500,
-  marginBottom: 12,
-})
-
-const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.palette.primary300,
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  marginBottom: 12,
-})
-
-const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral900,
-})
-
-const $button: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: "rgba(255, 255, 255, 0.08)",
-  borderRadius: 14,
-  paddingVertical: spacing.md,
-  alignItems: "center",
-  marginBottom: 8,
-  borderWidth: 1,
-  borderColor: "rgba(255, 255, 255, 0.15)",
-})
-
-const $buttonText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-})
-
-const $linkButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  marginTop: spacing.sm,
-  alignItems: "center",
-})
-
-const $linkText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral300,
-})
+const $migrationButtonText: ThemedStyle<TextStyle> = ({
+  colors,
+  typography,
+}) => ({
+  color: colors.vault.vaultAccentPinkSoft,
+  fontFamily: typography.primary.medium,
+  textAlign: "center",
+});
