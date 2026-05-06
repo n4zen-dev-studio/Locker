@@ -2,6 +2,7 @@ export interface ConfigBaseProps {
   persistNavigation: "always" | "dev" | "prod" | "never"
   catchErrors: "always" | "dev" | "prod" | "never"
   exitRoutes: string[]
+  API_BASE_URL: string
 }
 
 export type PersistNavigationConfig = ConfigBaseProps["persistNavigation"]
@@ -21,6 +22,11 @@ const BaseConfig: ConfigBaseProps = {
    * is pressed while in that screen. Only affects Android.
    */
   exitRoutes: ["Calculator"],
+
+  /**
+   * Locker API base URL for local dev.
+   */
+  API_BASE_URL: "http://localhost:4000",
 }
 
 export default BaseConfig

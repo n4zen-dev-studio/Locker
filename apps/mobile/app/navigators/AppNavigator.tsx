@@ -15,6 +15,9 @@ import { VaultLockedScreen } from "@/screens/VaultLockedScreen"
 import { VaultNoteScreen } from "@/screens/VaultNoteScreen"
 import { VaultPasskeySetupScreen } from "@/screens/VaultPasskeySetupScreen"
 import { VaultPinScreen } from "@/screens/VaultPinScreen"
+import { VaultAccountScreen } from "@/screens/VaultAccountScreen"
+import { VaultLinkDeviceScreen } from "@/screens/VaultLinkDeviceScreen"
+import { RemoteVaultScreen } from "@/screens/RemoteVaultScreen"
 import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
@@ -51,6 +54,9 @@ const AppStack = () => {
       <Stack.Screen name="VaultPasskeySetup" component={VaultPasskeySetupScreen} />
       <Stack.Screen name="VaultHome" component={VaultHomeScreen} />
       <Stack.Screen name="VaultNote" component={VaultNoteScreen} />
+      <Stack.Screen name="VaultAccount" component={VaultAccountScreen} />
+      <Stack.Screen name="VaultLinkDevice" component={VaultLinkDeviceScreen} />
+      <Stack.Screen name="RemoteVault" component={RemoteVaultScreen} />
       {/** 🔥 Your screens go here */}
       {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}
     </Stack.Navigator>

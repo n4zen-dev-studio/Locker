@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/router"
+import { QRCodeCanvas } from "qrcode.react"
 import { getAdminEnv } from "@locker/config"
 import { createApiClient, getStoredToken, getStoredUser, setStoredToken, setStoredUser } from "../lib/api"
 
@@ -19,6 +20,9 @@ export default function DashboardPage() {
   const [vaultName, setVaultName] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [passkeys, setPasskeys] = useState<Passkey[]>([])
+  const [linkPayload, setLinkPayload] = useState<string | null>(null)
+  const [linkExpiresAt, setLinkExpiresAt] = useState<string | null>(null)
+  const [linkError, setLinkError] = useState<string | null>(null)
 
   useEffect(() => {
     const storedToken = getStoredToken()
@@ -68,6 +72,27 @@ export default function DashboardPage() {
     setPasskeys(data.passkeys || [])
   }
 
+  async function generateLinkCode() {
+    if (!token) return
+    setLinkError(null)
+    try {
+      const data = await api.request<{ linkCode: string; expiresAt: string }>("/v1/devices/link-code", {
+        method: "POST",
+        body: JSON.stringify({}),
+      })
+      const payload = JSON.stringify({
+        t: "locker-link-v1",
+        apiBase: env.NEXT_PUBLIC_API_BASE_URL,
+        linkCode: data.linkCode,
+      })
+      setLinkPayload(payload)
+      setLinkExpiresAt(data.expiresAt)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to generate link code"
+      setLinkError(message)
+    }
+  }
+
   async function deletePasskey(credentialId: string) {
     if (!token) return
     await api.request<{ ok: boolean }>(`/v1/me/passkeys/${credentialId}`, { method: "DELETE" })
@@ -109,6 +134,28 @@ export default function DashboardPage() {
           {JSON.stringify(meta, null, 2)}
         </pre>
       ) : null}
+
+      <section style={{ marginTop: 24, maxWidth: 520 }}>
+        <h2>Link Device</h2>
+        <p style={{ marginBottom: 8 }}>
+          Generate a one-time QR code to link a mobile device.
+        </p>
+        <button onClick={() => generateLinkCode()} style={{ padding: "8px 12px" }}>
+          Generate Link QR
+        </button>
+        {linkError ? <p style={{ color: "crimson", marginTop: 8 }}>{linkError}</p> : null}
+        {linkPayload ? (
+          <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
+            <QRCodeCanvas value={linkPayload} size={180} />
+            <textarea
+              readOnly
+              value={linkPayload}
+              style={{ width: "100%", minHeight: 120, padding: 8 }}
+            />
+            {linkExpiresAt ? <p>Expires at: {new Date(linkExpiresAt).toLocaleString()}</p> : null}
+          </div>
+        ) : null}
+      </section>
 
       <section style={{ marginTop: 24, maxWidth: 520 }}>
         <h2>Create Vault</h2>

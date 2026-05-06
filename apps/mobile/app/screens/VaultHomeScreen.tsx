@@ -124,6 +124,13 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
         </Text>
       </Pressable>
 
+      <Pressable style={themed($cloudCard)} onPress={() => navigation.navigate("VaultAccount")}>
+        <Text preset="bold" style={themed($cloudTitle)}>
+          Cloud Sync
+        </Text>
+        <Text style={themed($cloudSubtitle)}>Link device and manage remote vault</Text>
+      </Pressable>
+
       {error ? (
         <View style={themed($errorCard)}>
           <Text style={themed($errorText)}>{error}</Text>
@@ -209,6 +216,25 @@ const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 
 const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral900,
+})
+
+const $cloudCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  backgroundColor: "rgba(255, 255, 255, 0.06)",
+  borderRadius: 18,
+  padding: spacing.md,
+  borderWidth: 1,
+  borderColor: "rgba(255, 255, 255, 0.12)",
+  marginBottom: spacing.lg,
+})
+
+const $cloudTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral100,
+  marginBottom: 4,
+})
+
+const $cloudSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral400,
+  fontSize: 12,
 })
 
 const $list: ThemedStyle<ViewStyle> = ({ spacing }) => ({

@@ -19,6 +19,9 @@ async function main() {
     origin: [env.ADMIN_ORIGIN, env.CORS_ORIGIN],
     credentials: false
   })
+  app.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (req, body, done) => {
+    done(null, body as Buffer)
+  })
 
   app.get("/health", async () => {
     return { ok: true }
