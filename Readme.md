@@ -355,7 +355,9 @@ pnpm test
 
 ### Demo Video
 
-![Demo Video](docs/demo.mp4)
+<!-- ![Demo Video](docs/demo.mp4) -->
+
+> Visuals and media coming soon!
 
 ### Architecture Diagram
 
@@ -363,7 +365,16 @@ pnpm test
 
 ### Sync Dashboard / Metrics
 
-![Metrics Dashboard](docs/metrics.png)
+<!-- ![Metrics Dashboard](docs/metrics.png) -->
+> Metrics Dashboard coming soon!
+
+
+---
+
+## 📲 Latest Release
+
+📲 Download APK from the [latest Release](https://github.com/n4zen-dev-studio/locker/releases/latest)
+
 
 ---
 
