@@ -59,7 +59,13 @@ export type AppStackParamList = {
   VaultPairDevice: undefined
   VaultImportPairing: { vaultId?: string; vaultName?: string; initialPayload?: string } | undefined
   VaultRecoverySetup: undefined
-  VaultRecoveryAccess: undefined
+  VaultRecoveryAccess:
+    | {
+        mode?: "device-link" | "vault-access"
+        vaultId?: string
+        vaultName?: string
+      }
+    | undefined
   VaultQrScanner:
     | {
         mode: "device-link" | "vault-access"

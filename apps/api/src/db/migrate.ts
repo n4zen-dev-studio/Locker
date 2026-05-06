@@ -201,6 +201,28 @@ export function runMigrations(db: Database.Database): void {
       rotatedAt TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS vault_recovery_artifacts (
+      recoveryId TEXT PRIMARY KEY,
+      ownerUserId TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      keyVersion TEXT NOT NULL,
+      alg TEXT NOT NULL,
+      kdf TEXT NOT NULL,
+      verifierB64 TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      rotatedAt TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS vault_recovery_artifact_envelopes (
+      recoveryId TEXT NOT NULL,
+      vaultId TEXT NOT NULL,
+      role TEXT NOT NULL,
+      nonceB64 TEXT NOT NULL,
+      ciphertextB64 TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      PRIMARY KEY (recoveryId, vaultId)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_vault_id ON audit_events (vaultId, id);
@@ -213,6 +235,7 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_vault_access_requests_user ON vault_access_requests (userId, status, expiresAt);
     CREATE INDEX IF NOT EXISTS idx_vault_access_requests_vault ON vault_access_requests (vaultId, status, expiresAt);
     CREATE INDEX IF NOT EXISTS idx_vault_recovery_envelopes_recovery_id ON vault_recovery_envelopes (recoveryId);
+    CREATE INDEX IF NOT EXISTS idx_vault_recovery_artifact_envelopes_vault ON vault_recovery_artifact_envelopes (vaultId, role);
   `)
 
   try {

@@ -16,11 +16,12 @@ import {
 import {
   fetchPublicRecoveryEnvelope,
   redeemRecoveryEnvelope,
+  redeemRecoveryVaultAccess,
 } from "@/locker/recovery/recoveryApi";
 import {
   createRecoveryProof,
   formatRecoveryKey,
-  openRecoveryEnvelope,
+  openRecoveryArtifact,
   parseRecoveryKey,
 } from "@/locker/recovery/recoveryKey";
 import type { AppStackScreenProps } from "@/navigators/navigationTypes";
@@ -32,9 +33,13 @@ import { getSuggestedDeviceName } from "@/utils/calc/DeviceInfo";
 export const VaultRecoveryAccessScreen: FC<
   AppStackScreenProps<"VaultRecoveryAccess">
 > = function VaultRecoveryAccessScreen(props) {
-  const { navigation } = props;
+  const { navigation, route } = props;
   const { themed, theme } = useAppTheme();
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"]);
+  const mode = route.params?.mode ?? "device-link";
+  const expectedVaultId = route.params?.vaultId;
+  const expectedVaultName = route.params?.vaultName;
+  const isVaultAccessMode = mode === "vault-access";
 
   const [recoveryKey, setRecoveryKey] = useState("");
   const [deviceName, setDeviceName] = useState(
@@ -63,15 +68,39 @@ export const VaultRecoveryAccessScreen: FC<
     setBusy(true);
     try {
       setStatus("Validating recovery key...");
-      const envelope = await fetchPublicRecoveryEnvelope(parsed.recoveryId);
-      const vaultKey = openRecoveryEnvelope(envelope, parsed.canonicalKey);
-      if (vaultKey.length !== 32) throw new Error("RECOVERY_FAILED");
-      const proofB64 = createRecoveryProof(parsed.canonicalKey, envelope);
+      const artifact = await fetchPublicRecoveryEnvelope(parsed.recoveryId);
+      const openedVaults = openRecoveryArtifact(artifact, parsed.canonicalKey).filter(
+        (vault) => vault.vaultKey.length === 32,
+      );
+      const targetVault = openedVaults.find((vault) => vault.role === "target") ?? openedVaults[0];
+      if (!targetVault) throw new Error("RECOVERY_FAILED");
+      if (expectedVaultId && targetVault.vaultId !== expectedVaultId) {
+        setError(
+          expectedVaultName
+            ? `This recovery key is for a different vault than ${expectedVaultName}.`
+            : "This recovery key is for a different vault.",
+        );
+        return;
+      }
+      const proofB64 = createRecoveryProof(parsed.canonicalKey, artifact);
+      if (isVaultAccessMode) {
+        // RemoteVault recovery is intentionally restricted to the target envelope only.
+        setStatus("Adding vault to this device...");
+        await redeemRecoveryVaultAccess({
+          proofB64,
+          recoveredVault: targetVault,
+          artifact,
+        });
+        navigation.replace("RemoteVault");
+        return;
+      }
+
+      // VaultSelection recovery is the new-device path and may use all envelopes in a new-format artifact.
       setStatus("Linking this device...");
       await redeemRecoveryEnvelope({
         proofB64,
-        vaultKey,
-        envelope,
+        recoveredVaults: openedVaults,
+        artifact,
         deviceName,
       });
       (navigation.replace as (...args: unknown[]) => void)("VaultTabs");
@@ -80,7 +109,7 @@ export const VaultRecoveryAccessScreen: FC<
     } finally {
       setBusy(false);
     }
-  }, [deviceName, navigation, recoveryKey]);
+  }, [deviceName, expectedVaultId, expectedVaultName, isVaultAccessMode, navigation, recoveryKey]);
 
   return (
     <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
@@ -91,31 +120,41 @@ export const VaultRecoveryAccessScreen: FC<
       >
         <VaultScreenHero
           themed={themed}
-          badge="RECOVERY"
-          title="Use Recovery Key"
-          subtitle="Recover vault access on this device and continue through the normal device-link flow."
+          badge={isVaultAccessMode ? "VAULT ACCESS" : "RECOVERY"}
+          title={isVaultAccessMode ? (expectedVaultName ? `Add ${expectedVaultName}` : "Add Vault with Recovery Key") : "Use Recovery Key"}
+          subtitle={
+            isVaultAccessMode
+              ? "Paste the vault recovery key from another linked device to add that vault here."
+              : "Recover vault access on this device and continue through the normal device-link flow."
+          }
           icon={<KeyRound size={13} color="#FFD8FA" />}
           metaLabel={busy ? "Working" : "Ready"}
         />
 
         <GlassSection
           themed={themed}
-          title="Recovery Access"
-          subtitle="Enter the device label and the one-time recovery key exactly as saved."
+          title={isVaultAccessMode ? "Recovery Key" : "Recovery Access"}
+          subtitle={
+            isVaultAccessMode
+              ? "Enter the one-time recovery key exactly as saved."
+              : "Enter the device label and the one-time recovery key exactly as saved."
+          }
           icon={<Smartphone size={14} color="#FFC8F3" />}
         >
           <View style={themed($fieldStack)}>
-            <View style={themed($fieldGroup)}>
-              <Text style={themed($label)}>Device name</Text>
-              <IconTextInput
-                themed={themed}
-                theme={theme}
-                icon={<Smartphone size={16} color="#FFD8FA" />}
-                placeholder="Device name"
-                value={deviceName}
-                onChangeText={setDeviceName}
-              />
-            </View>
+            {!isVaultAccessMode ? (
+              <View style={themed($fieldGroup)}>
+                <Text style={themed($label)}>Device name</Text>
+                <IconTextInput
+                  themed={themed}
+                  theme={theme}
+                  icon={<Smartphone size={16} color="#FFD8FA" />}
+                  placeholder="Device name"
+                  value={deviceName}
+                  onChangeText={setDeviceName}
+                />
+              </View>
+            ) : null}
 
             <View style={themed($fieldGroup)}>
               <Text style={themed($label)}>Recovery key</Text>
@@ -134,7 +173,7 @@ export const VaultRecoveryAccessScreen: FC<
 
           <GradientPrimaryButton
             themed={themed}
-            label={busy ? "Recovering..." : "Use Recovery Key"}
+            label={busy ? "Recovering..." : isVaultAccessMode ? "Add Vault to This Device" : "Use Recovery Key"}
             onPress={() => void handleRecover()}
             disabled={busy}
           />

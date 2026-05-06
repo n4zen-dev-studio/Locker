@@ -23,13 +23,15 @@ import {
   VaultScreenHero,
 } from "@/components/vault-note/VaultScreenChrome";
 import {
-  createRecoveryEnvelope,
+  createRecoveryArtifact,
   generateRecoveryKey,
 } from "@/locker/recovery/recoveryKey";
 import {
   getRecoveryEnvelopeStatus,
   upsertRecoveryEnvelope,
 } from "@/locker/recovery/recoveryApi";
+import { fetchAndInstallVaultKeyEnvelope } from "@/locker/keys/userKeyApi";
+import { fetchJson } from "@/locker/net/apiClient";
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
 import {
   getRemoteVaultId,
@@ -40,6 +42,7 @@ import { useAppTheme } from "@/theme/context";
 import { typography } from "@/theme/typography";
 import type { ThemedStyle } from "@/theme/types";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
+import type { VaultDTO } from "@locker/types";
 
 type RecoveryStatus = {
   configured: boolean;
@@ -105,11 +108,31 @@ export const VaultRecoverySetupScreen: FC<
       try {
         const vaultKey = await getRemoteVaultKey(vaultId);
         if (!vaultKey) throw new Error("Vault key unavailable on this device.");
+        const ownedVaults = (await fetchJson<{ vaults: VaultDTO[] }>("/v1/vaults")).vaults ?? [];
+        const currentVault = ownedVaults.find((vault) => vault.id === vaultId) ?? null;
+        const personalVault =
+          ownedVaults.find((vault) => vault.name === "Personal") ?? null;
+
         const recovery = generateRecoveryKey();
-        const envelope = createRecoveryEnvelope(
-          vaultKey,
-          recovery.canonicalKey,
-        );
+        const envelopes = [{ vaultId, vaultKey, role: "target" as const }];
+        if (currentVault && currentVault.name !== "Personal") {
+          if (!personalVault) {
+            throw new Error("Recovery setup could not include Personal vault. Try again from a device with Personal access.");
+          }
+          let personalVaultKey = await getRemoteVaultKey(personalVault.id);
+          if (!personalVaultKey) {
+            personalVaultKey = await fetchAndInstallVaultKeyEnvelope(personalVault.id);
+          }
+          if (!personalVaultKey) {
+            throw new Error("Personal vault key unavailable on this device.");
+          }
+          envelopes.push({
+            vaultId: personalVault.id,
+            vaultKey: personalVaultKey,
+            role: "personal" as const,
+          });
+        }
+        const envelope = createRecoveryArtifact(envelopes, recovery.canonicalKey);
         await upsertRecoveryEnvelope(vaultId, envelope);
         setGeneratedKey(recovery.displayKey);
         setStatus({ configured: true, rotatedAt: new Date().toISOString() });
