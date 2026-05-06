@@ -25,6 +25,7 @@ type SyncState = {
 type SyncEntry = {
   state: SyncState
   timer: ReturnType<typeof setTimeout> | null
+  inFlight: Promise<any> | null
 }
 
 const NOTE_DEBOUNCE_MS = 2000
@@ -37,7 +38,7 @@ let runningVaultId: string | null = null
 function getEntry(vaultId: string): SyncEntry {
   const existing = entries.get(vaultId)
   if (existing) return existing
-  const created: SyncEntry = { state: { syncing: false, pending: false }, timer: null }
+  const created: SyncEntry = { state: { syncing: false, pending: false }, timer: null, inFlight: null }
   entries.set(vaultId, created)
   return created
 }
@@ -79,30 +80,38 @@ async function processQueue(reason: SyncReason): Promise<any> {
   entry.state.syncing = true
   entry.state.pending = false
 
-  try {
-    const ok = reason === "manual" ? true : await hasPrereqs(vaultId)
-    if (ok) {
-      const result = await syncNow({ vaultId, reason })
-      entry.state.lastError = undefined
-      clearPendingUpdatesForVault(vaultId)
-      return result
+  const run = (async () => {
+    try {
+      const ok = reason === "manual" ? true : await hasPrereqs(vaultId)
+      if (ok) {
+        const result = await syncNow({ vaultId, reason })
+        entry.state.lastError = undefined
+        clearPendingUpdatesForVault(vaultId)
+        return result
+      }
+    } catch (err) {
+      entry.state.lastError = err instanceof Error ? err.message : "Sync failed"
+      if (reason === "manual") throw err
+    } finally {
+      entry.state.lastRunAt = new Date().toISOString()
+      entry.state.syncing = false
+      entry.inFlight = null
+      runningVaultId = null
+      if (queue.size > 0) {
+        void processQueue("note_change").catch(() => undefined)
+      }
     }
-  } catch (err) {
-    entry.state.lastError = err instanceof Error ? err.message : "Sync failed"
-    if (reason === "manual") throw err
-  } finally {
-    entry.state.lastRunAt = new Date().toISOString()
-    entry.state.syncing = false
-    runningVaultId = null
-    if (queue.size > 0) {
-      void processQueue("note_change").catch(() => undefined)
-    }
-  }
+  })()
+
+  entry.inFlight = run
+  return run
 }
 
 async function enqueueVault(vaultId: string, reason: SyncReason): Promise<void> {
   const entry = getEntry(vaultId)
-  clearTimer(entry)
+  if (reason !== "note_change") {
+    clearTimer(entry)
+  }
 
   if (reason === "app_active") {
     const lastRun = entry.state.lastRunAt ? new Date(entry.state.lastRunAt).getTime() : 0
@@ -110,11 +119,31 @@ async function enqueueVault(vaultId: string, reason: SyncReason): Promise<void> 
   }
 
   if (reason === "note_change") {
+    if (entry.state.syncing) {
+      entry.state.pending = true
+      queue.add(vaultId)
+      return entry.inFlight ?? undefined
+    }
     entry.timer = setTimeout(() => {
+      entry.timer = null
       queue.add(vaultId)
       void processQueue(reason).catch(() => undefined)
     }, NOTE_DEBOUNCE_MS)
     return
+  }
+
+  if (entry.state.syncing) {
+    entry.state.pending = true
+    if (reason !== "manual") {
+      queue.add(vaultId)
+      return entry.inFlight ?? undefined
+    }
+    return entry.inFlight ?? undefined
+  }
+
+  if (queue.has(vaultId) && reason !== "manual") {
+    entry.state.pending = true
+    return entry.inFlight ?? undefined
   }
 
   queue.add(vaultId)
