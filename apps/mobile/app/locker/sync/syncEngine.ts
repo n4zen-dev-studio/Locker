@@ -1,6 +1,6 @@
 import { getToken } from "@/locker/auth/tokenStore"
 import { getAccount } from "@/locker/storage/accountRepo"
-import { clearRemoteVaultId, getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { getRemoteVaultId, markVaultSynced, setVaultEnabledOnDevice } from "@/locker/storage/remoteVaultRepo"
 import { vaultSession } from "@/locker/session"
 import { base64ToBytes, bytesToBase64 } from "@/locker/crypto/encoding"
 import { sha256Hex } from "@/locker/crypto/sha"
@@ -24,6 +24,7 @@ import {
   setTombstone,
   clearTombstone,
   setSyncDiagnostics,
+  clearVaultSyncState,
 } from "./syncStateRepo"
 import { decryptBlobBytesToJson, encryptJsonToBlobBytes } from "./remoteCodec"
 import { enqueueDeleteNoteData, enqueueUpdateIndexData, enqueueUpsertNoteData } from "./queue"
@@ -53,9 +54,10 @@ export type SyncError = {
   step?: string
 }
 
-let status: { state: "idle" | "syncing" | "error"; lastError?: string; lastSyncAt?: string; lastErrors?: SyncError[] } = {
-  state: "idle",
-}
+const statusByVault = new Map<
+  string,
+  { state: "idle" | "syncing" | "error"; lastError?: string; lastSyncAt?: string; lastErrors?: SyncError[] }
+>()
 
 export function setNetworkOnline(isOnline: boolean): void {
   networkOnline = isOnline
@@ -83,14 +85,17 @@ function isForbidden(err: unknown): boolean {
 }
 
 
-export function getSyncStatus(): {
+export function getSyncStatus(vaultId?: string): {
   state: "idle" | "syncing" | "error"
   lastError?: string
   lastSyncAt?: string
   lastErrors?: SyncError[]
   queueSize: number
 } {
-  const state = getState()
+  const targetVaultId = vaultId ?? getRemoteVaultId()
+  if (!targetVaultId) return { state: "idle", queueSize: 0 }
+  const state = getState(targetVaultId)
+  const status = statusByVault.get(targetVaultId) ?? { state: "idle" as const }
   return {
     state: status.state,
     lastError: status.lastError,
@@ -167,7 +172,7 @@ export async function syncNow(options: { vaultId?: string; signal?: AbortSignal;
   rvk = await ensureSyncKeyCheckWithRefresh(vaultId, token, rvk, signal)
 
 
-  status = { state: "syncing" }
+  statusByVault.set(vaultId, { state: "syncing" })
 
   const startTime = Date.now()
   if (__DEV__) {
@@ -195,14 +200,15 @@ export async function syncNow(options: { vaultId?: string; signal?: AbortSignal;
     changesProcessed += pullResult.processedChanges
 
     const now = new Date().toISOString()
-    status = { state: "idle", lastSyncAt: now, lastErrors: errors }
-    setLastSyncAt(now)
-    setSyncDiagnostics({
+    statusByVault.set(vaultId, { state: "idle", lastSyncAt: now, lastErrors: errors })
+    setLastSyncAt(vaultId, now)
+    setSyncDiagnostics(vaultId, {
       lastSyncDurationMs: Date.now() - startTime,
       lastChangesProcessed: changesProcessed,
       lastIndexSize: listNoteIds(vaultId).length,
-      lastTombstonesCount: Object.keys(getState().tombstones ?? {}).length,
+      lastTombstonesCount: Object.keys(getState(vaultId).tombstones ?? {}).length,
     })
+    markVaultSynced(vaultId, now)
 
     return { pushed, pulled, conflicts, errors }
   } catch (err) {
@@ -211,12 +217,18 @@ export async function syncNow(options: { vaultId?: string; signal?: AbortSignal;
     const message = err instanceof Error ? err.message : "Sync failed"
     const classified = classifyError(err)
     errors.push(classified)
-    status = { state: "error", lastError: message, lastSyncAt: status.lastSyncAt, lastErrors: errors }
-    setSyncDiagnostics({
+    const previousStatus = statusByVault.get(vaultId)
+    statusByVault.set(vaultId, {
+      state: "error",
+      lastError: message,
+      lastSyncAt: previousStatus?.lastSyncAt,
+      lastErrors: errors,
+    })
+    setSyncDiagnostics(vaultId, {
       lastSyncDurationMs: Date.now() - startTime,
       lastChangesProcessed: changesProcessed,
       lastIndexSize: listNoteIds(vaultId).length,
-      lastTombstonesCount: Object.keys(getState().tombstones ?? {}).length,
+      lastTombstonesCount: Object.keys(getState(vaultId).tombstones ?? {}).length,
     })
     throw err
   }
@@ -284,7 +296,7 @@ async function flushOutbox(
   errors: SyncError[],
   signal?: AbortSignal,
 ): Promise<{ pushed: number; touchedNoteIds: Set<string> }> {
-  const outbox = [...getOutbox()]
+  const outbox = [...getOutbox(vaultId)]
   let pushed = 0
   const touchedNoteIds = new Set<string>()
   const updated: OutboxOp[] = []
@@ -314,8 +326,8 @@ async function flushOutbox(
       if (op.noteId) touchedNoteIds.add(op.noteId)
 
       if (op.noteId && op.noteUpdatedAt && op.lamport !== undefined) {
-        const existing = getNoteRemoteMeta(op.noteId)
-        setNoteRemoteMeta(op.noteId, {
+        const existing = getNoteRemoteMeta(vaultId, op.noteId)
+        setNoteRemoteMeta(vaultId, op.noteId, {
           lastLamport: op.lamport,
           lastUpdatedAt: op.noteUpdatedAt,
           lastSeenChangeId: existing?.lastSeenChangeId ?? 0,
@@ -331,10 +343,9 @@ async function flushOutbox(
         throw new Error(classified.message)
       }
       if (classified.type === "VAULT_MISMATCH") {
-        clearRemoteVaultId()
         clearRemoteVaultKey(vaultId)
-        setLastCursor(0)
-        setOutbox([])
+        setVaultEnabledOnDevice(vaultId, false)
+        clearVaultSyncState(vaultId)
         throw new Error("Remote vault deleted")
       }
       if (classified.type === "INTEGRITY_ERROR") {
@@ -351,7 +362,7 @@ async function flushOutbox(
     }
   }
 
-  setOutbox(updated)
+  setOutbox(vaultId, updated)
   return { pushed, touchedNoteIds }
 }
 
@@ -369,7 +380,7 @@ async function pullChanges(
   let processedChanges = 0
 
   // IMPORTANT: lastCursor can be undefined on fresh installs / older state
-  let cursor = getState().lastCursor ?? 0
+  let cursor = getState(vaultId).lastCursor ?? 0
 
   let sawIndex: string[] | null = null
   let indexState: "none" | "valid" | "missing" | "corrupt" = "none"
@@ -389,10 +400,9 @@ async function pullChanges(
       )
     } catch (err) {
       if (isNotFound(err)) {
-        clearRemoteVaultId()
         clearRemoteVaultKey(vaultId)
-        setLastCursor(0)
-        setOutbox([])
+        setVaultEnabledOnDevice(vaultId, false)
+        clearVaultSyncState(vaultId)
         throw new Error("Remote vault deleted")
       }
       throw err
@@ -546,7 +556,7 @@ async function pullChanges(
     }
 
     cursor = tempCursor
-    setLastCursor(cursor)
+    setLastCursor(vaultId, cursor)
 
     if (changes.length < 100) break
   }
@@ -573,10 +583,10 @@ async function applyRemoteNote(
   vaultId: string,
 ): Promise<{ applied: number; conflicts: number }> {
   const note = payload.note
-  const meta = getNoteRemoteMeta(note.id)
+  const meta = getNoteRemoteMeta(vaultId, note.id)
   const local = tryGetNote(note.id, vmk)
   const localUnsynced = !!local && (!meta || local.updatedAt > meta.lastUpdatedAt)
-  const tombstone = getTombstone(note.id, vaultId)
+  const tombstone = getTombstone(vaultId, note.id)
 
   if (note.vaultId && note.vaultId !== vaultId) {
     return { applied: 0, conflicts: 0 }
@@ -587,7 +597,7 @@ async function applyRemoteNote(
     if (cmpTombstone >= 0) {
       return { applied: 0, conflicts: 0 }
     }
-    clearTombstone(note.id)
+    clearTombstone(vaultId, note.id)
   }
 
   if (localUnsynced && meta?.lastLamport !== undefined) {
@@ -600,7 +610,7 @@ async function applyRemoteNote(
 
   if (!local) {
     saveNoteFromSync(note, vmk, vaultId)
-    setNoteRemoteMeta(note.id, {
+    setNoteRemoteMeta(vaultId, note.id, {
       lastLamport: payload.lamport,
       lastUpdatedAt: note.updatedAt,
       lastSeenChangeId: changeId,
@@ -629,7 +639,7 @@ async function applyRemoteNote(
         vmk,
       )
       enqueueUpsertNoteData(conflictNote, vaultId, rvk, deviceId)
-      setNoteRemoteMeta(note.id, {
+      setNoteRemoteMeta(vaultId, note.id, {
         lastLamport: payload.lamport,
         lastUpdatedAt: note.updatedAt,
         lastSeenChangeId: changeId,
@@ -640,7 +650,7 @@ async function applyRemoteNote(
       return { applied: 1, conflicts: 1 }
     }
     saveNoteFromSync(note, vmk, vaultId)
-    setNoteRemoteMeta(note.id, {
+    setNoteRemoteMeta(vaultId, note.id, {
       lastLamport: payload.lamport,
       lastUpdatedAt: note.updatedAt,
       lastSeenChangeId: changeId,
@@ -652,7 +662,7 @@ async function applyRemoteNote(
 
   if (note.updatedAt > local.updatedAt) {
     saveNoteFromSync(note, vmk, vaultId)
-    setNoteRemoteMeta(note.id, {
+    setNoteRemoteMeta(vaultId, note.id, {
       lastLamport: payload.lamport,
       lastUpdatedAt: note.updatedAt,
       lastSeenChangeId: changeId,
@@ -661,7 +671,7 @@ async function applyRemoteNote(
     return { applied: 1, conflicts: 0 }
   }
 
-  setNoteRemoteMeta(note.id, {
+  setNoteRemoteMeta(vaultId, note.id, {
     lastLamport: payload.lamport,
     lastUpdatedAt: note.updatedAt,
     lastSeenChangeId: changeId,
@@ -678,14 +688,14 @@ async function applyRemoteDelete(
   deviceId: string,
   vaultId: string,
 ): Promise<{ applied: number; conflicts: number }> {
-  const meta = getNoteRemoteMeta(payload.noteId)
+  const meta = getNoteRemoteMeta(vaultId, payload.noteId)
   const local = tryGetNote(payload.noteId, vmk)
 
   if (meta && compareLamport(meta.lastLamport, meta.lastDeviceId ?? "", payload.lamport, payload.deviceId) >= 0) {
     return { applied: 0, conflicts: 0 }
   }
 
-  setTombstone(payload.noteId, {
+  setTombstone(vaultId, payload.noteId, {
     noteId: payload.noteId,
     vaultId,
     deletedAt: payload.deletedAt,
@@ -697,7 +707,7 @@ async function applyRemoteDelete(
     deleteNote(payload.noteId, undefined, { suppressSync: true })
   }
 
-  setNoteRemoteMeta(payload.noteId, {
+  setNoteRemoteMeta(vaultId, payload.noteId, {
     lastLamport: payload.lamport,
     lastUpdatedAt: payload.deletedAt,
     lastSeenChangeId: changeId,
@@ -723,10 +733,10 @@ async function reconcileIndex(
 
   for (const id of localIds) {
     if (remoteSet.has(id)) continue
-    const meta = getNoteRemoteMeta(id)
+    const meta = getNoteRemoteMeta(vaultId, id)
     const local = tryGetNote(id, vmk)
     const unsynced = !!local && (!meta || local.updatedAt > meta.lastUpdatedAt)
-    const tombstone = getTombstone(id, vaultId)
+    const tombstone = getTombstone(vaultId, id)
     if (tombstone && local) {
       deleteNote(id, undefined, { suppressSync: true })
       needsUpdate = true
@@ -742,7 +752,7 @@ async function reconcileIndex(
   }
 
   for (const id of remoteIds) {
-    const tombstone = getTombstone(id, vaultId)
+    const tombstone = getTombstone(vaultId, id)
     if (tombstone) {
       needsUpdate = true
       continue
@@ -768,7 +778,7 @@ async function repairMissingNotes(
   signal?: AbortSignal,
 ): Promise<void> {
   for (const id of remoteIds) {
-    const tombstone = getTombstone(id, vaultId)
+    const tombstone = getTombstone(vaultId, id)
     if (tombstone) continue
     const local = tryGetNote(id, vmk)
     if (local) continue
@@ -815,7 +825,7 @@ async function uploadIndex(
     ids: listNoteIds(vaultId),
     updatedAt: new Date().toISOString(),
     deviceId,
-    lamport: nextLamport(),
+    lamport: nextLamport(vaultId),
   }
   const bytes = encryptJsonToBlobBytes(rvk, payload)
   await putBlob(

@@ -584,7 +584,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       try {
         if (!vaultSession.isUnlocked()) return
         if (!canEdit) {
-          setError("Viewer role cannot modify this item")
+          setError("This item is read-only right now")
           return
         }
 
@@ -893,7 +893,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   const startRecording = useCallback(async () => {
     try {
-      if (!canEdit) throw new Error("Viewer role cannot record audio")
+      if (!canEdit) throw new Error("This item is read-only right now")
       if (recordingRef.current) return
       const permission = await Audio.requestPermissionsAsync()
       if (!permission.granted) throw new Error("Microphone permission denied")
@@ -1010,7 +1010,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const removeAttachment = useCallback(
     async (attachment: NoteAttachment) => {
       if (!canEdit) {
-        setError("Viewer role cannot modify this item")
+        setError("This item is read-only right now")
         return
       }
 
@@ -1182,7 +1182,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           title={getVaultItemLabel(effectiveItemType)}
           subtitle={heroSubtitle}
           itemType={effectiveItemType}
-          scopeLabel={vaultId ? "Synced vault" : "Local vault"}
+          scopeLabel={vaultId ? "Account vault" : "Local vault"}
           canExport={!isExporting}
           onExport={() => void exportCurrentItem()}
           icon={
@@ -1288,7 +1288,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
             title="Attachments"
             subtitle={attachmentSectionSubtitle}
             icon={<Paperclip size={14} color="#FFC8F3" />}
-            rightSlot={<Text style={themed($tinyMetaText)}>{canEdit ? "Secure file surface" : "Viewer mode"}</Text>}
+            rightSlot={<Text style={themed($tinyMetaText)}>{canEdit ? "Secure file surface" : "Read-only"}</Text>}
           >
             <View style={themed($fileTitleBar)}>
               <IconTextInput

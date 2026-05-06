@@ -78,6 +78,12 @@ export async function deleteEncryptedAttachment(vaultId: string, attId: string):
   await FileSystem.deleteAsync(path, { idempotent: true })
 }
 
+export async function clearVaultAttachmentCache(vaultId: string): Promise<void> {
+  const rootDir = resolveWritableRootDirectory()
+  if (!rootDir) return
+  await FileSystem.deleteAsync(attachmentDir(vaultId, rootDir), { idempotent: true })
+}
+
 export function getAttachmentCachePath(vaultId: string, attId: string): string | null {
   const rootDir = resolveWritableRootDirectory()
   if (!rootDir) return null

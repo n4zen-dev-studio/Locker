@@ -344,6 +344,19 @@ export function resetNotes(): void {
   remove(NOTES_LIST_KEY)
 }
 
+export function removeNotesForVault(vaultId: string | null): void {
+  const metas = load<NoteMeta[]>(NOTES_LIST_KEY) ?? []
+  for (const meta of metas) {
+    if ((meta.vaultId ?? null) === (vaultId ?? null)) {
+      remove(NOTE_KEY_PREFIX + meta.id)
+    }
+  }
+  save(
+    NOTES_LIST_KEY,
+    metas.filter((meta) => (meta.vaultId ?? null) !== (vaultId ?? null)),
+  )
+}
+
 export function listNoteIds(vaultId?: string | null): string[] {
   const metas = load<NoteMeta[]>(NOTES_LIST_KEY) ?? []
   return metas

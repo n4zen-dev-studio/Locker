@@ -8,6 +8,7 @@ import path from "path"
 import { authMiddleware } from "../middleware/auth"
 import { recordAuditEvent } from "../db/audit"
 import { sendVaultChangedPush } from "../push/pushService"
+import { ensureVaultOwner, getRequestDeviceId } from "./access"
 
 const vaultSchema = z.object({
   name: z.string().min(1)
@@ -25,23 +26,59 @@ export async function registerVaultRoutes(app: FastifyInstance) {
     const db = getDb()
     const now = new Date().toISOString()
     const vaultId = crypto.randomUUID()
+    const deviceId = getRequestDeviceId(request)
 
     db.prepare("INSERT INTO vaults (id, ownerUserId, name, createdAt) VALUES (?, ?, ?, ?)")
       .run(vaultId, user.id, parse.data.name, now)
     db.prepare("INSERT INTO vault_members (vaultId, userId, role, createdAt) VALUES (?, ?, ?, ?)")
       .run(vaultId, user.id, "owner", now)
+    if (deviceId) {
+      db.prepare("INSERT OR REPLACE INTO device_vaults (deviceId, vaultId, enabledAt) VALUES (?, ?, ?)")
+        .run(deviceId, vaultId, now)
+    }
 
-    const vault = { id: vaultId, ownerUserId: user.id, name: parse.data.name, createdAt: now }
+    const vault = {
+      id: vaultId,
+      ownerUserId: user.id,
+      name: parse.data.name,
+      createdAt: now,
+      enabledOnDevice: !!deviceId,
+      enabledAt: deviceId ? now : null,
+    }
     reply.send({ vault })
   })
 
   app.get("/v1/vaults", { preHandler: authMiddleware }, async (request, reply) => {
     const user = request.user!
     const db = getDb()
+    const deviceId = getRequestDeviceId(request)
     const rows = db.prepare(
-      "SELECT v.id, v.ownerUserId, v.name, v.createdAt, m.role FROM vaults v INNER JOIN vault_members m ON v.id = m.vaultId WHERE m.userId = ? AND v.deletedAt IS NULL"
-    ).all(user.id)
-    reply.send({ vaults: rows })
+      `SELECT
+         v.id,
+         v.ownerUserId,
+         v.name,
+         v.createdAt,
+         dv.enabledAt,
+         CASE WHEN dv.deviceId IS NULL THEN 0 ELSE 1 END AS enabledOnDevice
+       FROM vaults v
+       LEFT JOIN device_vaults dv ON dv.vaultId = v.id AND dv.deviceId = ?
+       WHERE v.ownerUserId = ? AND v.deletedAt IS NULL
+       ORDER BY v.createdAt ASC`,
+    ).all(deviceId, user.id) as Array<{
+      id: string
+      ownerUserId: string
+      name: string
+      createdAt: string
+      enabledAt?: string | null
+      enabledOnDevice: number
+    }>
+    reply.send({
+      vaults: rows.map((row) => ({
+        ...row,
+        enabledOnDevice: row.enabledOnDevice === 1,
+        enabledAt: row.enabledAt ?? null,
+      })),
+    })
   })
 
   app.delete(
@@ -52,12 +89,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       const { vaultId } = request.params as { vaultId: string }
       const db = getDb()
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || member.role !== "owner") {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 
@@ -99,12 +131,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
 
       const db = getDb()
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || member.role !== "owner") {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 
@@ -113,6 +140,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       const tx = db.transaction(() => {
         db.prepare("DELETE FROM blobs WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM changes WHERE vaultId = ?").run(vaultId)
+        db.prepare("DELETE FROM device_vaults WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vault_members WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vaults WHERE id = ?").run(vaultId)
       })
@@ -143,21 +171,17 @@ export async function registerVaultRoutes(app: FastifyInstance) {
         return
       }
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member) {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 
       const rows = db.prepare(
         `SELECT d.id, d.userId, d.name, d.platform, d.createdAt, d.lastSeenAt
          FROM devices d
-         WHERE d.userId IN (SELECT userId FROM vault_members WHERE vaultId = ?)
+         INNER JOIN device_vaults dv ON dv.deviceId = d.id
+         WHERE dv.vaultId = ? AND d.userId = ?
          ORDER BY d.lastSeenAt DESC`
-      ).all(vaultId)
+      ).all(vaultId, user.id)
 
       reply.send({ devices: rows })
     }
@@ -183,12 +207,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
         return
       }
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member) {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 
@@ -208,24 +227,19 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       const { vaultId } = request.params as { vaultId: string }
       const db = getDb()
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member) {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 
-      const rows = db.prepare(
-        `SELECT vm.userId, u.email, vm.role, vm.createdAt
-         FROM vault_members vm
-         LEFT JOIN users u ON u.id = vm.userId
-         WHERE vm.vaultId = ?
-         ORDER BY vm.createdAt ASC`
-      ).all(vaultId)
+      const vault = db.prepare(
+        "SELECT ownerUserId, createdAt FROM vaults WHERE id = ?"
+      ).get(vaultId) as { ownerUserId: string; createdAt: string } | undefined
 
-      reply.send({ members: rows })
+      reply.send({
+        members: vault
+          ? [{ userId: vault.ownerUserId, email: user.email ?? null, role: "owner", createdAt: vault.createdAt }]
+          : [],
+      })
     }
   )
 
@@ -237,19 +251,15 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       const { vaultId, userId } = request.params as { vaultId: string; userId: string }
       const db = getDb()
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || member.role !== "owner") {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 
       const now = new Date().toISOString()
       const tx = db.transaction(() => {
-        db.prepare("DELETE FROM vault_members WHERE vaultId = ? AND userId = ?")
-          .run(vaultId, userId)
+        if (userId !== user.id) {
+          throw new Error("Single-user vaults do not support member removal")
+        }
         db.prepare("INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)")
           .run(vaultId, "vault_meta", null, now)
       })
@@ -280,12 +290,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       const limit = Math.min(Number(query.limit ?? 50), 100)
       const db = getDb()
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || (member.role !== "owner" && member.role !== "admin")) {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 
@@ -314,12 +319,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       const { vaultId } = request.params as { vaultId: string }
       const db = getDb()
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || (member.role !== "owner" && member.role !== "admin")) {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 
@@ -327,8 +327,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
         .get(vaultId) as { count: number }
       const changeCount = db.prepare("SELECT COUNT(*) as count FROM changes WHERE vaultId = ?")
         .get(vaultId) as { count: number }
-      const memberCount = db.prepare("SELECT COUNT(*) as count FROM vault_members WHERE vaultId = ?")
-        .get(vaultId) as { count: number }
+      const memberCount = { count: 1 }
       const lastActivity = db.prepare(
         "SELECT MAX(createdAt) as lastActivity FROM changes WHERE vaultId = ?"
       ).get(vaultId) as { lastActivity?: string | null }
@@ -351,12 +350,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       const { vaultId } = request.params as { vaultId: string }
       const db = getDb()
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || member.role !== "owner") {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 
@@ -386,12 +380,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       const { vaultId } = request.params as { vaultId: string }
       const db = getDb()
 
-      const member = db.prepare(
-        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
-      ).get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || (member.role !== "owner" && member.role !== "admin")) {
-        reply.code(403).send({ error: "Forbidden" })
+      if (!ensureVaultOwner(request, reply, vaultId)) {
         return
       }
 

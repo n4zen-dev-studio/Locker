@@ -96,16 +96,16 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
           >
             <View style={themed($grid)}>
               <ControlTile
-                label="Sync Setup"
-                caption="Vault sync"
+                label="Vaults & Devices"
+                caption="Sync and availability"
                 accent="blue"
                 icon={<Cloud size={18} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("RemoteVault")}
               />
 
               <ControlTile
-                label="Link Device"
-                caption="Trusted device"
+                label="Set Up Device"
+                caption="Add my device"
                 accent="pink"
                 icon={<Link2 size={18} color={theme.colors.vaultHub.vaultHubAccentPinkSoft} />}
                 onPress={() => navigation.navigate("VaultLinkDevice")}

@@ -7,6 +7,7 @@ import { getApiEnv } from "@locker/config"
 import { rateLimit } from "../middleware/rateLimit"
 import { recordAuditEvent } from "../db/audit"
 import { sendVaultChangedPush } from "../push/pushService"
+import { userOwnsVault } from "./access"
 
 export async function registerBlobRoutes(app: FastifyInstance) {
   const env = getApiEnv()
@@ -33,12 +34,7 @@ export async function registerBlobRoutes(app: FastifyInstance) {
       if (!vault) return reply.code(404).send({ error: "Not found" })
       if (vault.deletedAt) return reply.code(404).send({ error: "Vault deleted" })
 
-      const member = db
-        .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
-        .get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member) return reply.code(403).send({ error: "Forbidden" })
-      if (member.role === "viewer") return reply.code(403).send({ error: "Insufficient role" })
+      if (!userOwnsVault(user.id, vaultId)) return reply.code(403).send({ error: "Forbidden" })
 
       const body = await readBody(request)
       if (body.length > env.MAX_BLOB_BYTES) {
@@ -108,10 +104,7 @@ export async function registerBlobRoutes(app: FastifyInstance) {
       if (!vault) return reply.code(404).send({ error: "Not found" })
       if (vault.deletedAt) return reply.code(404).send({ error: "Vault deleted" })
 
-      const member = db
-        .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
-        .get(vaultId, user.id)
-      if (!member) return reply.code(403).send({ error: "Forbidden" })
+      if (!userOwnsVault(user.id, vaultId)) return reply.code(403).send({ error: "Forbidden" })
 
       // Prefer file as source-of-truth to prevent 404 when DB row is missing.
       let data: Buffer
@@ -145,11 +138,7 @@ export async function registerBlobRoutes(app: FastifyInstance) {
       if (!vault) return reply.code(404).send({ error: "Not found" })
       if (vault.deletedAt) return reply.code(404).send({ error: "Vault deleted" })
 
-      const member = db
-        .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
-        .get(vaultId, user.id) as { role?: string } | undefined
-
-      if (!member || member.role !== "owner") return reply.code(403).send({ error: "Forbidden" })
+      if (!userOwnsVault(user.id, vaultId)) return reply.code(403).send({ error: "Forbidden" })
 
       await deleteBlob(vaultId, blobId)
 

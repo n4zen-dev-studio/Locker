@@ -8,9 +8,11 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
-import { setRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { setRemoteVaultId, setVaultEnabledOnDevice } from "@/locker/storage/remoteVaultRepo"
 import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { fetchJson } from "@/locker/net/apiClient"
+import { getAccount } from "@/locker/storage/accountRepo"
+import { requestSync } from "@/locker/sync/syncCoordinator"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { getToken } from "@/locker/auth/tokenStore"
 import {
@@ -22,9 +24,12 @@ import {
 
 export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairing">> =
   function VaultImportPairingScreen(props) {
-    const { navigation } = props
+    const { navigation, route } = props
     const { themed } = useAppTheme()
     const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
+        const expectedVaultId = route.params?.vaultId
+    const expectedVaultName = route.params?.vaultName
+
 
     const [pairingCode, setPairingCode] = useState("")
     const [error, setError] = useState<string | null>(null)
@@ -90,10 +95,19 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
           pairingCode: normalizedCode,
           wrappedVaultKeyB64: data.wrappedVaultKeyB64,
         })
+        if (expectedVaultId && unwrapped.vaultId !== expectedVaultId) {
+          throw new Error(`This access code is for a different vault${expectedVaultName ? ` than ${expectedVaultName}` : ""}.`)
+        }
 
         await setRemoteVaultKey(unwrapped.vaultId, unwrapped.rvk)
-        setRemoteVaultId(unwrapped.vaultId)
-        setStatus("Device pairing completed. Sync is ready.")
+        const account = getAccount()
+        if (account?.device.id) {
+          await fetchJson(`/v1/devices/${account.device.id}/vaults/${unwrapped.vaultId}`, { method: "PUT" })
+        }
+        setRemoteVaultId(unwrapped.vaultId, expectedVaultName)
+        setVaultEnabledOnDevice(unwrapped.vaultId, true, { name: expectedVaultName })
+        void requestSync("vault_enabled", unwrapped.vaultId)
+        setStatus("Vault added to this device. Sync is ready.")
         navigation.replace("RemoteVault")
       } catch (err) {
         const message = err instanceof Error ? err.message : "Import failed"
@@ -105,10 +119,10 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
       <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
         <View style={themed($header)}>
           <Text preset="heading" style={themed($title)}>
-            Enter Pairing Code
+            {expectedVaultName ? `Add ${expectedVaultName}` : "Enter Vault Access Code"}
           </Text>
           <Text preset="subheading" style={themed($subtitle)}>
-            Use the one-time code from another one of your devices
+            Use the one-time vault access code from another one of your devices
           </Text>
         </View>
 
@@ -140,7 +154,7 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
 
         <Pressable style={themed($primaryButton)} onPress={handleImport}>
           <Text preset="bold" style={themed($primaryButtonText)}>
-            Pair This Device
+            Add Vault to This Device
           </Text>
         </Pressable>
 

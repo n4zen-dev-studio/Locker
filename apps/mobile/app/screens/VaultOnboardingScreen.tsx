@@ -3,6 +3,7 @@ import { Pressable, TextStyle, View, ViewStyle } from "react-native"
 
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
+import { ensureNewUserBootstrap } from "@/locker/bootstrap/bootstrapService"
 import { AnimatedBlobBackground } from "@/components/AnimatedBlobBackground"
 import { completePrivacyOnboarding } from "@/locker/storage/onboardingRepo"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
@@ -16,9 +17,15 @@ export const VaultOnboardingScreen: FC<AppStackScreenProps<"VaultOnboarding">> =
     const { themed } = useAppTheme()
     const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
-    const handleContinue = () => {
+    const handleContinue = async () => {
+      await ensureNewUserBootstrap()
       completePrivacyOnboarding()
       navigation.replace("VaultTabs", { screen: "Vault" })
+    }
+
+    const handleExistingUser = () => {
+      completePrivacyOnboarding()
+      navigation.replace("VaultLinkDevice")
     }
 
     return (
@@ -26,21 +33,27 @@ export const VaultOnboardingScreen: FC<AppStackScreenProps<"VaultOnboarding">> =
         <AnimatedBlobBackground>
           <View style={themed($card)}>
             <Text preset="heading" style={themed($title)}>
-              Privacy First
+              Set Up Locker
             </Text>
             <Text preset="subheading" style={themed($subtitle)}>
-              Your vault stays hidden behind the calculator and unlocks only with your device passkey.
+              Locker stays hidden behind the calculator while your vaults sync only across your own devices.
             </Text>
 
             <View style={themed($section)}>
-              <Text style={themed($bullet)}>The calculator remains the public face of the app.</Text>
-              <Text style={themed($bullet)}>Vault content is encrypted before storage and sync.</Text>
-              <Text style={themed($bullet)}>Security-sensitive actions will layer on stricter checks next.</Text>
+              <Text style={themed($bullet)}>A Personal vault is the default first setup.</Text>
+              <Text style={themed($bullet)}>Each vault keeps its own encryption key.</Text>
+              <Text style={themed($bullet)}>You can later choose which vaults live on each device.</Text>
             </View>
 
-            <Pressable style={themed($primaryButton)} onPress={handleContinue}>
+            <Pressable style={themed($primaryButton)} onPress={() => void handleContinue()}>
               <Text preset="bold" style={themed($primaryButtonText)}>
-                Enter Vault
+                Create New Locker Setup
+              </Text>
+            </Pressable>
+
+            <Pressable style={themed($secondaryButton)} onPress={handleExistingUser}>
+              <Text preset="bold" style={themed($secondaryButtonText)}>
+                I Already Use Locker
               </Text>
             </Pressable>
           </View>
@@ -92,4 +105,16 @@ const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 
 const $primaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
+})
+
+const $secondaryButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  borderRadius: 14,
+  paddingVertical: spacing.md,
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.18)",
+})
+
+const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
 })

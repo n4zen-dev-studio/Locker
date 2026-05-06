@@ -55,7 +55,7 @@ export type AppStackParamList = {
   VaultLinkDevice: undefined
   RemoteVault: undefined
   VaultPairDevice: undefined
-  VaultImportPairing: undefined
+  VaultImportPairing: { vaultId?: string; vaultName?: string } | undefined
   VaultDiagnostics: undefined
   ThreatModel: undefined
   ServerUrl: undefined
