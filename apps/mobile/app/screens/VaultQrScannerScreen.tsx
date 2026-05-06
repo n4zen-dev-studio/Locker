@@ -99,6 +99,8 @@ export const VaultQrScannerScreen: FC<AppStackScreenProps<"VaultQrScanner">> =
             metaLabel={
               permission?.granted ? "Camera ready" : "Permission needed"
             }
+            showBackButton
+            onBackPress={() => navigation.goBack()}
           />
 
           <GlassSection

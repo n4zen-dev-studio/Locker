@@ -1,11 +1,4 @@
-import React, {
-  FC,
-  MutableRefObject,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { FC, MutableRefObject, useEffect, useMemo, useRef } from "react";
 import {
   Platform,
   Pressable,
@@ -14,23 +7,14 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import {
-  Gesture,
-  GestureDetector,
-  GestureHandlerRootView,
-} from "react-native-gesture-handler";
 import Animated, {
-  cancelAnimation,
   Easing,
   interpolate,
-  runOnJS,
   SharedValue,
   useAnimatedStyle,
   useSharedValue,
-  withDecay,
   withDelay,
   withSequence,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
@@ -71,11 +55,6 @@ const SATELLITE_SIZE = 90;
 
 const CENTER_RADIUS = CENTER_SIZE / 2;
 const SATELLITE_RADIUS = SATELLITE_SIZE / 2;
-
-const DRAG_ROTATION_MULTIPLIER = 1.5;
-const RELEASE_VELOCITY_MULTIPLIER = 1.5;
-const ROTATION_DECELERATION = 0.998;
-const DRAG_TOUCH_SCALE = 1.03;
 
 const CORE_SIZE = 152;
 const INNER_CORE_SIZE = 120;
@@ -177,13 +156,6 @@ const ORB_THEMES: Record<
 
 function degToRad(deg: number) {
   return (deg * Math.PI) / 180;
-}
-
-function normalizeAngleDelta(delta: number) {
-  "worklet";
-  if (delta > Math.PI) return delta - Math.PI * 2;
-  if (delta < -Math.PI) return delta + Math.PI * 2;
-  return delta;
 }
 
 function getOrbOffset(angle: number, distance: number) {
@@ -443,11 +415,7 @@ function SatelliteOrb({
   const handlePressOut = () => {
     press.value = withSequence(
       withTiming(-0.12, { duration: 120, easing: Easing.out(Easing.quad) }),
-      withSpring(0, {
-        damping: 15,
-        stiffness: 190,
-        mass: 0.9,
-      }),
+      withTiming(0, { duration: 120, easing: Easing.out(Easing.quad) }),
     );
   };
 
@@ -538,44 +506,18 @@ function useStableGradientId(prefix: string) {
 
 export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
   actions,
-  reducedMotion = false,
-  active = true,
-  onOrbitDragStateChange,
+  reducedMotion = true,
 }) => {
-  const canvasRef = useRef<View>(null);
   const isOrbitDraggingRef = useRef(false);
-  const frameRef = useRef<number | null>(null);
-  const isMountedRef = useRef(true);
-  const [canvasCenter, setCanvasCenter] = useState({ x: 0, y: 0 });
   const { theme, themed } = useAppTheme();
 
   const heroActions = useMemo(() => actions.slice(0, 5), [actions]);
 
   const connectorsIn = useSharedValue(reducedMotion ? 1 : 0);
   const orbitRotation = useSharedValue(0);
-  const orbitTouchScale = useSharedValue(1);
-  const lastTouchAngle = useSharedValue(0);
-  const lastTouchTime = useSharedValue(0);
-  const angularVelocity = useSharedValue(0);
 
   const coreGradientId = useStableGradientId("vault-core");
   const bloomGradientId = useStableGradientId("vault-bloom");
-
-  const notifyOrbitDragState = (isDragging: boolean) => {
-    isOrbitDraggingRef.current = isDragging;
-    onOrbitDragStateChange?.(isDragging);
-  };
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      if (frameRef.current !== null) {
-        cancelAnimationFrame(frameRef.current);
-        frameRef.current = null;
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (reducedMotion) return;
@@ -586,322 +528,226 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
     });
   }, [connectorsIn, reducedMotion]);
 
-  const onCanvasLayout = () => {
-    if (!active) return;
-    if (frameRef.current !== null) {
-      cancelAnimationFrame(frameRef.current);
-    }
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null;
-      if (!active || !isMountedRef.current || !canvasRef.current) return;
-      try {
-        canvasRef.current.measureInWindow((x, y, width, height) => {
-          if (!isMountedRef.current || !active) return;
-          setCanvasCenter({
-            x: x + width / 2,
-            y: y + height / 2,
-          });
-        });
-      } catch (error) {
-        if (__DEV__) {
-          console.log("[vault-hero-orb] skipped stale measureInWindow", {
-            active,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-    });
-  };
-
   const connectorStyle = useAnimatedStyle(() => ({
     opacity: interpolate(connectorsIn.value, [0, 1], [0, 1]),
     transform: [{ scale: interpolate(connectorsIn.value, [0, 1], [0.92, 1]) }],
   }));
 
   const orbitLayerStyle = useAnimatedStyle(() => ({
-    transform: [
-      { rotate: `${orbitRotation.value}rad` },
-      { scale: orbitTouchScale.value },
-    ],
+    transform: [{ rotate: `${orbitRotation.value}rad` }],
   }));
 
-  const orbitPanGesture = Gesture.Pan()
-    .minDistance(3)
-    .shouldCancelWhenOutside(false)
-    .onBegin((event) => {
-      cancelAnimation(orbitRotation);
-      orbitTouchScale.value = withTiming(DRAG_TOUCH_SCALE, { duration: 320 });
-      runOnJS(notifyOrbitDragState)(true);
-
-      const dx = event.absoluteX - canvasCenter.x;
-      const dy = event.absoluteY - canvasCenter.y;
-
-      lastTouchAngle.value = Math.atan2(dy, dx);
-      lastTouchTime.value = Date.now();
-      angularVelocity.value = 0;
-    })
-    .onUpdate((event) => {
-      const dx = event.absoluteX - canvasCenter.x;
-      const dy = event.absoluteY - canvasCenter.y;
-      const currentAngle = Math.atan2(dy, dx);
-
-      const delta = normalizeAngleDelta(currentAngle - lastTouchAngle.value);
-      if (!Number.isFinite(delta)) return;
-
-      orbitRotation.value += delta * DRAG_ROTATION_MULTIPLIER;
-
-      const now = Date.now();
-      const dt = Math.max((now - lastTouchTime.value) / 1000, 0.001);
-      const nextVelocity = (delta / dt) * DRAG_ROTATION_MULTIPLIER;
-
-      if (Number.isFinite(nextVelocity)) {
-        angularVelocity.value = nextVelocity;
-      }
-
-      lastTouchAngle.value = currentAngle;
-      lastTouchTime.value = now;
-    })
-    .onEnd(() => {
-      orbitTouchScale.value = withTiming(1, { duration: 320 });
-      runOnJS(notifyOrbitDragState)(false);
-
-      if (Number.isFinite(angularVelocity.value)) {
-        orbitRotation.value = withDecay({
-          velocity: angularVelocity.value * RELEASE_VELOCITY_MULTIPLIER,
-          deceleration: ROTATION_DECELERATION,
-        });
-      }
-    })
-    .onFinalize(() => {
-      orbitTouchScale.value = withTiming(1, { duration: 180 });
-      runOnJS(notifyOrbitDragState)(false);
-    });
-
   return (
-    <GestureHandlerRootView>
-      <View style={styles.root}>
-        <GestureDetector gesture={orbitPanGesture}>
-          <View
-            ref={canvasRef}
-            style={styles.canvas}
-            onLayout={onCanvasLayout}
-            collapsable={false}
-          >
-            <View pointerEvents="none" style={styles.heroDotField}>
-              <HeroDotField />
-            </View>
+    <View style={styles.root}>
+      <View style={styles.canvas} collapsable={false}>
+        <View pointerEvents="none" style={styles.heroDotField}>
+          <HeroDotField />
+        </View>
 
-            <AnimatedView
-              pointerEvents="box-none"
-              style={[styles.orbitLayer, orbitLayerStyle]}
+        <AnimatedView
+          pointerEvents="box-none"
+          style={[styles.orbitLayer, orbitLayerStyle]}
+        >
+          <AnimatedView style={[styles.connectorLayer, connectorStyle]}>
+            <Svg
+              width={CANVAS_SIZE}
+              height={CANVAS_SIZE}
+              viewBox={`0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`}
             >
-              <AnimatedView style={[styles.connectorLayer, connectorStyle]}>
-                <Svg
-                  width={CANVAS_SIZE}
-                  height={CANVAS_SIZE}
-                  viewBox={`0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`}
+              <Defs>
+                <SvgRadialGradient id="connectorBody" cx="50%" cy="45%" r="85%">
+                  <Stop offset="0%" stopColor="rgba(41, 31, 31, 0.13)" />
+                  <Stop offset="38%" stopColor="rgba(32, 44, 96, 0.22)" />
+                  <Stop offset="100%" stopColor="rgba(20, 35, 77, 0.06)" />
+                </SvgRadialGradient>
+
+                <SvgRadialGradient
+                  id="connectorHighlight"
+                  cx="50%"
+                  cy="30%"
+                  r="75%"
                 >
-                  <Defs>
-                    <SvgRadialGradient
-                      id="connectorBody"
-                      cx="50%"
-                      cy="45%"
-                      r="85%"
-                    >
-                      <Stop offset="0%" stopColor="rgba(41, 31, 31, 0.13)" />
-                      <Stop offset="38%" stopColor="rgba(32, 44, 96, 0.22)" />
-                      <Stop offset="100%" stopColor="rgba(20, 35, 77, 0.06)" />
-                    </SvgRadialGradient>
+                  <Stop offset="0%" stopColor="rgba(110, 19, 19, 0.2)" />
+                  <Stop offset="35%" stopColor="rgba(36, 19, 19, 0.08)" />
+                  <Stop offset="100%" stopColor="rgba(60, 26, 26, 0)" />
+                </SvgRadialGradient>
+              </Defs>
 
-                    <SvgRadialGradient
-                      id="connectorHighlight"
-                      cx="50%"
-                      cy="30%"
-                      r="75%"
-                    >
-                      <Stop offset="0%" stopColor="rgba(110, 19, 19, 0.2)" />
-                      <Stop offset="35%" stopColor="rgba(36, 19, 19, 0.08)" />
-                      <Stop offset="100%" stopColor="rgba(60, 26, 26, 0)" />
-                    </SvgRadialGradient>
-                  </Defs>
+              {heroActions.map((action, index) => {
+                const slot = SLOT_LAYOUT[index] ?? SLOT_LAYOUT[0];
+                const { x, y } = getOrbOffset(slot.angle, slot.distance);
 
-                  {heroActions.map((action, index) => {
-                    const slot = SLOT_LAYOUT[index] ?? SLOT_LAYOUT[0];
-                    const { x, y } = getOrbOffset(slot.angle, slot.distance);
+                const bodyPath = getCurvedConnectorPath(
+                  x,
+                  y,
+                  CENTER_RADIUS - 8,
+                  SATELLITE_RADIUS - 6,
+                  12,
+                  CONNECTOR_BENDS[index] ?? 0,
+                );
 
-                    const bodyPath = getCurvedConnectorPath(
-                      x,
-                      y,
-                      CENTER_RADIUS - 8,
-                      SATELLITE_RADIUS - 6,
-                      12,
-                      CONNECTOR_BENDS[index] ?? 0,
-                    );
+                const innerHighlightPath = getCurvedConnectorPath(
+                  x,
+                  y,
+                  CENTER_RADIUS - 10,
+                  SATELLITE_RADIUS - 8,
+                  6,
+                  INNER_CONNECTOR_BENDS[index] ?? 0,
+                );
 
-                    const innerHighlightPath = getCurvedConnectorPath(
-                      x,
-                      y,
-                      CENTER_RADIUS - 10,
-                      SATELLITE_RADIUS - 8,
-                      6,
-                      INNER_CONNECTOR_BENDS[index] ?? 0,
-                    );
+                return (
+                  <React.Fragment key={`connector-${action.id}`}>
+                    <Path
+                      d={bodyPath}
+                      fill="url(#connectorBody)"
+                      stroke="rgba(74, 58, 58, 0.14)"
+                      strokeWidth={0.65}
+                      transform={`translate(${CANVAS_SIZE / 2}, ${CANVAS_SIZE / 2})`}
+                    />
+                    <Path
+                      d={innerHighlightPath}
+                      fill="url(#connectorHighlight)"
+                      opacity={0.72}
+                      transform={`translate(${CANVAS_SIZE / 2}, ${CANVAS_SIZE / 2})`}
+                    />
+                  </React.Fragment>
+                );
+              })}
+            </Svg>
+          </AnimatedView>
 
-                    return (
-                      <React.Fragment key={`connector-${action.id}`}>
-                        <Path
-                          d={bodyPath}
-                          fill="url(#connectorBody)"
-                          stroke="rgba(74, 58, 58, 0.14)"
-                          strokeWidth={0.65}
-                          transform={`translate(${CANVAS_SIZE / 2}, ${CANVAS_SIZE / 2})`}
-                        />
-                        <Path
-                          d={innerHighlightPath}
-                          fill="url(#connectorHighlight)"
-                          opacity={0.72}
-                          transform={`translate(${CANVAS_SIZE / 2}, ${CANVAS_SIZE / 2})`}
-                        />
-                      </React.Fragment>
-                    );
-                  })}
-                </Svg>
-              </AnimatedView>
+          {heroActions.map((action, index) => (
+            <SatelliteOrb
+              key={action.id}
+              action={action}
+              index={index}
+              slot={SLOT_LAYOUT[index] ?? SLOT_LAYOUT[0]}
+              reducedMotion={reducedMotion}
+              orbitRotation={orbitRotation}
+              isOrbitDraggingRef={isOrbitDraggingRef}
+            />
+          ))}
+        </AnimatedView>
 
-              {heroActions.map((action, index) => (
-                <SatelliteOrb
-                  key={action.id}
-                  action={action}
-                  index={index}
-                  slot={SLOT_LAYOUT[index] ?? SLOT_LAYOUT[0]}
-                  reducedMotion={reducedMotion}
-                  orbitRotation={orbitRotation}
-                  isOrbitDraggingRef={isOrbitDraggingRef}
-                />
-              ))}
-            </AnimatedView>
-
-            <View style={themed($coreWrap)}>
-              <Svg
-                width={CORE_SIZE}
-                height={CORE_SIZE}
-                viewBox={`0 0 ${CORE_SIZE} ${CORE_SIZE}`}
-                style={themed($coreGlowSvg)}
+        <View style={themed($coreWrap)}>
+          <Svg
+            width={CORE_SIZE}
+            height={CORE_SIZE}
+            viewBox={`0 0 ${CORE_SIZE} ${CORE_SIZE}`}
+            style={themed($coreGlowSvg)}
+          >
+            <Defs>
+              <RadialGradient
+                id={bloomGradientId}
+                cx="50%"
+                cy="50%"
+                rx="50%"
+                ry="50%"
               >
-                <Defs>
-                  <RadialGradient
-                    id={bloomGradientId}
-                    cx="50%"
-                    cy="50%"
-                    rx="50%"
-                    ry="50%"
-                  >
-                    <Stop
-                      offset="0%"
-                      stopColor={theme.colors.vault.vaultAccentPinkSoft}
-                      stopOpacity="0.52"
-                    />
-                    <Stop
-                      offset="42%"
-                      stopColor={theme.colors.vault.vaultGlow}
-                      stopOpacity="0.28"
-                    />
-                    <Stop
-                      offset="100%"
-                      stopColor={theme.colors.vault.vaultGlow}
-                      stopOpacity="0"
-                    />
-                  </RadialGradient>
-                  <RadialGradient
-                    id={coreGradientId}
-                    cx="50%"
-                    cy="45%"
-                    rx="52%"
-                    ry="52%"
-                  >
-                    <Stop
-                      offset="0%"
-                      stopColor={theme.colors.vault.vaultAccentPinkSoft}
-                      stopOpacity="0.92"
-                    />
-                    <Stop
-                      offset="34%"
-                      stopColor={theme.colors.vault.vaultAccentPink}
-                      stopOpacity="0.74"
-                    />
-                    <Stop
-                      offset="72%"
-                      stopColor={theme.colors.vault.vaultGlow}
-                      stopOpacity="0.34"
-                    />
-                    <Stop
-                      offset="100%"
-                      stopColor={theme.colors.vault.vaultSurface}
-                      stopOpacity="0.06"
-                    />
-                  </RadialGradient>
-                </Defs>
-                <Rect
-                  width={CORE_SIZE}
-                  height={CORE_SIZE}
-                  rx={CORE_SIZE / 2}
-                  fill={`url(#${bloomGradientId})`}
+                <Stop
+                  offset="0%"
+                  stopColor={theme.colors.vault.vaultAccentPinkSoft}
+                  stopOpacity="0.52"
                 />
-              </Svg>
+                <Stop
+                  offset="42%"
+                  stopColor={theme.colors.vault.vaultGlow}
+                  stopOpacity="0.28"
+                />
+                <Stop
+                  offset="100%"
+                  stopColor={theme.colors.vault.vaultGlow}
+                  stopOpacity="0"
+                />
+              </RadialGradient>
+              <RadialGradient
+                id={coreGradientId}
+                cx="50%"
+                cy="45%"
+                rx="52%"
+                ry="52%"
+              >
+                <Stop
+                  offset="0%"
+                  stopColor={theme.colors.vault.vaultAccentPinkSoft}
+                  stopOpacity="0.92"
+                />
+                <Stop
+                  offset="34%"
+                  stopColor={theme.colors.vault.vaultAccentPink}
+                  stopOpacity="0.74"
+                />
+                <Stop
+                  offset="72%"
+                  stopColor={theme.colors.vault.vaultGlow}
+                  stopOpacity="0.34"
+                />
+                <Stop
+                  offset="100%"
+                  stopColor={theme.colors.vault.vaultSurface}
+                  stopOpacity="0.06"
+                />
+              </RadialGradient>
+            </Defs>
+            <Rect
+              width={CORE_SIZE}
+              height={CORE_SIZE}
+              rx={CORE_SIZE / 2}
+              fill={`url(#${bloomGradientId})`}
+            />
+          </Svg>
 
-              <View style={themed($centerCore)}>
-                <Svg
-                  width={INNER_CORE_SIZE}
-                  height={INNER_CORE_SIZE}
-                  viewBox={`0 0 ${INNER_CORE_SIZE} ${INNER_CORE_SIZE}`}
+          <View style={themed($centerCore)}>
+            <Svg
+              width={INNER_CORE_SIZE}
+              height={INNER_CORE_SIZE}
+              viewBox={`0 0 ${INNER_CORE_SIZE} ${INNER_CORE_SIZE}`}
+            >
+              <Defs>
+                <RadialGradient
+                  id={coreGradientId + "-inner"}
+                  cx="50%"
+                  cy="42%"
+                  rx="50%"
+                  ry="50%"
                 >
-                  <Defs>
-                    <RadialGradient
-                      id={coreGradientId + "-inner"}
-                      cx="50%"
-                      cy="42%"
-                      rx="50%"
-                      ry="50%"
-                    >
-                      <Stop
-                        offset="0%"
-                        stopColor={theme.colors.vault.vaultAccentPinkSoft}
-                        stopOpacity="0.96"
-                      />
-                      <Stop
-                        offset="28%"
-                        stopColor={theme.colors.vault.vaultAccentPink}
-                        stopOpacity="0.82"
-                      />
-                      <Stop
-                        offset="72%"
-                        stopColor={theme.colors.vault.vaultGlow}
-                        stopOpacity="0.22"
-                      />
-                      <Stop
-                        offset="100%"
-                        stopColor={theme.colors.vault.vaultSurface}
-                        stopOpacity="0.1"
-                      />
-                    </RadialGradient>
-                  </Defs>
-                  <Rect
-                    width={INNER_CORE_SIZE}
-                    height={INNER_CORE_SIZE}
-                    rx={INNER_CORE_SIZE / 2}
-                    fill={`url(#${coreGradientId + "-inner"})`}
+                  <Stop
+                    offset="0%"
+                    stopColor={theme.colors.vault.vaultAccentPinkSoft}
+                    stopOpacity="0.96"
                   />
-                </Svg>
+                  <Stop
+                    offset="28%"
+                    stopColor={theme.colors.vault.vaultAccentPink}
+                    stopOpacity="0.82"
+                  />
+                  <Stop
+                    offset="72%"
+                    stopColor={theme.colors.vault.vaultGlow}
+                    stopOpacity="0.22"
+                  />
+                  <Stop
+                    offset="100%"
+                    stopColor={theme.colors.vault.vaultSurface}
+                    stopOpacity="0.1"
+                  />
+                </RadialGradient>
+              </Defs>
+              <Rect
+                width={INNER_CORE_SIZE}
+                height={INNER_CORE_SIZE}
+                rx={INNER_CORE_SIZE / 2}
+                fill={`url(#${coreGradientId + "-inner"})`}
+              />
+            </Svg>
 
-                <View style={themed($iconWrap)}>
-                  <CenterSymbol />
-                </View>
-              </View>
+            <View style={themed($iconWrap)}>
+              <CenterSymbol />
             </View>
           </View>
-        </GestureDetector>
+        </View>
       </View>
-    </GestureHandlerRootView>
+    </View>
   );
 };
 
@@ -978,7 +824,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    // elevation: 3,
   },
   satelliteShell: {
     flex: 1,

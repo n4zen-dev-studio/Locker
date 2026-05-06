@@ -189,6 +189,8 @@ export const VaultRecoverySetupScreen: FC<
           subtitle={`Create a one-time recovery key for ${vaultName}. It wraps this vault’s key without exposing the vault key itself.`}
           icon={<ShieldAlert size={13} color="#FFD8FA" />}
           metaLabel={status.configured ? "Configured" : "Not configured"}
+          showBackButton
+          onBackPress={() => navigation.goBack()}
         />
 
         <GlassSection

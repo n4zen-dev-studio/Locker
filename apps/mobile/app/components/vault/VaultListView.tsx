@@ -1,6 +1,14 @@
-import { Dimensions, Pressable, TextStyle, View, ViewStyle, ScrollView } from "react-native";
+import {
+  Dimensions,
+  FlatList,
+  Pressable,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { Easing, FadeInUp } from "react-native-reanimated";
+import { useCallback } from "react";
 
 import { Text } from "@/components/Text";
 import { useAppTheme } from "@/theme/context";
@@ -19,6 +27,57 @@ type VaultListViewProps = {
 export function VaultListView(props: VaultListViewProps) {
   const { items, reducedMotion, emptyLabel, onOpenItem } = props;
   const { themed } = useAppTheme();
+  const renderItem = useCallback(
+    ({ item, index }: { item: VaultListItem; index: number }) => (
+      <Animated.View
+        entering={
+          reducedMotion
+            ? undefined
+            : FadeInUp.delay(140 + index * 20)
+                .duration(320)
+                .easing(Easing.bezier(0.22, 1, 0.36, 1))
+        }
+      >
+        <Pressable
+          onPress={() => onOpenItem(item)}
+          style={({ pressed }) => [
+            themed($cardShell),
+            pressed && themed($cardPressed),
+          ]}
+        >
+          <LinearGradient
+            colors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.01)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={themed($cardGradient)}
+          >
+            <View style={themed($cardChrome)} />
+
+            <View style={themed($header)}>
+              <View style={themed($copy)}>
+                <Text preset="bold" style={themed($title)} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={themed($meta)}>
+                  Updated {formatVaultDate(item.updatedAt)}
+                </Text>
+              </View>
+
+              <View style={themed($badgeRow)}>
+                <Badge label={item.type.toUpperCase()} />
+                <Badge label={item.classification} />
+                <Badge
+                  label={item.syncStatus}
+                  active={item.syncStatus === "cloud"}
+                />
+              </View>
+            </View>
+          </LinearGradient>
+        </Pressable>
+      </Animated.View>
+    ),
+    [onOpenItem, reducedMotion, themed],
+  );
 
   if (items.length === 0) {
     return (
@@ -29,55 +88,16 @@ export function VaultListView(props: VaultListViewProps) {
   }
 
   return (
-    <ScrollView style={themed($list)} scrollToOverflowEnabled>
-      {items.map((item, index) => (
-        <Animated.View
-          key={item.id}
-          entering={
-            reducedMotion
-              ? undefined
-              : FadeInUp.delay(140 + index * 20)
-                  .duration(320)
-                  .easing(Easing.bezier(0.22, 1, 0.36, 1))
-          }
-        >
-          <Pressable
-            onPress={() => onOpenItem(item)}
-            style={({ pressed }) => [themed($cardShell), pressed && themed($cardPressed)]}
-          >
-            <LinearGradient
-              colors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.01)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={themed($cardGradient)}
-            >
-              <View style={themed($cardChrome)} />
-
-              <View style={themed($header)}>
-                <View style={themed($copy)}>
-                  <Text preset="bold" style={themed($title)} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <Text style={themed($meta)}>
-                    Updated {formatVaultDate(item.updatedAt)}
-                  </Text>
-                </View>
-
-                <View style={themed($badgeRow)}>
-                  <Badge label={item.type.toUpperCase()} />
-                  <Badge label={item.classification} />
-                  <Badge label={item.syncStatus} active={item.syncStatus === "cloud"} />
-                </View>
-              </View>
-
-              {/* <Text numberOfLines={2} style={themed($preview)}>
-                {item.preview || "No preview available"}
-              </Text> */}
-            </LinearGradient>
-          </Pressable>
-        </Animated.View>
-      ))}
-    </ScrollView>
+    <FlatList
+      data={items}
+      keyExtractor={(item) => item.id}
+      renderItem={renderItem}
+      style={themed($list)}
+      initialNumToRender={6}
+      maxToRenderPerBatch={6}
+      windowSize={5}
+      removeClippedSubviews
+    />
   );
 }
 
@@ -86,7 +106,10 @@ function Badge({ label, active = false }: { label: string; active?: boolean }) {
 
   return (
     <View style={themed([$badge, active && $badgeActive])}>
-      <Text style={themed(active ? $badgeTextActive : $badgeText)} numberOfLines={1}>
+      <Text
+        style={themed(active ? $badgeTextActive : $badgeText)}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </View>
@@ -96,7 +119,7 @@ function Badge({ label, active = false }: { label: string; active?: boolean }) {
 const $list: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
   marginTop: 50,
-  height: Dimensions.get('screen').height* 0.6,
+  height: Dimensions.get("screen").height * 0.6,
 });
 
 const $cardShell: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
@@ -106,10 +129,10 @@ const $cardShell: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
   shadowColor: "rgba(0,0,0,0.86)",
-  shadowOpacity: 0.38,
-  shadowRadius: 22,
-  shadowOffset: { width: 0, height: 16 },
-  elevation: 10,
+  shadowOpacity: 0.16,
+  shadowRadius: 6,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
   marginBottom: 5,
   //  gap: spacing.md,
 });

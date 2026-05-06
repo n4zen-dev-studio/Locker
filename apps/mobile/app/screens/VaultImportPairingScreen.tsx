@@ -163,6 +163,8 @@ export const VaultImportPairingScreen: FC<
           subtitle="Use the one-time vault access code from another one of your devices."
           icon={<Shield size={13} color="#FFD8FA" />}
           metaLabel={isLinked ? "Linked device" : "Link required"}
+          showBackButton
+          onBackPress={() => navigation.goBack()}
         />
 
         {!isLinked ? (

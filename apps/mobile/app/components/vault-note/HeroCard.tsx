@@ -1,5 +1,5 @@
 import { Pressable, View, type TextStyle, type ViewStyle } from "react-native"
-import { Download, LockKeyhole, Shield } from "lucide-react-native"
+import { Download, LockKeyhole, Shield, ArrowLeft } from "lucide-react-native"
 
 import { Text } from "@/components/Text"
 import type { VaultItemType } from "@/locker/vault/types"
@@ -11,27 +11,56 @@ type Props = {
   themed: VaultThemed
   title: string
   subtitle: string
-  itemType: VaultItemType
+  itemType?: VaultItemType
   scopeLabel: string
   canExport: boolean
   onExport: () => void
   icon: React.ReactNode
+  showBackButton?: boolean
+  onBackPress?: () => void
+  heroBadgeText?: string
 }
 
 export function HeroCard(props: Props) {
-  const { themed, title, subtitle, itemType, scopeLabel, canExport, onExport, icon } = props
+  const {
+    themed,
+    title,
+    subtitle,
+    itemType,
+    scopeLabel,
+    canExport,
+    onExport,
+    icon,
+    showBackButton,
+    onBackPress,
+    heroBadgeText,
+  } = props
+
   return (
     <View style={themed($heroCard)}>
+      {/* TOP ROW */}
       <View style={themed($heroTopRow)}>
-        <View style={themed($heroBadge)}>
-          <Shield size={13} color="#FFD8FA" />
-          <Text style={themed($heroBadgeText)}>{itemType.toUpperCase()}</Text>
+        {/* LEFT SIDE */}
+        <View style={themed($heroLeftGroup)}>
+          {showBackButton && (
+            <Pressable onPress={onBackPress} style={themed($backButton)}>
+              <ArrowLeft size={16} color="#FFF7FF" />
+            </Pressable>
+          )}
+
+          <View style={themed($heroBadge)}>
+            <Shield size={13} color="#FFD8FA" />
+            <Text style={themed($heroBadgeText)}>{itemType?.toUpperCase() || heroBadgeText}</Text>
+          </View>
         </View>
+
+        {/* RIGHT SIDE */}
         <View style={themed($heroControls)}>
           <View style={themed($rolePill)}>
             <LockKeyhole size={12} color="#FCE7FF" />
             <Text style={themed($rolePillText)}>{scopeLabel}</Text>
           </View>
+
           <Pressable onPress={onExport} disabled={!canExport} style={themed($downloadPill)}>
             <Download size={14} color="#0d0a14" />
             <Text style={themed($downloadPillText)}>Export</Text>
@@ -39,6 +68,7 @@ export function HeroCard(props: Props) {
         </View>
       </View>
 
+      {/* TITLE ROW */}
       <View style={themed($heroTitleRow)}>
         <View style={themed($heroIconWrap)}>{icon}</View>
         <View style={themed($heroTextWrap)}>
@@ -157,4 +187,20 @@ const $heroSubtitle: ThemedStyle<TextStyle> = () => ({
   color: "rgba(255,235,255,0.72)",
   fontSize: 12,
   lineHeight: 18,
+})
+const $heroLeftGroup: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $backButton: ThemedStyle<ViewStyle> = () => ({
+  width: 32,
+  height: 32,
+  borderRadius: 10,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(255,255,255,0.08)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
 })

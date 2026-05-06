@@ -1,4 +1,12 @@
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FC,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AccessibilityInfo,
   AppState,
@@ -13,7 +21,12 @@ import {
   ViewStyle,
 } from "react-native";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
-import Animated, { Easing, FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+} from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
 
 import { Screen } from "@/components/Screen";
@@ -37,7 +50,12 @@ import { vaultSession } from "@/locker/session";
 import { getPrivacyPrefs } from "@/locker/security/privacyPrefsRepo";
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
 import { listNotesForVault, Note } from "@/locker/storage/notesRepo";
-import { getRemoteVaultId, getRemoteVaultName, listRemoteVaults, setRemoteVaultId } from "@/locker/storage/remoteVaultRepo";
+import {
+  getRemoteVaultId,
+  getRemoteVaultName,
+  listRemoteVaults,
+  setRemoteVaultId,
+} from "@/locker/storage/remoteVaultRepo";
 import { getMeta } from "@/locker/storage/vaultMetaRepo";
 import { requestSync } from "@/locker/sync/syncCoordinator";
 import { getSyncStatus } from "@/locker/sync/syncEngine";
@@ -51,373 +69,546 @@ import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 import { useSessionIntroAnimation } from "@/utils/useSessionIntroAnimation";
-import { Ionicons } from "@expo/vector-icons"
+import { Ionicons } from "@expo/vector-icons";
 import { GlowFab } from "@/components/GlowFab";
 import { spacing } from "@/theme/spacing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = function VaultNotesHomeScreen(props) {
-  const { navigation } = props;
-  const { themed, theme } = useAppTheme();
-  const $insets = useSafeAreaInsetsStyle(["top"]);
-  const scrollRef = useRef<ScrollView>(null);
-  const isFocused = useIsFocused();
+function nowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
 
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [localNotes, setLocalNotes] = useState<Note[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [unlockMethod, setUnlockMethod] = useState<string | null>(null);
-  const [metaVersion, setMetaVersion] = useState<1 | 2 | null>(null);
-  const [syncStatus, setSyncStatus] = useState(() => getSyncStatus());
-  const [tokenPresent, setTokenPresent] = useState(false);
-  const [rvkPresent, setRvkPresent] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<VaultFilter>("all");
-  const [sort, setSort] = useState<VaultSort>("updated");
-  const [viewMode, setViewMode] = useState<VaultViewMode>("stack");
-  const [hideSensitivePreviews, setHideSensitivePreviews] = useState(() => getPrivacyPrefs().hideSensitivePreviews);
-  const [reducedMotion, setReducedMotion] = useState(false);
-  const [vaultSectionY, setVaultSectionY] = useState(0);
-  const unlocked = vaultSession.isUnlocked();
-  const [scrollEnabled, setScrollEnabled] = useState(true)
+function logVaultHome(message: string, meta?: Record<string, unknown>) {
+  if (!__DEV__) return;
+  console.log(`[VaultHome] ${message}`, meta ?? "");
+}
 
-  const [activeVaultId, setActiveVaultId] = useState<string | null>(() => getRemoteVaultId());
-  const [activeVaultName, setActiveVaultName] = useState<string | null>(() => getRemoteVaultName());
-  const [availableVaults, setAvailableVaults] = useState(() => listRemoteVaults().filter((vault) => vault.enabledOnDevice));
-  const shouldAnimateIntro = useSessionIntroAnimation("vault-home-intro", !reducedMotion);
-
-  const refreshActiveVault = useCallback(() => {
-    setActiveVaultId(getRemoteVaultId());
-    setActiveVaultName(getRemoteVaultName());
-    setAvailableVaults(listRemoteVaults().filter((vault) => vault.enabledOnDevice));
-  }, []);
-
-  const refreshNotes = useCallback(() => {
-    if (!vaultSession.isUnlocked()) return;
-
-    const key = vaultSession.getKey();
-    if (!key) return;
-
-    try {
-      setNotes(listNotesForVault(key, activeVaultId ?? null));
-      setLocalNotes(listNotesForVault(key, null));
-      setError(null);
-    } catch {
-      setError("Vault data error");
-    }
-  }, [activeVaultId]);
-
-  const refreshMeta = useCallback(async () => {
-    const meta = getMeta();
-    setMetaVersion(meta ? meta.v : null);
-
-    if (meta?.v === 2 && (await isPasskeyEnabled())) {
-      setUnlockMethod("Passkey");
-    } else if (meta?.v === 1) {
-      setUnlockMethod("Legacy PIN");
-    } else {
-      setUnlockMethod(null);
-    }
-  }, []);
-
-const refreshSyncPrereqs = useCallback(async (vaultId?: string | null) => {
-  const token = await getToken()
-  setTokenPresent(!!token)
-
-  const targetVaultId = vaultId ?? activeVaultId
-
-  if (!targetVaultId) {
-    setRvkPresent(false)
-    return
-  }
-
-  const rvk = await getRemoteVaultKey(targetVaultId)
-  setRvkPresent(!!rvk)
-}, [activeVaultId])
-
-  useFocusEffect(
-    useCallback(() => {
-      const task = InteractionManager.runAfterInteractions(() => {
-        refreshActiveVault();
-        refreshNotes();
-        refreshMeta();
-        setHideSensitivePreviews(getPrivacyPrefs().hideSensitivePreviews);
-        refreshSyncPrereqs().catch(() => undefined);
-        ensureUserKeypairUploaded().catch(() => undefined);
-      });
-
-      return () => task.cancel();
-    }, [refreshActiveVault, refreshMeta, refreshNotes, refreshSyncPrereqs]),
+function enabledVaultListsEqual(
+  left: ReturnType<typeof listRemoteVaults>,
+  right: ReturnType<typeof listRemoteVaults>,
+) {
+  if (left.length !== right.length) return false;
+  return left.every(
+    (vault, index) =>
+      vault.id === right[index]?.id && vault.name === right[index]?.name,
   );
+}
 
-  useEffect(() => {
-    refreshMeta().catch(() => undefined);
-  }, [refreshMeta]);
+const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
+  function VaultNotesHomeScreenComponent(props) {
+    const { navigation } = props;
+    const { themed, theme } = useAppTheme();
+    const $insets = useSafeAreaInsetsStyle(["top"]);
+    const safeInsets = useSafeAreaInsets();
+    const scrollRef = useRef<ScrollView>(null);
+    const isFocused = useIsFocused();
+    const hasLoadedNotesRef = useRef(false);
+    const lastNotesRefreshRef = useRef(0);
+    const renderCountRef = useRef(0);
 
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReducedMotion);
-    return () => subscription.remove();
-  }, []);
-
-  useEffect(() => {
-    if (!isFocused) return;
-
-    const timer = setInterval(() => {
-      setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
-    }, 2000);
-
-    return () => clearInterval(timer);
-  }, [activeVaultId, isFocused]);
-
-  const syncReason = useMemo(() => {
-    if (!activeVaultId) return "Select a remote vault";
-    if (!tokenPresent) return "Link device";
-    if (!unlocked) return "Unlock vault";
-    if (!rvkPresent) return "Create sync key";
-    return null;
-  }, [activeVaultId, rvkPresent, tokenPresent, unlocked]);
-
-  const handleSyncNow = async () => {
-    if (syncReason) return;
-
-    setError(null);
-    setRefreshing(true);
-
-    try {
-      const result = await requestSync("manual", activeVaultId ?? undefined);
-      if (result?.errors?.length) {
-        setError(`Sync completed with ${result.errors.length} error(s): ${result.errors[0].type}`);
-      }
-      refreshNotes();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sync failed");
-    } finally {
-      setRefreshing(false);
-      setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
+    if (__DEV__) {
+      renderCountRef.current += 1;
+      console.log("[VaultHome] render", renderCountRef.current);
     }
-  };
 
-  const handleLock = () => {
-    vaultSession.clear();
-  };
+    const [notes, setNotes] = useState<Note[]>([]);
+    const [localNotes, setLocalNotes] = useState<Note[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    const [unlockMethod, setUnlockMethod] = useState<string | null>(null);
+    const [metaVersion, setMetaVersion] = useState<1 | 2 | null>(null);
+    const [syncStatus, setSyncStatus] = useState(() => getSyncStatus());
+    const [tokenPresent, setTokenPresent] = useState(false);
+    const [rvkPresent, setRvkPresent] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [query, setQuery] = useState("");
+    const [filter, setFilter] = useState<VaultFilter>("all");
+    const [sort, setSort] = useState<VaultSort>("updated");
+    const [viewMode, setViewMode] = useState<VaultViewMode>("stack");
+    const [hideSensitivePreviews, setHideSensitivePreviews] = useState(
+      () => getPrivacyPrefs().hideSensitivePreviews,
+    );
+    const [reducedMotion, setReducedMotion] = useState(false);
+    const [vaultSectionY, setVaultSectionY] = useState(0);
+    const unlocked = vaultSession.isUnlocked();
+    const scrollEnabled = true;
 
-  const handleDisablePasskey = async () => {
-    await disablePasskeyDevOnly();
-    refreshMeta().catch(() => undefined);
-  };
+    const [activeVaultId, setActiveVaultId] = useState<string | null>(() =>
+      getRemoteVaultId(),
+    );
+    const [activeVaultName, setActiveVaultName] = useState<string | null>(() =>
+      getRemoteVaultName(),
+    );
+    const [availableVaults, setAvailableVaults] = useState(() =>
+      listRemoteVaults().filter((vault) => vault.enabledOnDevice),
+    );
+    const shouldAnimateIntro = useSessionIntroAnimation(
+      "vault-home-intro",
+      !reducedMotion,
+    );
 
-  const items = useMemo(() => {
-    const noteMap = new Map<string, Note>();
-    [...notes, ...localNotes].forEach((note) => noteMap.set(note.id, note));
+    const refreshActiveVault = useCallback(() => {
+      const nextVaultId = getRemoteVaultId();
+      const nextVaultName = getRemoteVaultName();
+      const nextVaults = listRemoteVaults().filter(
+        (vault) => vault.enabledOnDevice,
+      );
 
-    const list: VaultListItem[] = [];
-    for (const note of noteMap.values()) {
-      const itemSyncStatus: "cloud" | "local" = note.vaultId ? "cloud" : "local";
-      const primaryAttachment = (note.attachments ?? []).find(
-        (attachment) => attachment.id === note.primaryAttachmentId,
-      ) ?? note.attachments?.[0];
-      list.push({
-        id: `note:${note.id}`,
-        noteId: note.id,
-        type: note.itemType ?? "note",
-        title: note.title || "Untitled",
-        preview: hideSensitivePreviews && isSensitiveClassification(note.classification)
-          ? `Preview hidden for ${note.classification}`
-          : note.itemType === "voice"
-            ? `Voice recording${note.voiceDurationMs ? ` · ${Math.round(note.voiceDurationMs / 1000)}s` : ""}`
-            : note.itemType && note.itemType !== "note"
-              ? primaryAttachment?.mime ?? "Encrypted file"
-            : note.body,
-        updatedAt: note.updatedAt,
-        createdAt: note.createdAt,
-        classification: note.classification,
-        deleted: !!note.deletedAt,
-        syncStatus: itemSyncStatus,
+      setActiveVaultId((current) =>
+        current === nextVaultId ? current : nextVaultId,
+      );
+      setActiveVaultName((current) =>
+        current === nextVaultName ? current : nextVaultName,
+      );
+      setAvailableVaults((current) =>
+        enabledVaultListsEqual(current, nextVaults) ? current : nextVaults,
+      );
+    }, []);
+
+    const refreshNotes = useCallback(
+      (force = false) => {
+        if (!vaultSession.isUnlocked()) return;
+
+        const key = vaultSession.getKey();
+        if (!key) return;
+
+        const start = nowMs();
+        if (
+          !force &&
+          hasLoadedNotesRef.current &&
+          start - lastNotesRefreshRef.current < 15000
+        ) {
+          logVaultHome("notes load skipped", {
+            ageMs: Math.round(start - lastNotesRefreshRef.current),
+          });
+          return;
+        }
+
+        logVaultHome("notes load start", { force });
+
+        try {
+          setNotes(listNotesForVault(key, activeVaultId ?? null));
+          setLocalNotes(listNotesForVault(key, null));
+          hasLoadedNotesRef.current = true;
+          lastNotesRefreshRef.current = nowMs();
+          setError(null);
+          logVaultHome("notes load end", {
+            durationMs: (lastNotesRefreshRef.current - start).toFixed(1),
+          });
+        } catch {
+          setError("Vault data error");
+          logVaultHome("notes load error", {
+            durationMs: (nowMs() - start).toFixed(1),
+          });
+        }
+      },
+      [activeVaultId],
+    );
+
+    const refreshMeta = useCallback(async () => {
+      const start = nowMs();
+      logVaultHome("meta load start");
+      const meta = getMeta();
+      setMetaVersion(meta ? meta.v : null);
+
+      if (meta?.v === 2 && (await isPasskeyEnabled())) {
+        setUnlockMethod("Passkey");
+      } else if (meta?.v === 1) {
+        setUnlockMethod("Legacy PIN");
+      } else {
+        setUnlockMethod(null);
+      }
+      logVaultHome("meta load end", {
+        durationMs: (nowMs() - start).toFixed(1),
       });
+    }, []);
 
-      if ((note.itemType ?? "note") !== "note") continue;
+    const refreshSyncPrereqs = useCallback(
+      async (vaultId?: string | null) => {
+        const start = nowMs();
+        logVaultHome("sync prereqs load start");
+        const token = await getToken();
+        setTokenPresent(!!token);
 
-      for (const attachment of note.attachments ?? []) {
+        const targetVaultId = vaultId ?? activeVaultId;
+
+        if (!targetVaultId) {
+          setRvkPresent(false);
+          logVaultHome("sync prereqs load end", {
+            durationMs: (nowMs() - start).toFixed(1),
+          });
+          return;
+        }
+
+        const rvk = await getRemoteVaultKey(targetVaultId);
+        setRvkPresent(!!rvk);
+        logVaultHome("sync prereqs load end", {
+          durationMs: (nowMs() - start).toFixed(1),
+        });
+      },
+      [activeVaultId],
+    );
+
+    useEffect(() => {
+      logVaultHome("mounted", { time: nowMs().toFixed(1) });
+    }, []);
+
+    useFocusEffect(
+      useCallback(() => {
+        const focusTime = nowMs();
+        if (__DEV__) console.log("[VaultHome] focus");
+        logVaultHome("focus", { time: focusTime.toFixed(1) });
+
+        const task = InteractionManager.runAfterInteractions(() => {
+          logVaultHome("deferred focus work start", {
+            deltaMs: (nowMs() - focusTime).toFixed(1),
+          });
+          refreshActiveVault();
+          refreshNotes();
+          refreshMeta();
+          const nextHideSensitivePreviews =
+            getPrivacyPrefs().hideSensitivePreviews;
+          setHideSensitivePreviews((current) =>
+            current === nextHideSensitivePreviews
+              ? current
+              : nextHideSensitivePreviews,
+          );
+          refreshSyncPrereqs().catch(() => undefined);
+          logVaultHome("keypair upload check start");
+          ensureUserKeypairUploaded()
+            .then(() => logVaultHome("keypair upload check end"))
+            .catch(() => undefined);
+          logVaultHome("deferred focus work queued", {
+            deltaMs: (nowMs() - focusTime).toFixed(1),
+          });
+        });
+
+        return () => {
+          task.cancel();
+        };
+      }, [refreshActiveVault, refreshMeta, refreshNotes, refreshSyncPrereqs]),
+    );
+
+    useEffect(() => {
+      refreshMeta().catch(() => undefined);
+    }, [refreshMeta]);
+
+    useEffect(() => {
+      AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
+      const subscription = AccessibilityInfo.addEventListener(
+        "reduceMotionChanged",
+        setReducedMotion,
+      );
+      return () => subscription.remove();
+    }, []);
+
+    useEffect(() => {
+      if (!isFocused) return;
+
+      const timer = setInterval(() => {
+        setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
+      }, 2000);
+
+      return () => clearInterval(timer);
+    }, [activeVaultId, isFocused]);
+
+    const syncReason = useMemo(() => {
+      if (!activeVaultId) return "Select a remote vault";
+      if (!tokenPresent) return "Link device";
+      if (!unlocked) return "Unlock vault";
+      if (!rvkPresent) return "Create sync key";
+      return null;
+    }, [activeVaultId, rvkPresent, tokenPresent, unlocked]);
+
+    const handleSyncNow = async () => {
+      if (syncReason) return;
+
+      setError(null);
+      setRefreshing(true);
+
+      try {
+        const result = await requestSync("manual", activeVaultId ?? undefined);
+        if (result?.errors?.length) {
+          setError(
+            `Sync completed with ${result.errors.length} error(s): ${result.errors[0].type}`,
+          );
+        }
+        refreshNotes(true);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Sync failed");
+      } finally {
+        setRefreshing(false);
+        setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
+      }
+    };
+
+    const handleLock = () => {
+      vaultSession.clear();
+    };
+
+    const handleDisablePasskey = async () => {
+      await disablePasskeyDevOnly();
+      refreshMeta().catch(() => undefined);
+    };
+
+    const items = useMemo(() => {
+      const noteMap = new Map<string, Note>();
+      [...notes, ...localNotes].forEach((note) => noteMap.set(note.id, note));
+
+      const list: VaultListItem[] = [];
+      for (const note of noteMap.values()) {
+        const itemSyncStatus: "cloud" | "local" = note.vaultId
+          ? "cloud"
+          : "local";
+        const primaryAttachment =
+          (note.attachments ?? []).find(
+            (attachment) => attachment.id === note.primaryAttachmentId,
+          ) ?? note.attachments?.[0];
         list.push({
-          id: `attachment:${attachment.id}`,
+          id: `note:${note.id}`,
           noteId: note.id,
-          attachmentId: attachment.id,
-          type: getVaultItemTypeFromMime(attachment.mime),
-          title: attachment.filename ?? "Attachment",
-          preview: attachment.mime,
+          type: note.itemType ?? "note",
+          title: note.title || "Untitled",
+          preview:
+            hideSensitivePreviews &&
+            isSensitiveClassification(note.classification)
+              ? `Preview hidden for ${note.classification}`
+              : note.itemType === "voice"
+                ? `Voice recording${note.voiceDurationMs ? ` · ${Math.round(note.voiceDurationMs / 1000)}s` : ""}`
+                : note.itemType && note.itemType !== "note"
+                  ? (primaryAttachment?.mime ?? "Encrypted file")
+                  : note.body,
           updatedAt: note.updatedAt,
-          createdAt: attachment.createdAt,
+          createdAt: note.createdAt,
           classification: note.classification,
           deleted: !!note.deletedAt,
           syncStatus: itemSyncStatus,
         });
-      }
-    }
 
-    return list;
-  }, [hideSensitivePreviews, localNotes, notes]);
+        if ((note.itemType ?? "note") !== "note") continue;
 
-  const visibleItems = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    return items
-      .filter((item) => {
-        if (filter === "deleted") return item.deleted;
-        if (item.deleted) return false;
-        if (filter === "notes") return item.type === "note";
-        if (filter === "images") return item.type === "image";
-        if (filter === "pdfs") return item.type === "pdf";
-        if (filter === "files") return item.type === "doc";
-        if (filter === "voices") return item.type === "voice";
-        if (filter === "sensitive") return isSensitiveClassification(item.classification);
-        if (filter === "recent") {
-          return Date.now() - new Date(item.updatedAt).getTime() <= RECENT_WINDOW_MS;
+        for (const attachment of note.attachments ?? []) {
+          list.push({
+            id: `attachment:${attachment.id}`,
+            noteId: note.id,
+            attachmentId: attachment.id,
+            type: getVaultItemTypeFromMime(attachment.mime),
+            title: attachment.filename ?? "Attachment",
+            preview: attachment.mime,
+            updatedAt: note.updatedAt,
+            createdAt: attachment.createdAt,
+            classification: note.classification,
+            deleted: !!note.deletedAt,
+            syncStatus: itemSyncStatus,
+          });
         }
-        return true;
-      })
-      .filter((item) => {
-        if (!normalizedQuery) return true;
+      }
 
-        const haystack = [item.title, item.preview, item.classification, item.type, item.syncStatus]
-          .join(" ")
-          .toLowerCase();
-        return haystack.includes(normalizedQuery);
-      })
-      .sort((a, b) => compareVaultItems(a, b, sort));
-  }, [filter, items, query, sort]);
+      return list;
+    }, [hideSensitivePreviews, localNotes, notes]);
 
-  const heroActions = useMemo(
-    () => [
-      {
-        id: "new-note",
-        label: "New Note",
-        icon: "note" as const,
-        angle: -135,
-        distance: 108,
-        onPress: () => navigation.navigate("VaultNote"),
-      },
-      {
-        id: "import-image",
-        label: "Import Image",
-        icon: "image" as const,
-        angle: -45,
-        distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "image", createType: 'image' }),
-      },
-      {
-        id: "import-pdf",
-        label: "Import PDF",
-        icon: "pdf" as const,
-        angle: 135,
-        distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "pdf", createType: 'pdf'  }),
-      },
-      {
-        id: "import-file",
-        label: "Import File",
-        icon: "file" as const,
-        angle: 45,
-        distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "file",  createType: 'doc' }),
-      },
-      {
-        id: "voice",
-        label: "Secure Voice",
-        icon: "voice" as const,
-        angle: 45,
-        distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { createType: getVaultItemTypeFromImportType("voice") }),
-      },
-    ],
-    [navigation],
-  );
+    const visibleItems = useMemo(() => {
+      const normalizedQuery = query.trim().toLowerCase();
 
-  const handleOpenVaultItem = useCallback(
-    (item: VaultListItem) => {
-      navigation.navigate("VaultNote", { noteId: item.noteId, attachmentId: item.attachmentId });
-    },
-    [navigation],
-  );
-
-  const handleSwitchVault = useCallback(
-    (vaultId: string, vaultName?: string | null) => {
-      setRemoteVaultId(vaultId, vaultName ?? undefined)
-      refreshActiveVault()
-      refreshNotes()
-      refreshSyncPrereqs(vaultId).catch(() => undefined)
-      setSyncStatus(getSyncStatus(vaultId))
-    },
-    [refreshActiveVault, refreshNotes, refreshSyncPrereqs],
-  )
-
-  const handleScrollToVault = useCallback(() => {
-    scrollRef.current?.scrollTo({ y: Math.max(0, vaultSectionY), animated: true });
-  }, [vaultSectionY]);
-
-    const handleScrollToTop= useCallback(() => {
-    scrollRef.current?.scrollTo({ y: Math.min(0, vaultSectionY), animated: true });
-  }, [vaultSectionY]);
-
-  return (
-    <Screen
-      preset="fixed"
-      backgroundColor={theme.colors.vaultHub.vaultHubBg}
-      contentContainerStyle={themed([$screen, $insets])}
-      keyboardAvoidingEnabled={false}
-      systemBarStyle="light"
-    >
-      <VaultHubBackground reducedMotion={reducedMotion} />
-
-      <ScrollView
-        ref={scrollRef}
-        scrollEnabled={scrollEnabled}
-        contentContainerStyle={themed($content)}
-refreshControl={
-  <RefreshControl
-    refreshing={refreshing}
-    onRefresh={handleSyncNow}
-    enabled={!scrollEnabled}
-  />
-}        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View
-          entering={
-            reducedMotion || !shouldAnimateIntro
-              ? undefined
-              : FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
+      return items
+        .filter((item) => {
+          if (filter === "deleted") return item.deleted;
+          if (item.deleted) return false;
+          if (filter === "notes") return item.type === "note";
+          if (filter === "images") return item.type === "image";
+          if (filter === "pdfs") return item.type === "pdf";
+          if (filter === "files") return item.type === "doc";
+          if (filter === "voices") return item.type === "voice";
+          if (filter === "sensitive")
+            return isSensitiveClassification(item.classification);
+          if (filter === "recent") {
+            return (
+              Date.now() - new Date(item.updatedAt).getTime() <=
+              RECENT_WINDOW_MS
+            );
           }
-          style={themed($header)}
-        >
-                 <View style={themed($heroTopRow)}>
-                                <Text size="xs" style={themed($heroEyebrow)}>
-                                 {activeVaultName ?`${activeVaultName} Vault` : "Personal Vault"}
-                                </Text>
-                  
-                              <Pressable onPress={handleLock} style={themed($heroStatusPill)}>
-                                <Ionicons
-              name={"lock-closed"}
-              size={12}
-              color={'#fff'}
-              style={{ paddingRight: 5 }}
+          return true;
+        })
+        .filter((item) => {
+          if (!normalizedQuery) return true;
+
+          const haystack = [
+            item.title,
+            item.preview,
+            item.classification,
+            item.type,
+            item.syncStatus,
+          ]
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(normalizedQuery);
+        })
+        .sort((a, b) => compareVaultItems(a, b, sort));
+    }, [filter, items, query, sort]);
+
+    const heroActions = useMemo(
+      () => [
+        {
+          id: "new-note",
+          label: "New Note",
+          icon: "note" as const,
+          angle: -135,
+          distance: 108,
+          onPress: () => navigation.navigate("VaultNote"),
+        },
+        {
+          id: "import-image",
+          label: "Import Image",
+          icon: "image" as const,
+          angle: -45,
+          distance: 110,
+          onPress: () =>
+            navigation.navigate("VaultNote", {
+              importType: "image",
+              createType: "image",
+            }),
+        },
+        {
+          id: "import-pdf",
+          label: "Import PDF",
+          icon: "pdf" as const,
+          angle: 135,
+          distance: 110,
+          onPress: () =>
+            navigation.navigate("VaultNote", {
+              importType: "pdf",
+              createType: "pdf",
+            }),
+        },
+        {
+          id: "import-file",
+          label: "Import File",
+          icon: "file" as const,
+          angle: 45,
+          distance: 110,
+          onPress: () =>
+            navigation.navigate("VaultNote", {
+              importType: "file",
+              createType: "doc",
+            }),
+        },
+        {
+          id: "voice",
+          label: "Secure Voice",
+          icon: "voice" as const,
+          angle: 45,
+          distance: 110,
+          onPress: () =>
+            navigation.navigate("VaultNote", {
+              createType: getVaultItemTypeFromImportType("voice"),
+            }),
+        },
+      ],
+      [navigation],
+    );
+
+    const handleOpenVaultItem = useCallback(
+      (item: VaultListItem) => {
+        navigation.navigate("VaultNote", {
+          noteId: item.noteId,
+          attachmentId: item.attachmentId,
+        });
+      },
+      [navigation],
+    );
+
+    const handleSwitchVault = useCallback(
+      (vaultId: string, vaultName?: string | null) => {
+        setRemoteVaultId(vaultId, vaultName ?? undefined);
+        refreshActiveVault();
+        refreshNotes(true);
+        refreshSyncPrereqs(vaultId).catch(() => undefined);
+        setSyncStatus(getSyncStatus(vaultId));
+      },
+      [refreshActiveVault, refreshNotes, refreshSyncPrereqs],
+    );
+
+    const handleScrollToVault = useCallback(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, vaultSectionY),
+        animated: true,
+      });
+    }, [vaultSectionY]);
+
+    const handleScrollToTop = useCallback(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.min(0, vaultSectionY),
+        animated: true,
+      });
+    }, [vaultSectionY]);
+
+    return (
+      <Screen
+        preset="fixed"
+        backgroundColor={theme.colors.vaultHub.vaultHubBg}
+        contentContainerStyle={themed([$screen, $insets])}
+        keyboardAvoidingEnabled={false}
+        systemBarStyle="light"
+      >
+        <VaultHubBackground active={isFocused} reducedMotion={true} />
+
+        <ScrollView
+          ref={scrollRef}
+          bounces={false}
+          overScrollMode="never"
+          scrollEnabled={scrollEnabled}
+          contentContainerStyle={themed([
+            $content,
+            { paddingBottom: spacing.xl * 3 + safeInsets.bottom },
+          ])}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleSyncNow}
+              enabled={!scrollEnabled}
             />
-                                <Text style={themed($heroStatusText)}>Lock Vault</Text>
-                              </Pressable>
-                            </View>
-                  {/* <Text preset="heading" style={themed($heroTitle)}>
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View
+            entering={
+              reducedMotion || !shouldAnimateIntro
+                ? undefined
+                : FadeInDown.duration(360).easing(
+                    Easing.bezier(0.22, 1, 0.36, 1),
+                  )
+            }
+            style={themed($header)}
+          >
+            <View style={themed($heroTopRow)}>
+              <Text size="xs" style={themed($heroEyebrow)}>
+                {activeVaultName
+                  ? `${activeVaultName} Vault`
+                  : "Personal Vault"}
+              </Text>
+
+              <Pressable onPress={handleLock} style={themed($heroStatusPill)}>
+                <Ionicons
+                  name={"lock-closed"}
+                  size={12}
+                  color={"#fff"}
+                  style={{ paddingRight: 5 }}
+                />
+                <Text style={themed($heroStatusText)}>Lock Vault</Text>
+              </Pressable>
+            </View>
+            {/* <Text preset="heading" style={themed($heroTitle)}>
                     Security Center
                   </Text> */}
-          
-                    <Text preset="heading" style={themed($heroTitle)}>
-                              Home
-                            </Text>
-                  
-                            <Text style={themed($heroSubtitle)}>
-                              Add items to your {activeVaultName} vault
-                            </Text>
-          
-          {/* <View style={themed($headerTopRow)}>
+
+            <Text preset="heading" style={themed($heroTitle)}>
+              Home
+            </Text>
+
+            <Text style={themed($heroSubtitle)}>
+              Add items to your {activeVaultName} vault
+            </Text>
+
+            {/* <View style={themed($headerTopRow)}>
             <View style={themed($headerCopy)}>
                <Text size="xxs" style={themed($eyebrow)}>
                  {activeVaultId ? "Synced vault" : "Local-only vault"}
@@ -439,142 +630,156 @@ refreshControl={
             </View>
           </View> */}
 
-          {/* <View style={themed($headerMetaRow)}>
+            {/* <View style={themed($headerMetaRow)}>
             {unlockMethod ? <MetaPill label={`Unlock ${unlockMethod}`} /> : null}
             <MetaPill label={`Sync ${syncStatus.state} · Queue ${syncStatus.queueSize}`} />
             {__DEV__ && metaVersion ? <MetaPill label={`Meta v${metaVersion}`} /> : null}
           </View> */}
-        {availableVaults.length > 1 ? (
-  <View style={themed($vaultSwitcher)}>
-    {[...availableVaults]
-      .sort((a, b) => {
-        if ((a.name ?? "").toLowerCase() === "personal") return -1
-        if ((b.name ?? "").toLowerCase() === "personal") return 1
-        return 0
-      })
-      .map((vault) => (
-        <Pressable
-          key={vault.id}
-          style={themed([
-            $vaultChip,
-            activeVaultId === vault.id && $vaultChipActive,
-          ])}
-          onPress={() => handleSwitchVault(vault.id, vault.name)}
-        >
-          <Text
-            style={themed([
-              $vaultChipText,
-              activeVaultId === vault.id && $vaultChipTextActive,
-            ])}
-          >
-            {vault.name ?? "Vault"}
-          </Text>
-        </Pressable>
-      ))}
-  </View>
-) : null}
-        </Animated.View>
+            {availableVaults.length > 1 ? (
+              <View style={themed($vaultSwitcher)}>
+                {[...availableVaults]
+                  .sort((a, b) => {
+                    if ((a.name ?? "").toLowerCase() === "personal") return -1;
+                    if ((b.name ?? "").toLowerCase() === "personal") return 1;
+                    return 0;
+                  })
+                  .map((vault) => (
+                    <Pressable
+                      key={vault.id}
+                      style={themed([
+                        $vaultChip,
+                        activeVaultId === vault.id && $vaultChipActive,
+                      ])}
+                      onPress={() => handleSwitchVault(vault.id, vault.name)}
+                    >
+                      <Text
+                        style={themed([
+                          $vaultChipText,
+                          activeVaultId === vault.id && $vaultChipTextActive,
+                        ])}
+                      >
+                        {vault.name ?? "Vault"}
+                      </Text>
+                    </Pressable>
+                  ))}
+              </View>
+            ) : null}
+          </Animated.View>
 
-
-        <Animated.View
-          entering={
-            reducedMotion || !shouldAnimateIntro
-              ? undefined
-              : FadeIn.duration(520).easing(Easing.bezier(0.22, 1, 0.36, 1))
-          }
-          style={themed($heroSection)}
-        >
-<VaultHeroOrb
-  actions={heroActions}
-  reducedMotion={reducedMotion}
-  active={isFocused}
-  onOrbitDragStateChange={(dragging) => setScrollEnabled(!dragging)}
-/>
-        </Animated.View>
-
-        <Animated.View
-          entering={
-            reducedMotion || !shouldAnimateIntro
-              ? undefined
-              : FadeInUp.delay(80).duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
-          }
-          style={themed($toolbarSection)}
-        >
-          <View style={themed($toolbarHeader)}>
-             <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={handleScrollToVault}>
-              <Ionicons
-              name={"arrow-down"}
-              size={18}
-              color={'#fff'}
-              style={{ paddingVertical: 5 }}
-            />
-             
-            </Pressable>
-            <Pressable style={[themed($jumpButton), {flexDirection: 'row', }]} onPress={handleScrollToVault}>
-              <Ionicons
-              name={"wallet"}
-              size={18}
-              color={'#fff'}
-              style={{ paddingVertical: 5 }}
-            />
-            </Pressable>
-          </View>
-
-         
-
-
-        </Animated.View>
-
-
-        {error ? (
-          <View style={themed($errorCard)}>
-            <Text style={themed($errorText)}>{error}</Text>
-          </View>
-        ) : null}
-        <View style={{height: 60}}/>
-
-        <VaultSection
-          animateOnMount={shouldAnimateIntro}
-          filter={filter}
-          items={visibleItems}
-          sort={sort}
-          viewMode={viewMode}
-          reducedMotion={reducedMotion}
-          onLayout={(event) => setVaultSectionY(event.nativeEvent.layout.y)}
-          onChangeFilter={setFilter}
-          onChangeViewMode={setViewMode}
-          onSortCycle={() => setSort(nextVaultSort(sort))}
-          onOpenItem={handleOpenVaultItem}
-        >
-         <View style={themed($searchSurface)}>
-            <SearchGlyph />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search vault contents"
-              placeholderTextColor={theme.colors.vaultHub.vaultHubMuted}
-              style={themed($searchInput)}
-            />
-            {query &&
-             <Ionicons
-              name={"close"}
-              size={18}
-              color={'#fff'}
-              style={{ paddingVertical: 5 }}
-              onPress={() => setQuery('')}
-            />
+          <Animated.View
+            entering={
+              reducedMotion || !shouldAnimateIntro
+                ? undefined
+                : FadeIn.duration(520).easing(Easing.bezier(0.22, 1, 0.36, 1))
             }
+            style={themed($heroSection)}
+          >
+            <VaultHeroOrb
+              actions={heroActions}
+              reducedMotion={true}
+              active={isFocused}
+            />
+          </Animated.View>
 
-          </View>
-        </VaultSection>
-        
-         <GlowFab onPress={() => handleScrollToTop()} style={{position: 'absolute', left: 20, bottom: spacing.lg + useSafeAreaInsets().bottom +spacing.xl * 3,}}/>
-      </ScrollView>
-    </Screen>
-  );
-};
+          <Animated.View
+            entering={
+              reducedMotion || !shouldAnimateIntro
+                ? undefined
+                : FadeInUp.delay(80)
+                    .duration(360)
+                    .easing(Easing.bezier(0.22, 1, 0.36, 1))
+            }
+            style={themed($toolbarSection)}
+          >
+            <View style={themed($toolbarHeader)}>
+              <Pressable
+                style={[themed($jumpButton), { flexDirection: "row" }]}
+                onPress={handleScrollToVault}
+              >
+                <Ionicons
+                  name={"arrow-down"}
+                  size={18}
+                  color={"#fff"}
+                  style={{ paddingVertical: 5 }}
+                />
+              </Pressable>
+              <Pressable
+                style={[themed($jumpButton), { flexDirection: "row" }]}
+                onPress={handleScrollToVault}
+              >
+                <Ionicons
+                  name={"wallet"}
+                  size={18}
+                  color={"#fff"}
+                  style={{ paddingVertical: 5 }}
+                />
+              </Pressable>
+            </View>
+          </Animated.View>
 
-const HeaderPill = ({ label, onPress }: { label: string; onPress: () => void }) => {
+          {error ? (
+            <View style={themed($errorCard)}>
+              <Text style={themed($errorText)}>{error}</Text>
+            </View>
+          ) : null}
+          <View style={{ height: 60 }} />
+
+          <VaultSection
+            animateOnMount={shouldAnimateIntro}
+            filter={filter}
+            items={visibleItems}
+            sort={sort}
+            viewMode={viewMode}
+            reducedMotion={true}
+            onLayout={(event) => setVaultSectionY(event.nativeEvent.layout.y)}
+            onChangeFilter={setFilter}
+            onChangeViewMode={setViewMode}
+            onSortCycle={() => setSort(nextVaultSort(sort))}
+            onOpenItem={handleOpenVaultItem}
+          >
+            <View style={themed($searchSurface)}>
+              <SearchGlyph />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search vault contents"
+                placeholderTextColor={theme.colors.vaultHub.vaultHubMuted}
+                style={themed($searchInput)}
+              />
+              {query && (
+                <Ionicons
+                  name={"close"}
+                  size={18}
+                  color={"#fff"}
+                  style={{ paddingVertical: 5 }}
+                  onPress={() => setQuery("")}
+                />
+              )}
+            </View>
+          </VaultSection>
+
+          <GlowFab
+            onPress={() => handleScrollToTop()}
+            style={{
+              position: "absolute",
+              left: 20,
+              bottom: spacing.lg + safeInsets.bottom + spacing.xl * 3,
+            }}
+          />
+        </ScrollView>
+      </Screen>
+    );
+  };
+
+export const VaultNotesHomeScreen = memo(VaultNotesHomeScreenComponent);
+
+const HeaderPill = ({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) => {
   const { themed } = useAppTheme();
 
   return (
@@ -632,13 +837,13 @@ const $screen: ThemedStyle<ViewStyle> = ({ colors }) => ({
 const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.md,
   // paddingTop: spacing.md,
-  paddingBottom: spacing.xl * 3+ useSafeAreaInsets().bottom,
+  paddingBottom: spacing.xl * 3,
   gap: spacing.lg,
 });
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   // gap: spacing.md,
-  height: Dimensions.get('screen').height*0.21
+  height: Dimensions.get("screen").height * 0.21,
 });
 
 const $headerTopRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -656,7 +861,7 @@ const $heroTopRow: ThemedStyle<ViewStyle> = () => ({
   flexDirection: "row",
   alignItems: "center",
   justifyContent: "space-between",
-})
+});
 
 const $heroBadge: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   paddingHorizontal: spacing.sm,
@@ -665,31 +870,31 @@ const $heroBadge: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: "rgba(255,255,255,0.04)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-})
+});
 
 const $heroStatusPill: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: 'row',
+  flexDirection: "row",
   paddingHorizontal: spacing.sm,
   paddingVertical: 6,
   borderRadius: 999,
   backgroundColor: "rgba(255, 77, 186, 0.12)",
   borderWidth: 1,
   borderColor: "rgba(255, 154, 219, 0.28)",
-  alignItems: 'center',
-})
+  alignItems: "center",
+});
 
 const $heroStatusText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontSize: 11,
   fontWeight: "600",
-})
+});
 
 const $heroEyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextSecondary,
   fontFamily: typography.primary.medium,
   textTransform: "uppercase",
   letterSpacing: 1.2,
-})
+});
 
 const $heroTitle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
@@ -697,14 +902,13 @@ const $heroTitle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   fontSize: 32,
   marginTop: -5,
   // lineHeight: 4,
-})
+});
 
 const $heroSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
   fontSize: 12,
   lineHeight: 22,
-})
-
+});
 
 const $eyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
@@ -780,12 +984,17 @@ const $heroSection: ThemedStyle<ViewStyle> = () => ({
   alignItems: "center",
   justifyContent: "center",
   marginTop: 40,
-  height: Dimensions.get('screen').height* 0.45 ,
+  height: Dimensions.get("screen").height * 0.45,
+});
+
+const $heroPlaceholder: ThemedStyle<ViewStyle> = () => ({
+  width: 320,
+  height: 320,
 });
 
 const $toolbarSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
-height: Dimensions.get('screen').height*0.1
+  height: Dimensions.get("screen").height * 0.1,
 });
 
 const $vaultSwitcher: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -805,7 +1014,7 @@ const $vaultChip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 });
 
 const $vaultChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  backgroundColor: '#e63db675',
+  backgroundColor: "#e63db675",
   borderColor: colors.vaultHub.vaultHubAccentPink,
 });
 

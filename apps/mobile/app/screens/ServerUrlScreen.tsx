@@ -83,6 +83,8 @@ export const ServerUrlScreen: FC<AppStackScreenProps<"ServerUrl">> =
             subtitle="Configure the API base URL used by this device."
             icon={<Server size={13} color="#FFD8FA" />}
             metaLabel="Advanced"
+            showBackButton
+            onBackPress={() => navigation.goBack()}
           />
 
           <GlassSection

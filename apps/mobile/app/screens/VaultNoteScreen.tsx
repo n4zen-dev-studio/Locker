@@ -1706,6 +1706,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       <ScrollView contentContainerStyle={themed($content)} showsVerticalScrollIndicator={false}>
         <HeroCard
           themed={themed}
+          showBackButton
+          onBackPress={() => navigation.goBack()}
           title={getVaultItemLabel(effectiveItemType)}
           subtitle={heroSubtitle}
           itemType={effectiveItemType}

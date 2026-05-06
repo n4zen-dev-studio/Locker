@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { View, type TextStyle, type ViewStyle } from "react-native";
+import { Pressable, View, type TextStyle, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/Text";
@@ -16,6 +16,8 @@ type VaultScreenHeroProps = {
   subtitle: string;
   icon?: ReactNode;
   metaLabel?: string;
+  showBackButton?: boolean;
+  onBackPress?: () => void;
 };
 
 type VaultBannerProps = {
@@ -39,10 +41,19 @@ export function VaultScreenHero(props: VaultScreenHeroProps) {
   return (
     <View style={themed($heroBlock)}>
       <View style={themed($heroTopRow)}>
-        <View style={themed($heroBadge)}>
-          {icon ? <View style={themed($heroBadgeIcon)}>{icon}</View> : null}
-          <Text style={themed($heroBadgeText)}>{badge}</Text>
+        <View style={themed($heroLeftGroup)}>
+          {props.showBackButton && (
+            <Pressable onPress={props.onBackPress} style={themed($backButton)}>
+              <Ionicons name="arrow-back" size={18} color="#FFF5FF" />
+            </Pressable>
+          )}
+
+          <View style={themed($heroBadge)}>
+            {icon ? <View style={themed($heroBadgeIcon)}>{icon}</View> : null}
+            <Text style={themed($heroBadgeText)}>{badge}</Text>
+          </View>
         </View>
+
         {metaLabel ? (
           <View style={themed($heroMetaPill)}>
             <Text style={themed($heroMetaText)}>{metaLabel}</Text>
@@ -203,3 +214,19 @@ const $statusBannerText: ThemedStyle<TextStyle> = () => ({
   fontSize: 12,
   lineHeight: 18,
 });
+const $heroLeftGroup: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $backButton: ThemedStyle<ViewStyle> = () => ({
+  width: 36,
+  height: 36,
+  borderRadius: 12,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(255,255,255,0.06)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+})

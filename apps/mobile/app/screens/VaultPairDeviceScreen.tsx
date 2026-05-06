@@ -145,6 +145,8 @@ export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> =
             subtitle="Generate a one-time setup code for another one of your devices."
             icon={<Smartphone size={13} color="#FFD8FA" />}
             metaLabel={expiresAt ? "Live code" : "Preparing"}
+            showBackButton
+            onBackPress={() => navigation.goBack()}
           />
 
           <GlassSection
