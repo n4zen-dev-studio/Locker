@@ -69,6 +69,9 @@ function isValidAttachment(att: any): boolean {
   if (typeof att.sha256 !== "string") return false
   if (typeof att.blobId !== "string") return false
   if (typeof att.createdAt !== "string") return false
+  if (att.durationMs !== undefined && att.durationMs !== null && typeof att.durationMs !== "number") {
+    return false
+  }
   if (att.filename !== undefined && att.filename !== null && typeof att.filename !== "string") return false
   return true
 }

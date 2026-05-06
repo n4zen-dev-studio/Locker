@@ -1,5 +1,5 @@
 import React, { FC, MutableRefObject, useEffect, useMemo, useRef, useState } from "react"
-import { Platform, Pressable, StyleSheet, Vibration, View } from "react-native"
+import { Platform, Pressable, StyleSheet, Vibration, View, ViewStyle } from "react-native"
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler"
 import Animated, {
   cancelAnimation,
@@ -26,8 +26,11 @@ import Svg, {
   RadialGradient as SvgRadialGradient,
   Rect,
   Stop,
+  RadialGradient,
 } from "react-native-svg"
 import { MaterialCommunityIcons } from "@expo/vector-icons"
+import { useAppTheme } from "@/theme/context"
+import { ThemedStyle } from "@/theme/types"
 
 type VaultHeroOrbAction = {
   id: string
@@ -57,6 +60,13 @@ const DRAG_ROTATION_MULTIPLIER = 1
 const RELEASE_VELOCITY_MULTIPLIER = 1.15
 const ROTATION_DECELERATION = 0.992
 const DRAG_TOUCH_SCALE = 1.03
+
+const ORB_SIZE = 320;
+const CENTER = ORB_SIZE / 2;
+const HALO_SIZE = 260;
+const CORE_SIZE = 152;
+const INNER_CORE_SIZE = 120;
+
 
 const SLOT_LAYOUT = [
   { angle: -90, distance: 122 },
@@ -90,49 +100,71 @@ const ORB_THEMES: Record<
   }
 > = {
   note: {
-    shellTop: "#c55cf6",
-    shellBottom: "#3B1D7A",
-    glow: "#C4B5FD",
-    glowSoft: "rgba(196,181,253,0.22)",
-    icon: "#F5F3FF",
-    ring: "rgba(160,140,255,0.18)",
-    halo: "rgba(140,120,255,0.22)",
-  },
-  voice: {
-    shellTop: "#FF7ACF",
-    shellBottom: "#C2188B",
-    glow: "#edbfe2",
-    glowSoft: "rgb(182, 94, 151)",
+        shellTop:  "#ff5cab",
+    shellBottom: "#050209",
+    glow: "#FFF7FD",
+    glowSoft: "#FF9ADB",
     icon: "#FFF0FA",
-    ring: "rgba(107, 60, 91, 0.18)",
+    ring: "rgba(136, 110, 126, 0.82)",
     halo: "rgba(81, 36, 65, 0.91)",
   },
+  voice: {
+    // shellTop: "#FF7ACF",
+    // shellBottom: "#C2188B",
+    // glow: "#edbfe2",
+    // glowSoft: "rgb(182, 94, 151)",
+    // icon: "#FFF0FA",
+    // ring: "rgba(107, 60, 91, 0.18)",
+    // halo: "rgba(81, 36, 65, 0.91)",
+    shellTop:  "#ff5cab",
+    shellBottom: "#050209",
+    glow: "#FFF7FD",
+    glowSoft: "#FF9ADB",
+    icon: "#FFF0FA",
+    ring: "rgba(136, 110, 126, 0.82)",
+    halo: "rgba(81, 36, 65, 0.91)",
+
+    // vaultBg: "#050209",
+    // vaultBgTint: "#150817",
+    // vaultDot: "rgba(255, 184, 226, 0.16)",
+    // vaultTextPrimary: "#FFF7FD",
+    // vaultTextSecondary: "#B7A8C1",
+    // vaultAccentPink: "#FF4DBA",
+    // vaultAccentPinkSoft: "#FF9ADB",
+    // vaultGlow: "rgba(255, 77, 186, 0.28)",
+    // vaultGlow2: "rgba(77, 193, 255, 0.28))",
+    // vaultGlow3: "rgba(255, 219, 77, 0.28))",
+    // vaultRing: "rgba(255, 77, 186, 0.82)",
+    // vaultBorderSubtle: "rgba(255, 255, 255, 0.08)",
+    // vaultSurface: "rgba(18, 12, 24, 0.72)",
+    // vaultError: "#FF7A9E",
+  },
   image: {
-    shellTop: "#FF7ACF",
-    shellBottom: "#a122d3",
-    glow: "#edbfe2",
-    glowSoft: "rgb(86, 47, 89)",
-    icon: "#fff0fa",
-    ring: "rgba(222, 35, 160, 0.18)",
-    halo: "rgba(101, 43, 81, 0.91)",
+        shellTop:  "#ff5cab",
+    shellBottom: "#050209",
+    glow: "#FFF7FD",
+    glowSoft: "#FF9ADB",
+    icon: "#FFF0FA",
+    ring: "rgba(136, 110, 126, 0.82)",
+    halo: "rgba(81, 36, 65, 0.91)",
   },
   pdf: {
-    shellTop: "#8B5CF6",
-    shellBottom: "#3B1D7A",
-    glow: "#C4B5FD",
-    glowSoft: "rgba(196,181,253,0.22)",
-    icon: "#F5F3FF",
-    ring: "rgba(160,140,255,0.18)",
-    halo: "rgba(140,120,255,0.22)",
+       shellTop:  "#ff5cab",
+    shellBottom: "#050209",
+    glow: "#FFF7FD",
+    glowSoft: "#FF9ADB",
+    icon: "#FFF0FA",
+    ring: "rgba(136, 110, 126, 0.82)",
+    halo: "rgba(81, 36, 65, 0.91)",
   },
   file: {
-    shellTop: "#FF7ACF",
-    shellBottom: "#930cfa",
-    glow: "#edbfe2",
-    glowSoft: "rgb(86, 47, 89)",
-    icon: "#fff0fa",
-    ring: "rgba(222, 35, 160, 0.18)",
-    halo: "rgba(101, 43, 81, 0.91)",
+        shellTop:  "#ff5cab",
+    shellBottom: "#050209",
+    glow: "#FFF7FD",
+    glowSoft: "#FF9ADB",
+    icon: "#FFF0FA",
+    ring: "rgba(136, 110, 126, 0.82)",
+    halo: "rgba(81, 36, 65, 0.91)",
   },
 }
 
@@ -766,6 +798,14 @@ function SatelliteOrb({
   )
 }
 
+
+function useStableGradientId(prefix: string) {
+  return useMemo(
+    () => `${prefix}-${Math.random().toString(36).slice(2, 10)}`,
+    [prefix],
+  );
+}
+
 export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
   actions,
   reducedMotion = false,
@@ -774,6 +814,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
   const canvasRef = useRef<View>(null)
   const isOrbitDraggingRef = useRef(false)
   const [canvasCenter, setCanvasCenter] = useState({ x: 0, y: 0 })
+  const { theme, themed } = useAppTheme()
 
   const heroActions = useMemo(() => actions.slice(0, 5), [actions])
 
@@ -788,6 +829,10 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
   const angularVelocity = useSharedValue(0)
   const parallaxX = useSharedValue(0)
   const parallaxY = useSharedValue(0)
+
+  const haloGradientId = useStableGradientId("vault-halo");
+  const coreGradientId = useStableGradientId("vault-core");
+  const bloomGradientId = useStableGradientId("vault-bloom");
 
   const notifyOrbitDragState = (isDragging: boolean) => {
     isOrbitDraggingRef.current = isDragging
@@ -972,6 +1017,15 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
       runOnJS(notifyOrbitDragState)(false)
     })
 
+
+  //     const coreStyle = useAnimatedStyle(() => ({
+  //   transform: [
+  //     { scale: interpolate(energy.value, [0, 1], [1, 1.03]) },
+  //     { scale: interpolate(pulse.value, [0.86, 1], [0.99, 1.02]) },
+  //   ],
+  // }));
+
+
   return (
     <GestureHandlerRootView style={styles.gestureRoot}>
       <View style={styles.root}>
@@ -984,7 +1038,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
             <View pointerEvents="none" style={styles.auroraLayer}>
               <AuroraBlob
                 size={304}
-                color="#7C3AED"
+                color="#ed3ae1"
                 opacity={0.18}
                 baseX={-92}
                 baseY={-84}
@@ -1130,7 +1184,7 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
                 />
               ))}
             </AnimatedView>
-
+{/* 
             <AnimatedView style={[styles.centerWrap, centerPulseStyle]}>
               <View style={styles.centerOuterGlow}>
                 <GlowBlob size={162} color="#95A5FF" opacity={0.45} />
@@ -1143,11 +1197,13 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
                 style={styles.centerShell}
               >
                 <LinearGradient
-                  colors={["#d650be", "#7a3c92", "#8320b9"]}
+                  colors={["#fa2ebd", "#c52c8b","rgba(18, 12, 24, 0.72)",]}
                   start={{ x: 0.18, y: 0.12 }}
                   end={{ x: 0.82, y: 1 }}
                   style={styles.centerCore}
                 >
+
+
                   <View
                     style={[
                       styles.centerTopHighlight,
@@ -1159,10 +1215,64 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
                   <AnimatedView style={[styles.centerBlobWrap, centerBlobStyle]}>
                     <GlowBlob size={86} color="#fadcff" opacity={0.88} />
                   </AnimatedView>
+
+                  
                   <CenterSymbol />
                 </LinearGradient>
               </LinearGradient>
-            </AnimatedView>
+            </AnimatedView> */}
+
+             <Animated.View style={[themed($coreWrap), centerPulseStyle]}>
+                            <Svg width={CORE_SIZE} height={CORE_SIZE} viewBox={`0 0 ${CORE_SIZE} ${CORE_SIZE}`} style={themed($coreGlowSvg)}>
+                              <Defs>
+                                <RadialGradient id={bloomGradientId} cx="50%" cy="50%" rx="50%" ry="50%">
+                                  <Stop offset="0%" stopColor={theme.colors.vault.vaultAccentPinkSoft} stopOpacity="0.52" />
+                                  <Stop offset="42%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.28" />
+                                  <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0" />
+                                </RadialGradient>
+                                <RadialGradient id={coreGradientId} cx="50%" cy="45%" rx="52%" ry="52%">
+                                  <Stop offset="0%" stopColor={theme.colors.vault.vaultAccentPinkSoft} stopOpacity="0.92" />
+                                  <Stop offset="34%" stopColor={theme.colors.vault.vaultAccentPink} stopOpacity="0.74" />
+                                  <Stop offset="72%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.34" />
+                                  <Stop offset="100%" stopColor={theme.colors.vault.vaultSurface} stopOpacity="0.06" />
+                                </RadialGradient>
+                              </Defs>
+                              <Rect width={CORE_SIZE} height={CORE_SIZE} rx={CORE_SIZE / 2} fill={`url(#${bloomGradientId})`} />
+                            </Svg>
+                  
+                            <View style={themed($centerCore)}>
+                              <Svg width={INNER_CORE_SIZE} height={INNER_CORE_SIZE} viewBox={`0 0 ${INNER_CORE_SIZE} ${INNER_CORE_SIZE}`}>
+                                <Defs>
+                                  <RadialGradient id={coreGradientId + "-inner"} cx="50%" cy="42%" rx="50%" ry="50%">
+                                    <Stop offset="0%" stopColor={theme.colors.vault.vaultAccentPinkSoft} stopOpacity="0.96" />
+                                    <Stop offset="28%" stopColor={theme.colors.vault.vaultAccentPink} stopOpacity="0.82" />
+                                    <Stop offset="72%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.22" />
+                                    <Stop offset="100%" stopColor={theme.colors.vault.vaultSurface} stopOpacity="0.1" />
+                                  </RadialGradient>
+                                </Defs>
+                                <Rect
+                                  width={INNER_CORE_SIZE}
+                                  height={INNER_CORE_SIZE}
+                                  rx={INNER_CORE_SIZE / 2}
+                                  fill={`url(#${coreGradientId + "-inner"})`}
+                                />
+                                {/* <Circle
+                                  cx={INNER_CORE_SIZE / 2}
+                                  cy={INNER_CORE_SIZE / 2}
+                                  r={INNER_CORE_SIZE / 2 - 1.5}
+                                  stroke={theme.colors.vault.vaultAccentPinkSoft}
+                                  strokeOpacity="0.7"
+                                  strokeWidth="1.5"
+                                  fill="none"
+                                /> */}
+                              </Svg>
+
+                              <View style={themed($iconWrap)}>
+                                            <CenterSymbol/>
+                                          </View>
+
+                            </View>
+                          </Animated.View>
           </View>
         </GestureDetector>
       </View>
@@ -1335,7 +1445,7 @@ const styles = StyleSheet.create({
     height: 15,
     borderRadius: 999,
     backgroundColor: "rgba(255, 255, 255, 0.16)",
-      transform: [{ rotate: "-15deg" }, { translateX: -2 }],
+    transform: [{ rotate: "-15deg" }, { translateX: -2 }],
 
   },
   satelliteBlobWrap: {
@@ -1344,3 +1454,37 @@ const styles = StyleSheet.create({
     height: 70,
   },
 })
+
+const $coreWrap: ThemedStyle<ViewStyle> = () => ({
+  position: "absolute",
+  width: CORE_SIZE,
+  height: CORE_SIZE,
+  alignItems: "center",
+  justifyContent: "center",
+});
+
+const $coreGlowSvg: ThemedStyle<ViewStyle> = () => ({
+  position: "absolute",
+});
+
+const $centerCore: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: INNER_CORE_SIZE,
+  height: INNER_CORE_SIZE,
+  borderRadius: CORE_SIZE / 2,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: colors.vault.vaultSurface,
+  borderWidth: 1,
+  borderColor: colors.vault.vaultBorderSubtle,
+  shadowColor: colors.vault.vaultAccentPink,
+  shadowOpacity: 0.42,
+  shadowRadius: 34,
+  shadowOffset: { width: 0, height: 0 },
+});
+
+const $iconWrap: ThemedStyle<ViewStyle> = () => ({
+  position: "absolute",
+  alignItems: "center",
+  justifyContent: "center",
+});
+

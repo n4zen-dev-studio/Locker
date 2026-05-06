@@ -13,6 +13,7 @@ import { CalculatorScreen } from "@/screens/CalculatorScreen"
 import { VaultTabsNavigator } from "@/navigators/VaultTabsNavigator"
 import { VaultLockedScreen } from "@/screens/VaultLockedScreen"
 import { VaultOnboardingScreen } from "@/screens/VaultOnboardingScreen"
+import { VaultSelectionScreen } from "@/screens/VaultSelectionScreen"
 import { VaultPasskeySetupScreen } from "@/screens/VaultPasskeySetupScreen"
 import { VaultPinScreen } from "@/screens/VaultPinScreen"
 import { CalculatorEntryCodesScreen } from "@/screens/CalculatorEntryCodesScreen"
@@ -20,6 +21,9 @@ import { VaultLinkDeviceScreen } from "@/screens/VaultLinkDeviceScreen"
 import { RemoteVaultScreen } from "@/screens/RemoteVaultScreen"
 import { VaultPairDeviceScreen } from "@/screens/VaultPairDeviceScreen"
 import { VaultImportPairingScreen } from "@/screens/VaultImportPairingScreen"
+import { VaultRecoverySetupScreen } from "@/screens/VaultRecoverySetupScreen"
+import { VaultRecoveryAccessScreen } from "@/screens/VaultRecoveryAccessScreen"
+import { VaultQrScannerScreen } from "@/screens/VaultQrScannerScreen"
 import { ServerUrlScreen } from "@/screens/ServerUrlScreen"
 import { VaultDiagnosticsScreen } from "@/screens/VaultDiagnosticsScreen"
 import { ThreatModelScreen } from "@/screens/ThreatModelScreen"
@@ -59,12 +63,16 @@ const AppStack = () => {
       <Stack.Screen name="VaultPin" component={VaultPinScreen} />
       <Stack.Screen name="VaultPasskeySetup" component={VaultPasskeySetupScreen} />
       <Stack.Screen name="VaultOnboarding" component={VaultOnboardingScreen} />
+      <Stack.Screen name="VaultSelection" component={VaultSelectionScreen} />
       <Stack.Screen name="VaultTabs" component={VaultTabsNavigator} />
       <Stack.Screen name="CalculatorEntryCodes" component={CalculatorEntryCodesScreen} />
       <Stack.Screen name="VaultLinkDevice" component={VaultLinkDeviceScreen} />
       <Stack.Screen name="RemoteVault" component={RemoteVaultScreen} />
       <Stack.Screen name="VaultPairDevice" component={VaultPairDeviceScreen} />
       <Stack.Screen name="VaultImportPairing" component={VaultImportPairingScreen} />
+      <Stack.Screen name="VaultRecoverySetup" component={VaultRecoverySetupScreen} />
+      <Stack.Screen name="VaultRecoveryAccess" component={VaultRecoveryAccessScreen} />
+      <Stack.Screen name="VaultQrScanner" component={VaultQrScannerScreen} />
       <Stack.Screen name="VaultDiagnostics" component={VaultDiagnosticsScreen} />
       <Stack.Screen name="ThreatModel" component={ThreatModelScreen} />
       <Stack.Screen name="ServerUrl" component={ServerUrlScreen} />

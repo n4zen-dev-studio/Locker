@@ -11,6 +11,7 @@ import {
   isSupported as isAndroidKeystoreSupported,
   unwrapVmkWithPrompt,
   wrapVmkWithPrompt,
+  deleteKey,
   deleteKeyDevOnly,
 } from "./androidKeystore"
 
@@ -18,6 +19,9 @@ const SERVICE = "com.n4zen.calculator.locker.dwk.v1"
 const ANDROID_KEY_REF = "android-keystore:locker_vmk_wrap_v1"
 
 export async function isPasskeyEnabled(): Promise<boolean> {
+  const meta = getMeta()
+  if (!meta || meta.v !== 2) return false
+
   if (Platform.OS === "android") {
     return isAndroidKeystoreSupported()
   }
@@ -101,9 +105,22 @@ export async function disablePasskeyDevOnly(): Promise<void> {
   removeMeta()
 }
 
+export async function clearPasskey(): Promise<void> {
+  if (Platform.OS === "android") {
+    await deleteKey()
+    removeMeta()
+    vaultSession.clear()
+    return
+  }
+
+  await Keychain.resetGenericPassword({ service: SERVICE })
+  removeMeta()
+  vaultSession.clear()
+}
+
 async function storeDwk(dwk: Uint8Array): Promise<void> {
   const password = bytesToBase64(dwk)
-  const options: Keychain.Options = {
+  const options = {
     service: SERVICE,
     accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
     accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE,

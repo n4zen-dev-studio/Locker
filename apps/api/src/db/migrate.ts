@@ -20,6 +20,7 @@ export function runMigrations(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS device_link_codes (
       code TEXT PRIMARY KEY,
       userId TEXT,
+      provisioningPayload TEXT NULL,
       expiresAt TEXT,
       usedAt TEXT NULL,
       createdAt TEXT
@@ -153,12 +154,65 @@ export function runMigrations(db: Database.Database): void {
       createdAt TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS device_pairing_codes (
+      code TEXT PRIMARY KEY,
+      vaultId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      wrappedVaultKeyB64 TEXT NOT NULL,
+      expiresAt TEXT NOT NULL,
+      usedAt TEXT NULL,
+      createdAt TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS device_vaults (
+      deviceId TEXT NOT NULL,
+      vaultId TEXT NOT NULL,
+      enabledAt TEXT NOT NULL,
+      PRIMARY KEY (deviceId, vaultId)
+    );
+
+    CREATE TABLE IF NOT EXISTS vault_access_requests (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      vaultId TEXT NOT NULL,
+      requestingDeviceId TEXT NOT NULL,
+      requesterPublicKey TEXT NOT NULL,
+      wrappedVaultKeyB64 TEXT NULL,
+      status TEXT NOT NULL,
+      expiresAt TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      approvedAt TEXT NULL,
+      approvedByDeviceId TEXT NULL,
+      rejectedAt TEXT NULL,
+      redeemedAt TEXT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS vault_recovery_envelopes (
+      vaultId TEXT PRIMARY KEY,
+      recoveryId TEXT NOT NULL UNIQUE,
+      version INTEGER NOT NULL,
+      keyVersion TEXT NOT NULL,
+      alg TEXT NOT NULL,
+      kdf TEXT NOT NULL,
+      verifierB64 TEXT NOT NULL,
+      nonceB64 TEXT NOT NULL,
+      ciphertextB64 TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      rotatedAt TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_vault_id ON audit_events (vaultId, id);
     CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_events (userId, id);
     CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens (userId, deviceId);
     CREATE INDEX IF NOT EXISTS idx_push_events_created ON push_events (createdAt, id);
+    CREATE INDEX IF NOT EXISTS idx_device_pairing_codes_user ON device_pairing_codes (userId, expiresAt);
+    CREATE INDEX IF NOT EXISTS idx_device_vaults_device ON device_vaults (deviceId, enabledAt);
+    CREATE INDEX IF NOT EXISTS idx_device_vaults_vault ON device_vaults (vaultId, enabledAt);
+    CREATE INDEX IF NOT EXISTS idx_vault_access_requests_user ON vault_access_requests (userId, status, expiresAt);
+    CREATE INDEX IF NOT EXISTS idx_vault_access_requests_vault ON vault_access_requests (vaultId, status, expiresAt);
+    CREATE INDEX IF NOT EXISTS idx_vault_recovery_envelopes_recovery_id ON vault_recovery_envelopes (recoveryId);
   `)
 
   try {
@@ -171,5 +225,9 @@ export function runMigrations(db: Database.Database): void {
 
   try {
     db.exec("ALTER TABLE vaults ADD COLUMN deletedByUserId TEXT")
+  } catch {}
+
+  try {
+    db.exec("ALTER TABLE device_link_codes ADD COLUMN provisioningPayload TEXT")
   } catch {}
 }

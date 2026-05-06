@@ -11,6 +11,7 @@ export type DeviceDTO = {
   platform: string
   createdAt: string
   lastSeenAt?: string
+  current?: boolean
 }
 
 export type VaultDTO = {
@@ -18,7 +19,33 @@ export type VaultDTO = {
   ownerUserId: string
   name: string
   createdAt: string
-  role?: string
+  enabledOnDevice?: boolean
+  enabledAt?: string | null
+  lastSyncAt?: string | null
+  lastAccessedAt?: string | null
+}
+
+export type DeviceVaultDTO = {
+  vaultId: string
+  deviceId: string
+  enabledAt: string
+}
+
+export type VaultAccessRequestDTO = {
+  id: string
+  vaultId: string
+  vaultName?: string | null
+  requestingDeviceId: string
+  requestingDeviceName?: string | null
+  approvedByDeviceId?: string | null
+  approvedByDeviceName?: string | null
+  requesterPublicKey?: string | null
+  status: "pending" | "approved" | "rejected" | "redeemed" | "expired"
+  createdAt: string
+  expiresAt: string
+  approvedAt?: string | null
+  rejectedAt?: string | null
+  redeemedAt?: string | null
 }
 
 export type UserKeyDTO = {

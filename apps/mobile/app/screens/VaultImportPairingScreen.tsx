@@ -1,4 +1,4 @@
-import { FC, useCallback, useState } from "react"
+import { FC, useCallback, useEffect, useState } from "react"
 import { Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
@@ -8,34 +8,41 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
-import { setRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { setRemoteVaultId, setVaultEnabledOnDevice } from "@/locker/storage/remoteVaultRepo"
 import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
-import { fetchRaw } from "@/locker/net/apiClient"
-import { setServerUrl } from "@/locker/storage/serverConfigRepo"
-import { sha256Hex } from "@/locker/crypto/sha"
-import { encryptV1 } from "@/locker/crypto/aead"
-import { base64ToBytes, utf8ToBytes } from "@/locker/crypto/encoding"
+import { fetchJson } from "@/locker/net/apiClient"
+import { getAccount } from "@/locker/storage/accountRepo"
+import { requestSync } from "@/locker/sync/syncCoordinator"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { getToken } from "@/locker/auth/tokenStore"
-
-type PairPayload = {
-  t?: string
-  apiBase?: string
-  vaultId?: string
-  rvkB64?: string
-  createdAt?: string
-}
+import {
+  formatPairingCode,
+  isValidPairingCode,
+  normalizePairingCode,
+  unwrapVaultKeyPayload,
+} from "@/locker/pairing/pairingCode"
+import { parseLockerQrPayload } from "@/locker/linking/qrPayload"
 
 export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairing">> =
   function VaultImportPairingScreen(props) {
-    const { navigation } = props
+    const { navigation, route } = props
     const { themed } = useAppTheme()
     const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
+    const expectedVaultId = route.params?.vaultId
+    const expectedVaultName = route.params?.vaultName
+    const initialPayload = route.params?.initialPayload ?? ""
 
-    const [payload, setPayload] = useState("")
+
+    const [pairingCode, setPairingCode] = useState("")
     const [error, setError] = useState<string | null>(null)
     const [status, setStatus] = useState<string | null>(null)
     const [isLinked, setIsLinked] = useState(false)
+
+    useEffect(() => {
+      if (initialPayload) {
+        setPairingCode(initialPayload)
+      }
+    }, [initialPayload])
 
     const refreshLinked = useCallback(async () => {
       try {
@@ -65,26 +72,22 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
       setError(null)
       setStatus(null)
 
-      if (!payload.trim()) {
-        setError("Paste pairing payload")
+      const qrPayload = parseLockerQrPayload(pairingCode)
+      const rawCode =
+        qrPayload?.t === "locker-vault-access"
+          ? qrPayload.pairingCode
+          : pairingCode
+      const normalizedCode = normalizePairingCode(rawCode)
+      if (!normalizedCode) {
+        setError("Enter a pairing code")
         return
       }
-
-      let parsed: PairPayload
-      try {
-        parsed = JSON.parse(payload) as PairPayload
-      } catch {
-        setError("Invalid JSON")
-        return
-      }
-
-      if (parsed.t !== "locker-pair-v1" || !parsed.vaultId || !parsed.rvkB64) {
-        setError("Invalid pairing payload")
+      if (!isValidPairingCode(normalizedCode)) {
+        setError("Enter the 8-character pairing code")
         return
       }
 
       try {
-        // Ensure device is linked first (import needs auth for PUT)
         const token = await getToken()
         if (!token) {
           setIsLinked(false)
@@ -92,36 +95,32 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
           return
         }
 
-        if (parsed.apiBase) {
-          setServerUrl(parsed.apiBase)
-        }
-
-        const rvk = base64ToBytes(parsed.rvkB64)
-        await setRemoteVaultKey(parsed.vaultId, rvk)
-
-        const checkObj = {
-          v: 1,
-          type: "sync-key-check",
-          vaultId: parsed.vaultId,
-          createdAt: new Date().toISOString(),
-        }
-
-        const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(checkObj)))
-        const bytes = utf8ToBytes(JSON.stringify(envelope))
-        const sha256 = sha256Hex(bytes)
-
-        await fetchRaw(
-          `/v1/vaults/${parsed.vaultId}/blobs/sync-key-check-v1?sha256=${sha256}`,
+        const data = await fetchJson<{ vaultId: string; wrappedVaultKeyB64: string }>(
+          "/v1/pairing-codes/redeem",
           {
-            method: "PUT",
-            headers: { "content-type": "application/octet-stream" },
-            body: bytes as any,
+            method: "POST",
+            body: JSON.stringify({ pairingCode: normalizedCode }),
           },
           { token },
         )
 
-        setRemoteVaultId(parsed.vaultId)
-        setStatus("Pairing imported. You can sync now.")
+        const unwrapped = unwrapVaultKeyPayload({
+          pairingCode: normalizedCode,
+          wrappedVaultKeyB64: data.wrappedVaultKeyB64,
+        })
+        if (expectedVaultId && unwrapped.vaultId !== expectedVaultId) {
+          throw new Error(`This access code is for a different vault${expectedVaultName ? ` than ${expectedVaultName}` : ""}.`)
+        }
+
+        await setRemoteVaultKey(unwrapped.vaultId, unwrapped.rvk)
+        const account = getAccount()
+        if (account?.device.id) {
+          await fetchJson(`/v1/devices/${account.device.id}/vaults/${unwrapped.vaultId}`, { method: "PUT" })
+        }
+        setRemoteVaultId(unwrapped.vaultId, expectedVaultName)
+        setVaultEnabledOnDevice(unwrapped.vaultId, true, { name: expectedVaultName })
+        void requestSync("vault_enabled", unwrapped.vaultId)
+        setStatus("Vault added to this device. Sync is ready.")
         navigation.replace("RemoteVault")
       } catch (err) {
         const message = err instanceof Error ? err.message : "Import failed"
@@ -133,10 +132,10 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
       <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
         <View style={themed($header)}>
           <Text preset="heading" style={themed($title)}>
-            Import Pairing
+            {expectedVaultName ? `Add ${expectedVaultName}` : "Enter Vault Access Code"}
           </Text>
           <Text preset="subheading" style={themed($subtitle)}>
-            Paste pairing JSON
+            Use the one-time vault access code from another one of your devices
           </Text>
         </View>
 
@@ -153,21 +152,31 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
           </View>
         ) : null}
 
-        <TextInput
-          value={payload}
-          onChangeText={setPayload}
-          placeholder='{"t":"locker-pair-v1", ...}'
+      <TextInput
+        value={formatPairingCode(pairingCode)}
+        onChangeText={setPairingCode}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          placeholder="ABCD-EFGH"
           placeholderTextColor="#9aa0a6"
-          style={themed($payload)}
-          multiline
-        />
+        style={themed($payload)}
+      />
+
+      <Pressable
+        style={themed($secondaryButton)}
+        onPress={() => navigation.navigate("VaultQrScanner", { mode: "vault-access", vaultId: expectedVaultId, vaultName: expectedVaultName })}
+      >
+        <Text preset="bold" style={themed($secondaryButtonText)}>
+          Scan QR Instead
+        </Text>
+      </Pressable>
 
         {error ? <Text style={themed($errorText)}>{error}</Text> : null}
         {status ? <Text style={themed($statusText)}>{status}</Text> : null}
 
         <Pressable style={themed($primaryButton)} onPress={handleImport}>
           <Text preset="bold" style={themed($primaryButtonText)}>
-            Import Pairing
+            Add Vault to This Device
           </Text>
         </Pressable>
 
@@ -229,8 +238,8 @@ const $payload: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
   borderRadius: 14,
   padding: spacing.md,
   color: colors.palette.neutral100,
-  minHeight: 200,
-  textAlignVertical: "top",
+  fontSize: 20,
+  letterSpacing: 3,
   borderWidth: 1,
   borderColor: "rgba(255, 255, 255, 0.15)",
   marginBottom: spacing.md,

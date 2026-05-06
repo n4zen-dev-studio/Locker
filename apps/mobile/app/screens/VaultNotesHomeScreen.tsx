@@ -37,11 +37,15 @@ import { vaultSession } from "@/locker/session";
 import { getPrivacyPrefs } from "@/locker/security/privacyPrefsRepo";
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
 import { listNotesForVault, Note } from "@/locker/storage/notesRepo";
-import { getRemoteVaultId, getRemoteVaultName } from "@/locker/storage/remoteVaultRepo";
+import { getRemoteVaultId, getRemoteVaultName, listRemoteVaults, setRemoteVaultId } from "@/locker/storage/remoteVaultRepo";
 import { getMeta } from "@/locker/storage/vaultMetaRepo";
 import { requestSync } from "@/locker/sync/syncCoordinator";
 import { getSyncStatus } from "@/locker/sync/syncEngine";
-import { getVaultItemTypeFromMime, isSensitiveClassification } from "@/locker/vault/types";
+import {
+  getVaultItemTypeFromMime,
+  getVaultItemTypeFromImportType,
+  isSensitiveClassification,
+} from "@/locker/vault/types";
 import type { VaultStackScreenProps } from "@/navigators/navigationTypes";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
@@ -49,6 +53,7 @@ import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 import { Lock } from 'lucide-react-native'
 import { Ionicons } from "@expo/vector-icons"
 import { GlowFab } from "@/components/GlowFab";
+import { VaultLockBackground } from "@/components/VaultLockBackground";
 
 export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = function VaultNotesHomeScreen(props) {
   const { navigation } = props;
@@ -77,10 +82,12 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
 
   const [activeVaultId, setActiveVaultId] = useState<string | null>(() => getRemoteVaultId());
   const [activeVaultName, setActiveVaultName] = useState<string | null>(() => getRemoteVaultName());
+  const [availableVaults, setAvailableVaults] = useState(() => listRemoteVaults().filter((vault) => vault.enabledOnDevice));
 
   const refreshActiveVault = useCallback(() => {
     setActiveVaultId(getRemoteVaultId());
     setActiveVaultName(getRemoteVaultName());
+    setAvailableVaults(listRemoteVaults().filter((vault) => vault.enabledOnDevice));
   }, []);
 
   const refreshNotes = useCallback(() => {
@@ -168,11 +175,11 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setSyncStatus(getSyncStatus());
+      setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
     }, 2000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [activeVaultId]);
 
   const syncReason = useMemo(() => {
     if (!activeVaultId) return "Select a remote vault";
@@ -198,7 +205,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
       setError(err instanceof Error ? err.message : "Sync failed");
     } finally {
       setRefreshing(false);
-      setSyncStatus(getSyncStatus());
+      setSyncStatus(getSyncStatus(activeVaultId ?? undefined));
     }
   };
 
@@ -220,20 +227,29 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
     const list: VaultListItem[] = [];
     for (const note of noteMap.values()) {
       const itemSyncStatus: "cloud" | "local" = note.vaultId ? "cloud" : "local";
+      const primaryAttachment = (note.attachments ?? []).find(
+        (attachment) => attachment.id === note.primaryAttachmentId,
+      ) ?? note.attachments?.[0];
       list.push({
         id: `note:${note.id}`,
         noteId: note.id,
-        type: "note",
+        type: note.itemType ?? "note",
         title: note.title || "Untitled",
         preview: hideSensitivePreviews && isSensitiveClassification(note.classification)
           ? `Preview hidden for ${note.classification}`
-          : note.body,
+          : note.itemType === "voice"
+            ? `Voice recording${note.voiceDurationMs ? ` · ${Math.round(note.voiceDurationMs / 1000)}s` : ""}`
+            : note.itemType && note.itemType !== "note"
+              ? primaryAttachment?.mime ?? "Encrypted file"
+            : note.body,
         updatedAt: note.updatedAt,
         createdAt: note.createdAt,
         classification: note.classification,
         deleted: !!note.deletedAt,
         syncStatus: itemSyncStatus,
       });
+
+      if ((note.itemType ?? "note") !== "note") continue;
 
       for (const attachment of note.attachments ?? []) {
         list.push({
@@ -265,7 +281,8 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         if (filter === "notes") return item.type === "note";
         if (filter === "images") return item.type === "image";
         if (filter === "pdfs") return item.type === "pdf";
-        if (filter === "files") return item.type === "file";
+        if (filter === "files") return item.type === "doc";
+        if (filter === "voices") return item.type === "voice";
         if (filter === "sensitive") return isSensitiveClassification(item.classification);
         if (filter === "recent") {
           return Date.now() - new Date(item.updatedAt).getTime() <= RECENT_WINDOW_MS;
@@ -299,7 +316,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         icon: "image" as const,
         angle: -45,
         distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "image" }),
+        onPress: () => navigation.navigate("VaultNote", { importType: "image", createType: 'image' }),
       },
       {
         id: "import-pdf",
@@ -307,7 +324,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         icon: "pdf" as const,
         angle: 135,
         distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "pdf" }),
+        onPress: () => navigation.navigate("VaultNote", { importType: "pdf", createType: 'pdf'  }),
       },
       {
         id: "import-file",
@@ -315,15 +332,15 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         icon: "file" as const,
         angle: 45,
         distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "file" }),
+        onPress: () => navigation.navigate("VaultNote", { importType: "file",  createType: 'doc' }),
       },
       {
         id: "voice",
-        label: "Import Voice Recording",
+        label: "Secure Voice",
         icon: "voice" as const,
         angle: 45,
         distance: 110,
-        onPress: () => navigation.navigate("VaultNote", { importType: "file" }),
+        onPress: () => navigation.navigate("VaultNote", { createType: getVaultItemTypeFromImportType("voice") }),
       },
     ],
     [navigation],
@@ -331,10 +348,21 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
 
   const handleOpenVaultItem = useCallback(
     (item: VaultListItem) => {
-      navigation.navigate("VaultNote", { noteId: item.noteId });
+      navigation.navigate("VaultNote", { noteId: item.noteId, attachmentId: item.attachmentId });
     },
     [navigation],
   );
+
+  const handleSwitchVault = useCallback(
+    (vaultId: string, vaultName?: string | null) => {
+      setRemoteVaultId(vaultId, vaultName ?? undefined)
+      refreshActiveVault()
+      refreshNotes()
+      refreshSyncPrereqs().catch(() => undefined)
+      setSyncStatus(getSyncStatus(vaultId))
+    },
+    [refreshActiveVault, refreshNotes, refreshSyncPrereqs],
+  )
 
   const handleScrollToVault = useCallback(() => {
     scrollRef.current?.scrollTo({ y: Math.max(0, vaultSectionY), animated: true });
@@ -346,6 +374,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
 
   return (
     <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])} systemBarStyle="light">
+      {/* <VaultLockBackground reducedMotion={reducedMotion} /> */}
       <VaultHubBackground reducedMotion={reducedMotion} />
 
       <ScrollView
@@ -370,7 +399,7 @@ refreshControl={
                 Locker
               </Text> */}
                <Text size="xxs" style={themed($eyebrow)}>
-                 {activeVaultId ? "Personal cloud vault" : "Local-only vault"}
+                 {activeVaultId ? "Synced vault" : "Local-only vault"}
               </Text>
               <Text preset="heading" style={themed($vaultNameText)}>
                 {activeVaultName ?? "Personal Vault"}
@@ -439,6 +468,22 @@ refreshControl={
 
 
         </Animated.View>
+
+        {availableVaults.length > 1 ? (
+          <View style={themed($vaultSwitcher)}>
+            {availableVaults.map((vault) => (
+              <Pressable
+                key={vault.id}
+                style={themed([$vaultChip, activeVaultId === vault.id && $vaultChipActive])}
+                onPress={() => handleSwitchVault(vault.id, vault.name)}
+              >
+                <Text style={themed([$vaultChipText, activeVaultId === vault.id && $vaultChipTextActive])}>
+                  {vault.name ?? "Vault"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         {/* {syncReason ? (
           <View style={themed($syncHint)}>
@@ -647,6 +692,35 @@ const $heroSection: ThemedStyle<ViewStyle> = () => ({
 
 const $toolbarSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
+});
+
+const $vaultSwitcher: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.sm,
+});
+
+const $vaultChip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.xs,
+  borderRadius: 999,
+  backgroundColor: colors.vaultHub.vaultHubChipInactive,
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+});
+
+const $vaultChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  backgroundColor: colors.vaultHub.vaultHubAccentPink,
+  borderColor: colors.vaultHub.vaultHubAccentPink,
+});
+
+const $vaultChipText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 12,
+});
+
+const $vaultChipTextActive: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral900,
 });
 
 const $toolbarHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({

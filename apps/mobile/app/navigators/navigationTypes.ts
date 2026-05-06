@@ -6,10 +6,18 @@ import {
   NavigatorScreenParams,
 } from "@react-navigation/native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import type { VaultImportType, VaultItemType } from "@/locker/vault/types"
 
 export type VaultStackParamList = {
   VaultHome: undefined
-  VaultNote: { noteId?: string; importType?: "image" | "pdf" | "file" } | undefined
+  VaultNote:
+    | {
+        noteId?: string
+        attachmentId?: string
+        importType?: VaultImportType
+        createType?: VaultItemType
+      }
+    | undefined
 }
 
 export type SecurityStackParamList = {
@@ -42,12 +50,22 @@ export type AppStackParamList = {
   VaultPin: undefined
   VaultPasskeySetup: { mode?: "fresh" | "migrate" | "recovery" } | undefined
   VaultOnboarding: undefined
+  VaultSelection: undefined
   VaultTabs: NavigatorScreenParams<VaultTabsParamList>
   CalculatorEntryCodes: undefined
-  VaultLinkDevice: undefined
+  VaultLinkDevice: { initialPayload?: string } | undefined
   RemoteVault: undefined
   VaultPairDevice: undefined
-  VaultImportPairing: undefined
+  VaultImportPairing: { vaultId?: string; vaultName?: string; initialPayload?: string } | undefined
+  VaultRecoverySetup: undefined
+  VaultRecoveryAccess: undefined
+  VaultQrScanner:
+    | {
+        mode: "device-link" | "vault-access"
+        vaultId?: string
+        vaultName?: string
+      }
+    | undefined
   VaultDiagnostics: undefined
   ThreatModel: undefined
   ServerUrl: undefined

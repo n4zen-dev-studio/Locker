@@ -6,6 +6,7 @@ export type VaultFilter =
   | "images"
   | "pdfs"
   | "files"
+  | "voices"
   | "sensitive"
   | "recent"
   | "deleted";
@@ -18,7 +19,7 @@ export type VaultListItem = {
   id: string;
   noteId: string;
   attachmentId?: string;
-  type: "note" | "image" | "pdf" | "file";
+  type: "note" | "image" | "pdf" | "doc" | "voice";
   title: string;
   preview: string;
   updatedAt: string;
@@ -40,6 +41,7 @@ export const FILTER_OPTIONS: Array<{
   { label: "Images", shortLabel: "IMG", value: "images" },
   { label: "PDFs", shortLabel: "PDF", value: "pdfs" },
   { label: "Files", shortLabel: "FILE", value: "files" },
+  { label: "Voice", shortLabel: "VOICE", value: "voices" },
   { label: "Sensitive", shortLabel: "SAFE", value: "sensitive" },
   { label: "Recent", shortLabel: "NEW", value: "recent" },
   { label: "Trash", shortLabel: "BIN", value: "deleted" },

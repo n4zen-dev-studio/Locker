@@ -44,11 +44,24 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> =
       setMetaVersion(meta ? meta.v : null);
       const enabled = await isPasskeyEnabled();
       setPasskeyReady(enabled);
+      return { enabled, metaVersion: meta?.v ?? null };
     }, []);
 
     useEffect(() => {
       refreshState();
     }, [refreshState]);
+
+    useEffect(() => {
+      let active = true
+      void refreshState().then((state) => {
+        if (!active || state.enabled) return
+        navigation.replace("VaultPasskeySetup", { mode: state.metaVersion === 1 ? "migrate" : "fresh" })
+      })
+
+      return () => {
+        active = false
+      }
+    }, [navigation, refreshState])
 
     useEffect(() => {
       AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
@@ -96,8 +109,8 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> =
           severity: "info",
         });
         const next = getPostUnlockRoute();
-        if (next.name === "VaultOnboarding") {
-          navigation.replace("VaultOnboarding");
+        if (next.name === "VaultSelection") {
+          navigation.replace("VaultSelection");
         } else {
           navigation.replace(next.name, next.params);
         }
@@ -131,17 +144,11 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> =
           }
           style={themed($headerRow)}
         >
-          {/* <Pressable style={themed($backButton)} onPress={() => navigation.goBack()}>
-            <Text style={themed($backButtonText)}>‹ Back</Text>
-          </Pressable> */}
 
           <View style={themed($headerCopy)}>
             <Text size="xs" style={themed($eyebrow)}>
               Locker
             </Text>
-            {/* <Text preset="heading" style={themed($title)}>
-              Vault Locked
-            </Text> */}
           </View>
         </Animated.View>
 

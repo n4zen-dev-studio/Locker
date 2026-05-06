@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Cloud,
   Fingerprint,
+  KeyRound,
   Link2,
   RotateCcw,
   Server,
@@ -15,8 +16,10 @@ import {
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { VaultHubBackground } from "@/components/VaultHubBackground"
-import { resetPrivacyOnboarding } from "@/locker/storage/onboardingRepo"
+import { resetDeviceLocally } from "@/locker/device/deviceLocalReset"
+import { resetSetupOnboardingState } from "@/locker/storage/onboardingRepo"
 import type { SettingsStackScreenProps } from "@/navigators/navigationTypes"
+import { resetRoot } from "@/navigators/navigationUtilities"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
@@ -30,15 +33,34 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
 
     const handleReplayOnboarding = () => {
       Alert.alert(
-        "Replay onboarding",
-        "This will reopen the privacy onboarding flow without changing your vault data.",
+        "Reset setup gate",
+        "This will require setup selection again on the next unlock without clearing vault data.",
         [
           { text: "Cancel", style: "cancel" },
           {
-            text: "Replay",
+            text: "Reset",
             onPress: () => {
-              resetPrivacyOnboarding()
-              navigation.navigate("VaultOnboarding")
+              resetSetupOnboardingState()
+              navigation.navigate("VaultSelection")
+            },
+          },
+        ],
+      )
+    }
+
+    const handleLogout = () => {
+      Alert.alert(
+        "Log out on this device?",
+        "This clears passkey setup, linked account state, local vault keys, cached vault data, and sync state on this device only. Your Locker account and remote vaults stay intact.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Log out",
+            style: "destructive",
+            onPress: () => {
+              void resetDeviceLocally().then(() => {
+                resetRoot({ index: 0, routes: [{ name: "Calculator" }] })
+              })
             },
           },
         ],
@@ -96,28 +118,36 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
           >
             <View style={themed($grid)}>
               <ControlTile
-                label="Sync Setup"
-                caption="Vault sync"
+                label="Vaults & Devices"
+                caption="Sync and availability"
                 accent="blue"
                 icon={<Cloud size={18} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("RemoteVault")}
               />
 
               <ControlTile
-                label="Link Device"
-                caption="Trusted device"
+                label="Recovery Key"
+                caption="Generate or rotate"
                 accent="pink"
-                icon={<Link2 size={18} color={theme.colors.vaultHub.vaultHubAccentPinkSoft} />}
-                onPress={() => navigation.navigate("VaultLinkDevice")}
+                icon={<KeyRound size={18} color={theme.colors.vaultHub.vaultHubAccentPinkSoft} />}
+                onPress={() =>navigation.navigate("VaultRecoverySetup")}
               />
 
-              <ControlTile
+             {__DEV__ && <ControlTile
                 label="Server URL"
                 caption="API endpoint"
                 accent="warm"
                 icon={<Server size={18} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("ServerUrl")}
-              />
+              />}
+
+              {__DEV__ && <ControlTile
+                label="Add Another Device"
+                caption="Link new device"
+                accent="pink"
+                icon={<Link2 size={18} color={theme.colors.vaultHub.vaultHubAccentPinkSoft} />}
+                onPress={() => navigation.navigate("VaultLinkDevice")}
+              />}
 
               <ControlTile
                 label="Entry Codes"
@@ -135,6 +165,7 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
             compact
           >
             <View style={themed($toolStack)}>
+
               <MiniToolRow
                 label="Export & Diagnostics"
                 value="Backup, logs"
@@ -151,12 +182,20 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
                 onPress={() => navigation.navigate("ThreatModel")}
               />
 
-              <MiniToolRow
+              {/* <MiniToolRow
                 label="Replay Onboarding"
-                value="Run flow again"
+                value="Show setup gate again"
                 accent="neutral"
                 icon={<RotateCcw size={16} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={handleReplayOnboarding}
+              /> */}
+
+              <MiniToolRow
+                label="Log out"
+                value="Reset this device"
+                accent="warm"
+                icon={<ShieldAlert size={16} color={theme.colors.vaultHub.vaultHubAccentPink} />}
+                onPress={handleLogout}
               />
             </View>
           </PanelCard>
