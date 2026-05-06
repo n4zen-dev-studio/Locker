@@ -1,6 +1,5 @@
-import { FC, useRef, useState } from "react";
+import { FC } from "react";
 import {
-  Animated,
   Pressable,
   PressableProps,
   StyleProp,
@@ -10,13 +9,15 @@ import {
   ViewStyle,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { Text } from "@/components/Text";
-import {
-  createMoldedSurface,
-  createPressedInset,
-  createSoftShadow,
-} from "@/theme/calculatorStyling";
+import { createMoldedSurface, createSoftShadow } from "@/theme/calculatorStyling";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 
@@ -47,45 +48,30 @@ export const CalculatorKey: FC<CalculatorKeyProps> = ({
 }) => {
   const { themed, theme } = useAppTheme();
 
-  const progress = useRef(new Animated.Value(0)).current;
-  const [isPressed, setIsPressed] = useState(false);
+  const progress = useSharedValue(0);
 
   const handlePressIn = () => {
-    setIsPressed(true);
-    Animated.spring(progress, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 34,
-      bounciness: 0,
-    }).start();
+    progress.value = withTiming(1, { duration: 140 });
   };
 
   const handlePressOut = () => {
-    setIsPressed(false);
-    Animated.spring(progress, {
-      toValue: 0,
-      useNativeDriver: true,
-      speed: 24,
-      bounciness: 4,
-    }).start();
+    progress.value = withTiming(0, { duration: 220 });
   };
 
-  const animatedStyle = {
+  const animatedShellStyle = useAnimatedStyle(() => ({
     transform: [
-      {
-        scale: progress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [1, 0.978],
-        }),
-      },
-      {
-        translateY: progress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0, 1.6],
-        }),
-      },
+      { scale: interpolate(progress.value, [0, 1], [1, 0.968]) },
+      { translateY: interpolate(progress.value, [0, 1], [0, 2]) },
     ],
-  };
+  }));
+
+  const animatedGlowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 1], [0.28, 0.55]),
+  }));
+
+  const animatedFaceStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 1], [1, 0.92]),
+  }));
 
   const shellGradient = theme.colors.calculator.keyGradients[variant];
   const faceGradient = theme.colors.calculator.keyFaceGradients[variant];
@@ -97,10 +83,10 @@ export const CalculatorKey: FC<CalculatorKeyProps> = ({
   return (
     <Animated.View
       style={[
-        themed($shadowBase),
-        themed($shadowByVariant[variant]),
-        isPressed && themed($shadowPressed),
-        animatedStyle,
+        themed($shell),
+        themed($shellByVariant[variant]),
+        disabled && themed($shellDisabled),
+        animatedShellStyle,
         style,
       ]}
     >
@@ -114,81 +100,59 @@ export const CalculatorKey: FC<CalculatorKeyProps> = ({
         delayLongPress={delayLongPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={({ pressed }) => [
-          themed($buttonBase),
-          pressed && themed($buttonPressed),
-          disabled && themed($buttonDisabled),
-        ]}
+        style={themed($pressable)}
       >
         <LinearGradient
-          colors={theme.colors.calculator.keyBodyGradient}
-          start={{ x: 0.12, y: 0.04 }}
-          end={{ x: 0.9, y: 1 }}
-          style={[StyleSheet.absoluteFillObject, themed($baseShellWash)]}
-        />
-
-        <LinearGradient
           colors={shellGradient}
-          start={{ x: 0.16, y: 0.03 }}
-          end={{ x: 0.9, y: 1 }}
-          style={[StyleSheet.absoluteFillObject, themed($baseShellColor)]}
+          start={{ x: 0.18, y: 0.04 }}
+          end={{ x: 0.86, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
         />
 
-        <LinearGradient
-          colors={theme.colors.calculator.keyGlossGradient}
-          start={{ x: 0.18, y: 0 }}
-          end={{ x: 0.82, y: 0.68 }}
-          style={[StyleSheet.absoluteFillObject, themed($outerPlaneGloss)]}
-        />
-
-        <View pointerEvents="none" style={themed($outerTopEdge)} />
-        <View pointerEvents="none" style={themed($outerLeftEdge)} />
-        <View pointerEvents="none" style={themed($outerBottomDepth)} />
-
-        <View
+        <Animated.View
           pointerEvents="none"
-          style={[themed($innerFace), isPressed && themed($innerFacePressed)]}
+          style={[themed($ambientGlow), themed($ambientGlowByVariant[variant]), animatedGlowStyle]}
+        />
+        <View pointerEvents="none" style={themed($topRim)} />
+        <View pointerEvents="none" style={themed($edgeRim)} />
+        <View pointerEvents="none" style={themed($bottomDepth)} />
+
+        <Animated.View
+          pointerEvents="none"
+          style={[themed($face), animatedFaceStyle]}
         >
           <LinearGradient
             colors={faceGradient}
-            start={{ x: 0.18, y: 0.04 }}
-            end={{ x: 0.86, y: 0.96 }}
+            start={{ x: 0.14, y: 0.04 }}
+            end={{ x: 0.84, y: 0.96 }}
             style={StyleSheet.absoluteFillObject}
           />
 
           {pearlescentGradient ? (
             <LinearGradient
               colors={pearlescentGradient}
-              start={{ x: 0.08, y: 0.12 }}
-              end={{ x: 0.92, y: 0.92 }}
-              style={[StyleSheet.absoluteFillObject, themed($pearlescentLayer)]}
+              start={{ x: 0.1, y: 0.12 }}
+              end={{ x: 0.9, y: 0.94 }}
+              style={[StyleSheet.absoluteFillObject, themed($pearlescent)]}
             />
           ) : null}
 
           <LinearGradient
-            colors={theme.colors.calculator.keyConcaveHighlightGradient}
-            start={{ x: 0.2, y: 0.05 }}
+            colors={theme.colors.calculator.keyGlossGradient}
+            start={{ x: 0.18, y: 0 }}
             end={{ x: 0.82, y: 1 }}
-            style={[StyleSheet.absoluteFillObject, themed($concavePlane)]}
+            style={[StyleSheet.absoluteFillObject, themed($faceGloss)]}
           />
 
-          <View pointerEvents="none" style={themed($faceTopPlane)} />
-          <View pointerEvents="none" style={themed($faceLeftPlane)} />
-          <View pointerEvents="none" style={themed($faceRightDepth)} />
-          <View pointerEvents="none" style={themed($faceBottomDepth)} />
-          <View pointerEvents="none" style={themed($centerDip)} />
-          <View pointerEvents="none" style={themed($centerDipShade)} />
-          <View pointerEvents="none" style={themed($faceInsetContour)} />
-
-          {variant === "equals" ? (
-            <View pointerEvents="none" style={themed($equalsAura)} />
-          ) : null}
-        </View>
+          <View pointerEvents="none" style={themed($faceTopRim)} />
+          <View pointerEvents="none" style={themed($faceBottomShade)} />
+          <View pointerEvents="none" style={themed($faceOutline)} />
+        </Animated.View>
 
         <Text
           preset={variant === "equals" ? "heading" : "subheading"}
           style={[
-            themed($labelBase),
+            themed($label),
             themed($labelByVariant[variant]),
             disabled && themed($labelDisabled),
             textStyle,
@@ -203,22 +167,26 @@ export const CalculatorKey: FC<CalculatorKeyProps> = ({
   );
 };
 
-const OUTER_RADIUS = 18;
-const INNER_RADIUS = 12;
+const OUTER_RADIUS = 22;
+const INNER_RADIUS = 17;
 
-const $shadowBase: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $shell: ThemedStyle<ViewStyle> = ({ colors }) => ({
   flex: 1,
+  minHeight: 78,
   borderRadius: OUTER_RADIUS,
+  overflow: "hidden",
+  borderWidth: 1,
+  borderColor: colors.calculator.keyBorder,
   ...createSoftShadow({
     color: colors.calculator.keyShadow,
-    opacity: 0.12,
-    radius: 16,
-    offsetY: 9,
+    opacity: 0.28,
+    radius: 18,
+    offsetY: 10,
     elevation: 6,
   }),
 });
 
-const $shadowByVariant: Record<CalculatorKeyVariant, ThemedStyle<ViewStyle>> = {
+const $shellByVariant: Record<CalculatorKeyVariant, ThemedStyle<ViewStyle>> = {
   number: ({ colors }) => ({
     shadowColor: colors.calculator.keyShadow,
   }),
@@ -233,86 +201,78 @@ const $shadowByVariant: Record<CalculatorKeyVariant, ThemedStyle<ViewStyle>> = {
   }),
 };
 
-const $shadowPressed: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  ...createSoftShadow({
-    color: colors.calculator.keyShadowPressed,
-    opacity: 0.08,
-    radius: 7,
-    offsetY: 3,
-    elevation: 3,
-  }),
+const $shellDisabled: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.45,
 });
 
-const $buttonBase: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $pressable: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   ...createMoldedSurface({
     backgroundColor: colors.calculator.keyFallback,
     radius: OUTER_RADIUS,
   }),
-  minHeight: 74,
+  flex: 1,
   alignItems: "center",
   justifyContent: "center",
-  paddingVertical: spacing.md,
   paddingHorizontal: spacing.sm,
-  overflow: "hidden",
+  paddingVertical: spacing.md,
 });
 
-const $buttonPressed: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.988,
-});
-
-const $buttonDisabled: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.45,
-});
-
-const $baseShellWash: ThemedStyle<ViewStyle> = () => ({
-  borderRadius: OUTER_RADIUS,
-  opacity: 0.92,
-});
-
-const $baseShellColor: ThemedStyle<ViewStyle> = () => ({
-  borderRadius: OUTER_RADIUS,
-  opacity: 0.98,
-});
-
-const $outerPlaneGloss: ThemedStyle<ViewStyle> = () => ({
-  borderRadius: OUTER_RADIUS,
-  opacity: 0.18,
-});
-
-const $outerTopEdge: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $ambientGlow: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
-  top: 1,
-  left: 6,
-  right: 6,
-  height: 12,
-  borderRadius: 10,
-  backgroundColor: colors.calculator.surfaceHighlight,
-  opacity: 0.38,
+  left: 10,
+  right: 10,
+  bottom: -18,
+  height: 54,
+  borderRadius: 999,
 });
 
-const $outerLeftEdge: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  left: 2,
-  top: 8,
-  bottom: 10,
-  width: 8,
-  borderRadius: 8,
-  backgroundColor: colors.calculator.surfaceHighlight,
-  opacity: 0.05,
-});
+const $ambientGlowByVariant: Record<CalculatorKeyVariant, ThemedStyle<ViewStyle>> = {
+  number: ({ colors }) => ({
+    backgroundColor: colors.calculator.surfaceGlow,
+  }),
+  operator: ({ colors }) => ({
+    backgroundColor: colors.calculator.accentPurpleSoft,
+  }),
+  utility: ({ colors }) => ({
+    backgroundColor: colors.calculator.accentPurpleSoft,
+  }),
+  equals: ({ colors }) => ({
+    backgroundColor: colors.calculator.accentGlow,
+  }),
+};
 
-const $outerBottomDepth: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $topRim: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
+  top: 0,
   left: 8,
   right: 8,
-  bottom: 4,
-  height: 14,
-  borderRadius: 10,
-  backgroundColor: colors.calculator.keyBaseShadow,
-  opacity: 0.06,
+  height: 1,
+  backgroundColor: colors.calculator.keyEdgeHighlight,
+  opacity: 0.9,
 });
 
-const $innerFace: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $edgeRim: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  top: 8,
+  bottom: 10,
+  left: 0,
+  width: 1,
+  backgroundColor: colors.calculator.keyRimLight,
+  opacity: 0.6,
+});
+
+const $bottomDepth: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  left: 10,
+  right: 10,
+  bottom: 4,
+  height: 14,
+  borderRadius: 999,
+  backgroundColor: colors.calculator.keyBaseShadow,
+  opacity: 0.3,
+});
+
+const $face: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
   top: 6,
   right: 6,
@@ -323,148 +283,72 @@ const $innerFace: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: colors.calculator.keyFallback,
 });
 
-const $innerFacePressed: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  ...createPressedInset({
-    top: 8,
-    bottom: 8,
-    left: 8,
-    right: 8,
-    radius: INNER_RADIUS,
-  }),
-  backgroundColor: colors.calculator.surfaceBloom,
-});
-
-const $pearlescentLayer: ThemedStyle<ViewStyle> = () => ({
+const $pearlescent: ThemedStyle<ViewStyle> = () => ({
   borderRadius: INNER_RADIUS,
-  opacity: 0.88,
+  opacity: 0.9,
 });
 
-const $concavePlane: ThemedStyle<ViewStyle> = () => ({
+const $faceGloss: ThemedStyle<ViewStyle> = () => ({
   borderRadius: INNER_RADIUS,
-  opacity: 0.56,
+  opacity: 0.22,
 });
 
-const $faceTopPlane: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $faceTopRim: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
   top: 0,
-  left: 8,
-  right: 8,
-  height: 8,
-  borderRadius: 10,
+  left: 7,
+  right: 7,
+  height: 1,
   backgroundColor: colors.calculator.surfaceHighlight,
-  opacity: 0.18,
+  opacity: 0.72,
 });
 
-const $faceLeftPlane: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $faceBottomShade: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  top: 8,
-  left: 0,
-  bottom: 12,
-  width: 10,
-  borderRadius: 8,
-  backgroundColor: colors.calculator.surfaceHighlight,
-  opacity: 0.05,
-});
-
-const $faceRightDepth: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  top: 8,
-  right: -1,
-  bottom: 10,
-  width: 12,
-  borderRadius: 10,
+  left: 10,
+  right: 10,
+  bottom: 0,
+  height: 14,
+  borderRadius: 999,
   backgroundColor: colors.calculator.keyInnerShadow,
-  opacity: 0.08,
+  opacity: 0.22,
 });
 
-const $faceBottomDepth: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  left: 8,
-  right: 8,
-  bottom: -1,
-  height: 18,
-  borderRadius: 12,
-  backgroundColor: colors.calculator.keyInnerShadow,
-  opacity: 0.06,
-});
-
-const $centerDip: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  top: 18,
-  left: 16,
-  right: 16,
-  bottom: 14,
-  borderRadius: 8,
-  backgroundColor: colors.calculator.surfaceBloom,
-  opacity: 0.08,
-});
-
-const $centerDipShade: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  top: 20,
-  left: 18,
-  right: 18,
-  bottom: 12,
-  borderRadius: 6,
-  backgroundColor: colors.calculator.keyInnerShadow,
-  opacity: 0.025,
-});
-
-const $faceInsetContour: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $faceOutline: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
   borderRadius: INNER_RADIUS,
-  borderTopWidth: 1,
-  borderLeftWidth: 1,
-  borderTopColor: colors.calculator.keyBorderHighlight,
-  borderLeftColor: colors.calculator.keyBorderHighlight,
-  borderBottomWidth: 1,
-  borderRightWidth: 1,
-  borderBottomColor: colors.calculator.keyInnerShadow,
-  borderRightColor: colors.calculator.keyInnerShadow,
-  opacity: 0.06,
+  borderWidth: 1,
+  borderColor: colors.calculator.keyInnerBorder,
 });
 
-const $equalsAura: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  right: -8,
-  bottom: -8,
-  width: 44,
-  height: 44,
-  borderRadius: 999,
-  backgroundColor: colors.calculator.ambientBlue,
-  opacity: 0.24,
-});
-
-const $labelBase: ThemedStyle<TextStyle> = ({ typography }) => ({
+const $label: ThemedStyle<TextStyle> = ({ typography }) => ({
   fontFamily: typography.primary.medium,
-  letterSpacing: -0.35,
+  letterSpacing: -0.45,
   includeFontPadding: false,
   textAlign: "center",
-  textShadowColor: "rgba(255,255,255,0.18)",
-  textShadowRadius: 8,
-  textShadowOffset: { width: 0, height: 1 },
 });
 
 const $labelByVariant: Record<CalculatorKeyVariant, ThemedStyle<TextStyle>> = {
   number: ({ colors }) => ({
     color: colors.calculator.keyText,
     fontSize: 29,
-    lineHeight: 33,
+    lineHeight: 34,
   }),
   operator: ({ colors }) => ({
     color: colors.calculator.operatorText,
-    fontSize: 31,
+    fontSize: 29,
     lineHeight: 34,
   }),
   utility: ({ colors }) => ({
     color: colors.calculator.utilityText,
-    fontSize: 21,
-    lineHeight: 25,
+    fontSize: 18,
+    lineHeight: 22,
+    letterSpacing: 0,
   }),
   equals: ({ colors }) => ({
     color: colors.calculator.equalsText,
     fontSize: 33,
-    lineHeight: 37,
+    lineHeight: 38,
   }),
 };
 
