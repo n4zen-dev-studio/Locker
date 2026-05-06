@@ -7,6 +7,9 @@ import { getSyncStatus } from "@/locker/sync/syncEngine"
 import { listNoteIds, listNotes, listNoteMetas, getEncryptedNoteRecord } from "@/locker/storage/notesRepo"
 import { vaultSession } from "@/locker/session"
 import { getToken } from "@/locker/auth/tokenStore"
+import { getTrustSnapshot } from "@/locker/security/trustRepo"
+import { getPrivacyPrefs } from "@/locker/security/privacyPrefsRepo"
+import { recentSecurityAuditEvents } from "@/locker/security/auditLogRepo"
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const appPackage = require("../../../package.json") as { version?: string }
@@ -33,6 +36,14 @@ export type DiagnosticsSnapshot = {
     version: string
     timestamp: string
   }
+  security: {
+    trustState: string
+    lastUnlockAt: string | null
+    lockOnBackground: boolean
+    inactivityLockSeconds: number
+    hideSensitivePreviews: boolean
+    recentAuditTypes: string[]
+  }
 }
 
 export async function buildDiagnosticsSnapshot(): Promise<DiagnosticsSnapshot> {
@@ -42,6 +53,8 @@ export async function buildDiagnosticsSnapshot(): Promise<DiagnosticsSnapshot> {
   const token = await getToken()
   const syncState = getState()
   const syncStatus = getSyncStatus()
+  const trust = getTrustSnapshot()
+  const prefs = getPrivacyPrefs()
   const vmk = vaultSession.getKey()
   let noteCount = 0
 
@@ -74,6 +87,14 @@ export async function buildDiagnosticsSnapshot(): Promise<DiagnosticsSnapshot> {
       platform: Platform.OS,
       version: appPackage?.version ?? "unknown",
       timestamp: new Date().toISOString(),
+    },
+    security: {
+      trustState: trust.state,
+      lastUnlockAt: trust.lastUnlockAt,
+      lockOnBackground: prefs.lockOnBackground,
+      inactivityLockSeconds: prefs.inactivityLockSeconds,
+      hideSensitivePreviews: prefs.hideSensitivePreviews,
+      recentAuditTypes: recentSecurityAuditEvents(5).map((event) => event.type),
     },
   }
 }

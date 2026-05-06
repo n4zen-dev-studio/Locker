@@ -36,6 +36,7 @@ import {
   isSensitiveClassification,
   VaultClassification,
 } from "@/locker/vault/types"
+import { getPrivacyPrefs } from "@/locker/security/privacyPrefsRepo"
 
 type VaultFilter = "all" | "notes" | "images" | "pdfs" | "files" | "sensitive" | "recent" | "deleted"
 type VaultSort = "updated" | "created" | "title" | "classification"
@@ -59,6 +60,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<VaultFilter>("all")
   const [sort, setSort] = useState<VaultSort>("updated")
+  const [hideSensitivePreviews, setHideSensitivePreviews] = useState(() => getPrivacyPrefs().hideSensitivePreviews)
   const unlocked = vaultSession.isUnlocked()
 
   const [activeVaultId, setActiveVaultId] = useState<string | null>(() => getRemoteVaultId())
@@ -120,6 +122,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
       refreshActiveVault()
       refreshNotes()
       refreshMeta()
+      setHideSensitivePreviews(getPrivacyPrefs().hideSensitivePreviews)
       refreshSyncPrereqs().catch(() => undefined)
       ensureUserKeypairUploaded().catch(() => undefined)
     }, [navigation, refreshNotes, refreshMeta, refreshSyncPrereqs, refreshActiveVault]),
@@ -393,7 +396,7 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
                   Updated {new Date(item.updatedAt).toLocaleString()}
                 </Text>
                 <Text style={themed($noteMeta)} numberOfLines={2}>
-                  {isSensitiveClassification(item.classification)
+                  {hideSensitivePreviews && isSensitiveClassification(item.classification)
                     ? `Preview hidden for ${item.classification}`
                     : item.preview || "No preview available"}
                 </Text>

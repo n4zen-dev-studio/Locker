@@ -7,6 +7,7 @@ import { VaultNotesHomeScreen } from "@/screens/VaultNotesHomeScreen"
 import { VaultNoteScreen } from "@/screens/VaultNoteScreen"
 import { SecurityDashboardScreen } from "@/screens/SecurityDashboardScreen"
 import { SettingsHomeScreen } from "@/screens/SettingsHomeScreen"
+import { DecoyVaultScreen } from "@/screens/DecoyVaultScreen"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import type {
@@ -36,6 +37,7 @@ const SecurityStackScreen = () => {
   return (
     <SecurityStack.Navigator screenOptions={{ headerShown: false }}>
       <SecurityStack.Screen name="SecurityDashboard" component={SecurityDashboardScreen} />
+      <SecurityStack.Screen name="DecoyVault" component={DecoyVaultScreen} />
     </SecurityStack.Navigator>
   )
 }

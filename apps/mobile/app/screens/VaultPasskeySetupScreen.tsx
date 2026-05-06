@@ -13,6 +13,7 @@ import { randomBytes } from "@/locker/crypto/random"
 import { enablePasskey, isPasskeyEnabled } from "@/locker/auth/passkey"
 import { getMeta } from "@/locker/storage/vaultMetaRepo"
 import { getPostUnlockRoute } from "@/navigators/postUnlockRoute"
+import { recordSecurityEvent } from "@/locker/security/auditLogRepo"
 
 export const VaultPasskeySetupScreen: FC<AppStackScreenProps<"VaultPasskeySetup">> = function VaultPasskeySetupScreen(
   props,
@@ -58,6 +59,11 @@ export const VaultPasskeySetupScreen: FC<AppStackScreenProps<"VaultPasskeySetup"
         vaultSession.setKey(vmk)
       }
       await enablePasskey(vmk)
+      recordSecurityEvent({
+        type: "passkey_enabled",
+        message: "Passkey enabled for vault unlock.",
+        severity: "info",
+      })
       const next = getPostUnlockRoute()
       if (next.name === "VaultOnboarding") {
         navigation.replace("VaultOnboarding")
