@@ -487,6 +487,7 @@ refreshControl={
 <VaultHeroOrb
   actions={heroActions}
   reducedMotion={reducedMotion}
+  active={isFocused}
   onOrbitDragStateChange={(dragging) => setScrollEnabled(!dragging)}
 />
         </Animated.View>

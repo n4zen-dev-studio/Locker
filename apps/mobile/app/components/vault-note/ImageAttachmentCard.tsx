@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { Image, Pressable, View, type ImageStyle, type TextStyle, type ViewStyle } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { Image as LucideImage } from "lucide-react-native"
@@ -7,7 +8,7 @@ import type { NoteAttachment } from "@/locker/storage/notesRepo"
 import type { ThemedStyle } from "@/theme/types"
 
 import type { AttachmentUiState, VaultThemed } from "./types"
-import { formatBytes } from "./utils"
+import { formatBytes, getAttachmentPreviewImageUri } from "./utils"
 
 type Props = {
   themed: VaultThemed
@@ -23,6 +24,24 @@ type Props = {
 
 export function ImageAttachmentCard(props: Props) {
   const { themed, att, state, selected, onOpen, onPrepare, onSelect, onRemove, canEdit } = props
+  const previewUri = getAttachmentPreviewImageUri(att.mime, state)
+  const [previewFailed, setPreviewFailed] = useState(false)
+
+  useEffect(() => {
+    setPreviewFailed(false)
+  }, [previewUri])
+
+  useEffect(() => {
+    if (!__DEV__) return
+    console.log("[vault-note-render] ImageAttachmentCard", {
+      attachmentId: att.id,
+      mime: att.mime,
+      previewUri,
+      state,
+      selected: !!selected,
+    })
+  }, [att.id, att.mime, previewUri, selected, state])
+
   return (
     <Pressable
       onPress={() => {
@@ -32,8 +51,22 @@ export function ImageAttachmentCard(props: Props) {
       }}
       style={themed([$imageTile, selected && $imageTileSelected])}
     >
-      {state.dataUri ? (
-        <Image source={{ uri: state.dataUri }} style={themed($imageTilePreview)} />
+      {previewUri && !previewFailed ? (
+        <Image
+          source={{ uri: previewUri }}
+          style={themed($imageTilePreview)}
+          onError={() => {
+            if (__DEV__) {
+              console.log("[vault-attachment-preview] image card preview failed", {
+                attachmentId: att.id,
+                mime: att.mime,
+                previewUri,
+                state,
+              })
+            }
+            setPreviewFailed(true)
+          }}
+        />
       ) : (
         <View style={themed($imageTilePlaceholder)}>
           <LucideImage size={22} color="#fff" />

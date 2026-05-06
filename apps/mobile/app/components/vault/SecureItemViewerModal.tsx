@@ -67,6 +67,17 @@ export const SecureItemViewerModal: FC<SecureItemViewerModalProps> = ({
     })
   }, [imageItems, initialImageIndex, itemType, screenWidth, visible])
 
+  React.useEffect(() => {
+    if (!__DEV__ || !visible) return
+    console.log("[vault-note-render] SecureItemViewerModal", {
+      itemType,
+      sourceUri,
+      dataUri,
+      imageItems,
+      htmlPresent: !!html,
+    })
+  }, [dataUri, html, imageItems, itemType, sourceUri, visible])
+
   const canRenderWebView =
     !!html || !!imageHtml || itemType === "image"
 
