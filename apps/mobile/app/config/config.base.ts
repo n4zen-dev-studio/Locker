@@ -1,3 +1,5 @@
+import config from "."
+
 export interface ConfigBaseProps {
   persistNavigation: "always" | "dev" | "prod" | "never"
   catchErrors: "always" | "dev" | "prod" | "never"
@@ -24,9 +26,12 @@ const BaseConfig: ConfigBaseProps = {
   exitRoutes: ["Calculator"],
 
   /**
-   * Locker API base URL for local dev.
+   * Locker API base URL. Expo env overrides this when defined.
    */
-  API_BASE_URL: "http://10.0.2.2:4000",
+  API_BASE_URL:
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.API_ORIGIN,
 }
 
 export default BaseConfig
