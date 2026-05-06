@@ -1,4 +1,4 @@
-import { Pressable, View, type TextStyle, type ViewStyle } from "react-native"
+import { Pressable, StyleProp, View, type TextStyle, type ViewStyle } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 
 import { Text } from "@/components/Text"
@@ -12,20 +12,22 @@ type Props = {
   icon?: React.ReactNode
   onPress?: () => void
   disabled?: boolean
+  containerStyle?: StyleProp<ViewStyle>
+  textStyle?: StyleProp<TextStyle>
 }
 
 export function GradientPrimaryButton(props: Props) {
-  const { themed, label, onPress, disabled } = props
+  const { themed, label, onPress, disabled, containerStyle, textStyle } = props
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={themed($buttonBlock)}>
+    <Pressable onPress={onPress} disabled={disabled} style={[themed($buttonBlock)]}>
       <LinearGradient
         colors={disabled ? ["#4B4350", "#3E3742", "#3A3440"] : ["#FFA2EA", "#F06DFF", "#BF69FF"]}
         start={{ x: 0, y: 0.4 }}
         end={{ x: 1, y: 0.7 }}
-        style={themed([$primaryButton, disabled && $disabledButton])}
+        style={themed([$primaryButton, disabled && $disabledButton, containerStyle])}
       >
         <View style={themed($primaryButtonContent)}>
-          <Text style={themed($primaryButtonText)}>{label}</Text>
+          <Text style={[themed($primaryButtonText), textStyle]}>{label}</Text>
         </View>
       </LinearGradient>
     </Pressable>

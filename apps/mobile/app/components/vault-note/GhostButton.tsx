@@ -1,4 +1,4 @@
-import { Pressable, View, type TextStyle, type ViewStyle } from "react-native"
+import { Pressable, StyleProp, View, type TextStyle, type ViewStyle } from "react-native"
 
 import { Text } from "@/components/Text"
 import type { ThemedStyle } from "@/theme/types"
@@ -10,20 +10,29 @@ type Props = {
   label: string
   icon?: React.ReactNode
   onPress?: () => void
+  containerStyle?: StyleProp<ViewStyle>
+  textStyle?: StyleProp<TextStyle>
 }
-
 export function GhostButton(props: Props) {
-  const { themed, label, icon, onPress } = props
+  const { themed, label, icon, onPress, containerStyle, textStyle } = props
+
   return (
-    <Pressable onPress={onPress} style={themed($ghostButton)}>
+    <Pressable onPress={onPress} 
+      style={({ pressed }) => [
+        themed($ghostButton),
+        pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
+        containerStyle,
+      ]}
+    >
       <View style={themed($ghostButtonContent)}>
         {icon}
-        <Text style={themed($ghostButtonText)}>{label}</Text>
+        <Text style={[themed($ghostButtonText), textStyle]}>
+          {label}
+        </Text>
       </View>
     </Pressable>
   )
 }
-
 const $ghostButton: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
   minHeight: 48,
