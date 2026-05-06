@@ -2,7 +2,7 @@ import { FastifyInstance } from "fastify"
 import { z } from "zod"
 import crypto from "crypto"
 import { getDb } from "../db/db"
-import { signToken } from "../auth/jwt"
+import { signToken, verifyTokenAllowExpired } from "../auth/jwt"
 import { getApiEnv } from "@locker/config"
 import { authMiddleware } from "../middleware/auth"
 import { rateLimit } from "../middleware/rateLimit"
@@ -62,6 +62,47 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const ip = request.ip
     recordAuditEvent(db, { userId: user.id, type: "login_dev", meta: { ip } })
     reply.send({ token, user })
+  })
+
+  app.post("/v1/auth/refresh", async (request, reply) => {
+    const header = request.headers.authorization
+    const deviceId = typeof request.headers["x-device-id"] === "string" ? request.headers["x-device-id"] : null
+    if (!header || !header.startsWith("Bearer ") || !deviceId) {
+      reply.code(401).send({ error: "Unauthorized" })
+      return
+    }
+
+    let payload: { sub: string; email: string }
+    try {
+      payload = verifyTokenAllowExpired(header.slice("Bearer ".length))
+    } catch {
+      reply.code(401).send({ error: "Unauthorized" })
+      return
+    }
+
+    const db = getDb()
+    const user = db
+      .prepare("SELECT id, email, createdAt FROM users WHERE id = ?")
+      .get(payload.sub) as { id: string; email: string | null; createdAt: string } | undefined
+    if (!user) {
+      reply.code(401).send({ error: "Unauthorized" })
+      return
+    }
+
+    const device = db
+      .prepare("SELECT id, userId, name, platform, createdAt, lastSeenAt FROM devices WHERE id = ? AND userId = ?")
+      .get(deviceId, user.id) as
+      | { id: string; userId: string; name: string; platform: string; createdAt: string; lastSeenAt?: string }
+      | undefined
+    if (!device) {
+      reply.code(403).send({ error: "Device not recognized" })
+      return
+    }
+
+    const lastSeenAt = new Date().toISOString()
+    db.prepare("UPDATE devices SET lastSeenAt = ? WHERE id = ? AND userId = ?").run(lastSeenAt, device.id, user.id)
+    const token = signToken({ sub: user.id, email: user.email ?? user.id })
+    reply.send({ token, user, device: { ...device, lastSeenAt } })
   })
 
   app.get("/v1/me", { preHandler: authMiddleware }, async (request, reply) => {
