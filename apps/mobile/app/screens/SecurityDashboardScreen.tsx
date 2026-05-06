@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
   ViewStyle,
+  StyleSheet,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import Animated, { Easing, FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated";
@@ -41,6 +42,19 @@ import {
 } from "@/locker/security/auditLogRepo";
 import { Ionicons } from "@expo/vector-icons"
 import { spacing } from "@/theme/spacing";
+import { BlobGlassButton } from "@/components/BlobGlassButton";
+import { LinearGradient } from "expo-linear-gradient";
+import Svg, {
+  Defs,
+  Rect,
+  RadialGradient,
+  LinearGradient as SvgLinearGradient,
+  Stop,
+  Circle,
+  Path,
+  G,
+  Line,
+} from "react-native-svg"
 
 
 type RecoveryState = {
@@ -298,9 +312,9 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
         <Text preset="heading" style={themed($heroTitle)}>
           Security Center
         </Text>
-        <Text style={themed($heroSubtitle)}>
+        {/* <Text style={themed($heroSubtitle)}>
           Trust state, recovery health, recent security activity, and protective controls for the vault.
-        </Text>
+        </Text> */}
 
         {/* <View style={themed($chipRow)}>
           {heroChips.map((chip) => (
@@ -338,12 +352,14 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
   contentContainerStyle={themed($activityPanelContent)}
 >
   <View style={themed($activityChartShellV2)}>
-    <View style={themed($activityChartHeaderV2)}>
+    <Text style={themed($activityHintV2)}>Last recorded audit windows</Text>
+
+    {/* <View style={themed($activityChartHeaderV2)}>
       <View>
-        {/* <Text style={themed($activityEyebrowV2)}>Security movement</Text> */}
+        <Text style={themed($activityEyebrowV2)}>Security movement</Text>
         <Text style={themed($activityHintV2)}>Last recorded audit windows</Text>
       </View>
-    </View>
+    </View> */}
 
     <View style={themed($activityChartFrameV2)}>
       <View style={themed($activityGridWrapV2)}>
@@ -452,6 +468,14 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
             <InfoRow label="Current state" value={trust.state} />
             <InfoRow label="Elevated until" value={formatTimestamp(trust.elevatedUntil)} />
             <ActionButton label="Elevate Session" onPress={handleElevate} variant="primary" />
+            {/* <BlobGlassButton
+          title="Get Started"
+          // width={}
+          height={78}
+          onPress={() => {
+            console.log("Pressed")
+          }}
+        /> */}
           </PanelCard>
 
           <PanelCard
@@ -522,85 +546,93 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
             />
           </PanelCard>
 
-          <PanelCard
-            title="Panic Action"
-            subtitle="Immediately relock the vault and return to the calculator disguise."
-          >
-            <ActionButton label="Panic Relock" onPress={handlePanic} variant="danger" />
-          </PanelCard>
+          <View style={themed($securityTileGrid)}>
+  <SecurityTileCard
+    title="Panic Action"
+    subtitle="Immediately relock the vault and return to the calculator disguise."
+    tone="critical"
+    icon="warning-outline"
+  >
+    <ActionButton label="Panic Relock" onPress={handlePanic} variant="danger" />
+  </SecurityTileCard>
 
-          <PanelCard
-            title="Decoy Vault"
-            subtitle="Open a believable decoy content path that does not use real vault state."
-          >
-            <ActionButton
-              label="Open Decoy Vault"
-              onPress={() => {
-                recordSecurityEvent({
-                  type: "decoy_vault_open",
-                  message: "Decoy vault opened.",
-                  severity: "info",
-                });
-                navigation.navigate("DecoyVault");
-              }}
-              variant="secondary"
-            />
-          </PanelCard>
+  <SecurityTileCard
+    title="Decoy Vault"
+    subtitle="Open a believable decoy content path that does not use real vault state."
+    tone="accent"
+    icon="lock-open-outline"
+  >
+    <ActionButton
+      label="Open Decoy Vault"
+      onPress={() => {
+        recordSecurityEvent({
+          type: "decoy_vault_open",
+          message: "Decoy vault opened.",
+          severity: "info",
+        })
+        navigation.navigate("DecoyVault")
+      }}
+      variant="secondary"
+    />
+  </SecurityTileCard>
 
-          <PanelCard
-            title="Tamper Indicators"
-            subtitle="Recent signals that deserve a closer look."
-          >
-            {tamperIndicators.length === 0 ? (
-              <Text style={themed($supportText)}>No suspicious recent indicators.</Text>
-            ) : (
-              <View style={themed($alertStack)}>
-                {tamperIndicators.map((warning) => (
-                  <AlertRow key={warning} label={warning} />
-                ))}
-              </View>
-            )}
-          </PanelCard>
+  <SecurityTileCard
+    title="Tamper Indicators"
+    subtitle="Recent signals that deserve a closer look."
+    tone="blue"
+    icon="pulse-outline"
+  >
+    {tamperIndicators.length === 0 ? (
+      <Text style={themed($securityTileBodyText)}>No suspicious recent indicators.</Text>
+    ) : (
+      <View style={themed($securityTileAlertStack)}>
+        {tamperIndicators.map((warning) => (
+          <AlertRow key={warning} label={warning} />
+        ))}
+      </View>
+    )}
+  </SecurityTileCard>
 
-          {/* <PanelCard
-            title="Audit Log"
-            subtitle="Recent security events in their existing order."
-          >
-            {auditEvents.length === 0 ? (
-              <Text style={themed($supportText)}>No recent security events.</Text>
-            ) : (
-              <View style={themed($auditList)}>
-                {auditEvents.map((event) => (
-                  <AuditItem key={event.id} event={event} />
-                ))}
-              </View>
-            )}
-          </PanelCard> */}
+  {__DEV__ ? (
+    <SecurityTileCard
+      title="Developer Controls"
+      subtitle="Development-only safety and testing controls."
+      tone="default"
+      icon="settings-outline"
+    >
+      <ActionButton
+        label="Disable Passkey (Dev)"
+        onPress={async () => {
+          await disablePasskeyDevOnly()
+          await refreshStatus()
+        }}
+        variant="secondary"
+      />
+    </SecurityTileCard>
+  ) : null}
 
-          {__DEV__ ? (
-            <PanelCard title="Developer Controls" subtitle="Development-only safety and testing controls.">
-              <ActionButton
-                label="Disable Passkey (Dev)"
-                onPress={async () => {
-                  await disablePasskeyDevOnly();
-                  await refreshStatus();
-                }}
-                variant="secondary"
-              />
-            </PanelCard>
-          ) : null}
+  {error ? (
+    <SecurityTileCard
+      title="Security Error"
+      subtitle="The last action did not complete successfully."
+      tone="critical"
+      icon="alert-outline"
+    >
+      <Text style={themed($securityTileErrorText)}>{error}</Text>
+    </SecurityTileCard>
+  ) : null}
 
-          {error ? (
-            <PanelCard title="Security Error" subtitle="The last action did not complete successfully." tone="critical">
-              <Text style={themed($errorText)}>{error}</Text>
-            </PanelCard>
-          ) : null}
-
-          {status ? (
-            <PanelCard title="Security Status" subtitle="Latest result from the previous action.">
-              <Text style={themed($statusText)}>{status}</Text>
-            </PanelCard>
-          ) : null}
+  {status ? (
+    <SecurityTileCard
+      title="Security Status"
+      subtitle="Latest result from the previous action."
+      tone="violet"
+      icon="information"
+    >
+      <Text style={themed($securityTileStatusText)}>{status}</Text>
+    </SecurityTileCard>
+  ) : null}
+</View>
       </Animated.View>
     </Screen>
   );
@@ -628,6 +660,181 @@ function PanelCard({
       {children}
     </View>
   );
+}
+
+
+function SecurityTileTint({
+  tone = "default",
+}: {
+  tone?: "default" | "critical" | "accent" | "violet" | "blue" | "green"
+}) {
+  const palette = {
+    default: {
+      edgeA: "#4D63FF",
+      edgeB: "#7D5CFF",
+      edgeC: "#2B49C8",
+      line: "rgba(183,197,255,0.55)",
+    },
+    critical: {
+      edgeA: "#FF5A4E",
+      edgeB: "#D61E5B",
+      edgeC: "#9A123A",
+      line: "rgba(255,210,210,0.52)",
+    },
+    accent: {
+      edgeA: "#8B4DFF",
+      edgeB: "#C02FFF",
+      edgeC: "#6122B8",
+      line: "rgba(235,216,255,0.55)",
+    },
+    violet: {
+      edgeA: "#FF2FA8",
+      edgeB: "#B024FF",
+      edgeC: "#6A1598",
+      line: "rgba(255,210,238,0.55)",
+    },
+    blue: {
+      edgeA: "#14A6FF",
+      edgeB: "#007DFF",
+      edgeC: "#0B45B8",
+      line: "rgba(208,236,255,0.52)",
+    },
+    green: {
+      edgeA: "#80D63A",
+      edgeB: "#0A9A3A",
+      edgeC: "#1D6E18",
+      line: "rgba(230,255,204,0.52)",
+    },
+  }[tone]
+
+  return (
+    <Svg
+      pointerEvents="none"
+      width="102%"
+      height="110%"
+      
+      viewBox="0 0 100 100"
+      style={{flex:1, position: "absolute", top: 0, left: 0 }}
+    >
+      <Defs>
+        {/* top-left edge wash */}
+        <RadialGradient id={`tl-${tone}`} cx="0%" cy="0%" r="95%">
+          <Stop offset="0%" stopColor={palette.edgeA} stopOpacity="0.95" />
+          <Stop offset="38%" stopColor={palette.edgeB} stopOpacity="0.35" />
+          <Stop offset="70%" stopColor={palette.edgeC} stopOpacity="0.10" />
+          <Stop offset="100%" stopColor={palette.edgeC} stopOpacity="0" />
+        </RadialGradient>
+
+        {/* top-right edge wash */}
+        <RadialGradient id={`tr-${tone}`} cx="100%" cy="0%" r="95%">
+          <Stop offset="0%" stopColor={palette.edgeB} stopOpacity="0.78" />
+          <Stop offset="40%" stopColor={palette.edgeA} stopOpacity="0.24" />
+          <Stop offset="75%" stopColor={palette.edgeC} stopOpacity="0.08" />
+          <Stop offset="100%" stopColor={palette.edgeC} stopOpacity="0" />
+        </RadialGradient>
+
+        {/* bottom-left edge wash */}
+        <RadialGradient id={`bl-${tone}`} cx="0%" cy="100%" r="95%">
+          <Stop offset="0%" stopColor={palette.edgeC} stopOpacity="0.55" />
+          <Stop offset="42%" stopColor={palette.edgeB} stopOpacity="0.20" />
+          <Stop offset="100%" stopColor={palette.edgeA} stopOpacity="0" />
+        </RadialGradient>
+
+        {/* bottom-right edge wash */}
+        <RadialGradient id={`br-${tone}`} cx="100%" cy="100%" r="95%">
+          <Stop offset="0%" stopColor={palette.edgeA} stopOpacity="0.42" />
+          <Stop offset="36%" stopColor={palette.edgeB} stopOpacity="0.18" />
+          <Stop offset="100%" stopColor={palette.edgeC} stopOpacity="0" />
+        </RadialGradient>
+
+        {/* darker center veil */}
+        <RadialGradient id={`center-dark-${tone}`} cx="50%" cy="52%" r="44%">
+          <Stop offset="0%" stopColor="#030714" stopOpacity="0.78" />
+          <Stop offset="55%" stopColor="#050A1C" stopOpacity="0.42" />
+          <Stop offset="100%" stopColor="#071021" stopOpacity="0" />
+        </RadialGradient>
+
+        <SvgLinearGradient id={`sheen-${tone}`} x1="0%" y1="0%" x2="100%" y2="100%">
+          <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.08" />
+          <Stop offset="35%" stopColor="#FFFFFF" stopOpacity="0.02" />
+          <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+        </SvgLinearGradient>
+      </Defs>
+
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#tl-${tone})`} />
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#tr-${tone})`} />
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#bl-${tone})`} />
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#br-${tone})`} />
+
+      {/* darken the center */}
+      <Circle cx="50" cy="52" r="30" fill={`url(#center-dark-${tone})`} />
+
+      {/* slight glass sheen */}
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#sheen-${tone})`} />
+    </Svg>
+  )
+}
+
+function SecurityTileCard({
+  children,
+  subtitle,
+  title,
+  tone = "default",
+  icon,
+}: {
+  children: ReactNode
+  subtitle?: string
+  title: string
+  tone?: "default" | "critical" | "accent" | "violet" | "blue" | "green"
+  icon?: keyof typeof Ionicons.glyphMap
+}) {
+  const { themed } = useAppTheme()
+
+  const gradientByTone = {
+    default: ["rgba(9,13,31,0.98)", "rgba(5,8,22,1)"],
+    critical: ["rgba(16,8,18,0.98)", "rgba(8,5,16,1)"],
+    accent: ["rgba(15,8,25,0.98)", "rgba(7,5,18,1)"],
+    violet: ["rgba(18,8,24,0.98)", "rgba(7,5,18,1)"],
+    blue: ["rgba(6,10,24,0.98)", "rgba(4,7,18,1)"],
+    green: ["rgba(8,14,18,0.98)", "rgba(5,9,14,1)"],
+  } as const
+
+  return (
+    <View style={themed($securityTileOuter)}>
+      <LinearGradient
+        colors={gradientByTone[tone]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={themed($securityTileGradient)}
+      >
+        <SecurityTileTint tone={tone} />
+{icon ? (
+  <Ionicons
+    name={icon}
+    size={52}
+    style={themed($securityTileIcon)}
+  />
+) : null}       
+ <View style={themed($securityTileGlassVeil)} />
+
+        <View style={themed($securityTileInner)}>
+          <View style={themed($securityTileTextWrap)}>
+            <Text preset="bold" style={themed($securityTileTitle)} numberOfLines={2}>
+              {title}
+            </Text>
+
+            {subtitle ? (
+              <Text style={themed($securityTileSubtitle)} numberOfLines={4}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={themed($securityTileFooter)}>{children}</View>
+        </View>
+      </LinearGradient>
+    </View>
+  )
 }
 
 function MetricTile({
@@ -767,27 +974,6 @@ function AlertRow({ label }: { label: string }) {
     <View style={themed($alertRow)}>
       <TriangleAlert size={16} color={theme.colors.accentYellow} />
       <Text style={themed($alertText)}>{label}</Text>
-    </View>
-  );
-}
-
-function SummaryStat({
-  accent = false,
-  label,
-  value,
-}: {
-  accent?: boolean;
-  label: string;
-  value: string;
-}) {
-  const { themed } = useAppTheme();
-
-  return (
-    <View style={themed($summaryStat)}>
-      <Text style={themed($summaryLabel)}>{label}</Text>
-      <Text preset="bold" style={themed(accent ? $summaryValueAccent : $summaryValue)}>
-        {value}
-      </Text>
     </View>
   );
 }
@@ -968,12 +1154,12 @@ const $metricRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $metricTile: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   flex: 1,
-  borderRadius: 22,
+  borderRadius: 30,
   padding: spacing.xs,
   backgroundColor: colors.vaultHub.vaultHubSurface,
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
-  gap: spacing.xxs,
+  // gap: spacing.xxs,
   alignItems: 'center',
 });
 
@@ -999,7 +1185,7 @@ const $panel: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderRadius: 26,
   padding: spacing.md,
   gap: spacing.md,
-  backgroundColor: '#1e1f2c8b',
+  backgroundColor: "rgba(12, 12, 24, 0.65)",
   borderWidth: 1,
   borderColor: colors.vaultHub.vaultHubBorderSubtle,
   shadowColor: "rgba(0,0,0,0.82)",
@@ -1193,7 +1379,7 @@ const $actionButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 });
 
 const $actionButtonPrimary: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  backgroundColor: colors.vaultHub.vaultHubAccentPink,
+  backgroundColor: '#7a366af1',
 });
 
 const $actionButtonSecondary: ThemedStyle<ViewStyle> = ({ colors }) => ({
@@ -1212,16 +1398,22 @@ const $actionButtonPressed: ThemedStyle<ViewStyle> = () => ({
   transform: [{ scale: 0.986 }],
 });
 
-const $actionButtonTextPrimary: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.palette.neutral100,
-});
-
-const $actionButtonTextSecondary: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $actionButtonTextPrimary: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
+  fontFamily: typography.primary.semiBold,
+  fontSize: 15
 });
 
-const $actionButtonTextDanger: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $actionButtonTextSecondary: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontFamily: typography.primary.semiBold,
+  fontSize: 15
+});
+
+const $actionButtonTextDanger: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.error,
+  fontFamily: typography.primary.semiBold,
+  fontSize: 15
 });
 
 const $settingRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
@@ -1352,7 +1544,7 @@ const $activityPanelContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $activityChartShellV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
+  // gap: spacing.md,
 })
 
 const $activityChartHeaderV2: ThemedStyle<ViewStyle> = () => ({
@@ -1373,13 +1565,15 @@ const $activityHintV2: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.textDim ?? "rgba(255,255,255,0.4)",
   fontFamily: typography.primary.normal,
   fontSize: 12,
-  marginTop: 4,
+  marginTop: -20,
+  marginBottom: 12,
+
 })
 
 const $activityChartFrameV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   borderRadius: 28,
-  paddingHorizontal: spacing.md,
-  paddingVertical: spacing.md,
+  // paddingHorizontal: spacing.md,
+  paddingBottom: spacing.xs,
   minHeight: 250,
   justifyContent: "center",
   // backgroundColor: "rgba(255,255,255,0.02)",
@@ -1489,4 +1683,118 @@ const $legendRowV2: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   alignItems: "center",
   gap: spacing.md,
   paddingTop: spacing.xs,
+})
+
+const $securityTileGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  marginHorizontal: -6,
+  marginTop: spacing.md,
+  alignItems: "stretch",
+})
+
+const $securityTileOuter: ThemedStyle<ViewStyle> = () => ({
+  width: "50%",
+  paddingHorizontal: 6,
+  marginBottom: 12,
+})
+
+const $securityTileGlow: ThemedStyle<ViewStyle> = () => ({
+  position: "absolute",
+  width: 130,
+  height: 130,
+  borderRadius: 999,
+  top: -26,
+  right: -24,
+  opacity: 1,
+})
+
+
+
+const $securityTileAlertStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+
+const $securityTileGlassVeil: ThemedStyle<ViewStyle> = () => ({
+  ...StyleSheet.absoluteFillObject,
+  backgroundColor: "rgba(255,255,255,0.02)",
+})
+
+
+
+const $securityTileTitle: ThemedStyle<TextStyle> = () => ({
+  fontSize: 13,
+  lineHeight: 16,
+  color: "#F8FAFF",
+  marginBottom: 5,
+  letterSpacing: -0.2,
+})
+
+const $securityTileSubtitle: ThemedStyle<TextStyle> = () => ({
+  fontSize: 10.5,
+  lineHeight: 14,
+  color: "rgba(235,240,255,0.66)",
+  maxWidth: "78%",
+})
+
+const $securityTileBodyText: ThemedStyle<TextStyle> = () => ({
+  fontSize: 11,
+  lineHeight: 15,
+  color: "rgba(243,246,255,0.76)",
+})
+
+const $securityTileErrorText: ThemedStyle<TextStyle> = () => ({
+  fontSize: 11,
+  lineHeight: 15,
+  color: "rgba(255,198,205,0.82)",
+})
+
+const $securityTileStatusText: ThemedStyle<TextStyle> = () => ({
+  fontSize: 11,
+  lineHeight: 15,
+  color: "rgba(243,247,255,0.82)",
+})
+
+const $securityTileGradient: ThemedStyle<ViewStyle> = () => ({
+  minHeight: 168,
+  borderRadius: 22,
+  // padding: 3, 
+  
+  // flex:1,
+  overflow: "hidden",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.07)",
+  shadowColor: "#000",
+  shadowOpacity: 0.26,
+  shadowRadius: 16,
+  shadowOffset: { width: 0, height: 10 },
+  elevation: 8,
+})
+
+const $securityTileInner: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  minHeight: 168,
+  paddingHorizontal: 14,
+  paddingTop: 12,
+  paddingBottom: 12,
+  justifyContent: "space-between",
+})
+
+const $securityTileTextWrap: ThemedStyle<ViewStyle> = () => ({
+  paddingRight: 8,
+  zIndex: 2,
+})
+
+const $securityTileFooter: ThemedStyle<ViewStyle> = () => ({
+  marginTop: 10,
+  zIndex: 2,
+})
+const $securityTileIcon: ThemedStyle<TextStyle> = () => ({
+  position: "absolute",
+  alignSelf: "center",
+  top: "32%",
+  opacity: 0.12, // KEY: keeps it subtle
+  color: "#FFFFFF",
+  zIndex: 1,
 })
