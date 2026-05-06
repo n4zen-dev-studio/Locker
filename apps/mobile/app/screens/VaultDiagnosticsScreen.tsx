@@ -9,6 +9,7 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
 import { buildDiagnosticsSnapshot, exportDiagnosticsJson, exportEncryptedVaultBackup } from "@/locker/diagnostics/diagnostics"
+import { rebuildSearchIndex } from "@/locker/search/searchRepo"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
 export const VaultDiagnosticsScreen: FC<AppStackScreenProps<"VaultDiagnostics">> =
@@ -62,6 +63,18 @@ export const VaultDiagnosticsScreen: FC<AppStackScreenProps<"VaultDiagnostics">>
       }
     }
 
+    const handleRebuildSearch = () => {
+      setError(null)
+      setStatus(null)
+      try {
+        rebuildSearchIndex(snapshot?.vaultId ?? null)
+        setStatus("Search index rebuilt.")
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Rebuild failed"
+        setError(message)
+      }
+    }
+
     return (
       <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
         <View style={themed($header)}>
@@ -105,6 +118,14 @@ export const VaultDiagnosticsScreen: FC<AppStackScreenProps<"VaultDiagnostics">>
           <Pressable style={themed($secondaryButton)} onPress={handleExportBackup}>
             <Text preset="bold" style={themed($secondaryButtonText)}>
               Export Encrypted Vault Backup
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {__DEV__ ? (
+          <Pressable style={themed($secondaryButton)} onPress={handleRebuildSearch}>
+            <Text preset="bold" style={themed($secondaryButtonText)}>
+              Rebuild Search Index
             </Text>
           </Pressable>
         ) : null}

@@ -26,6 +26,7 @@ import { ServerUrlScreen } from "@/screens/ServerUrlScreen"
 import { VaultShareScreen } from "@/screens/VaultShareScreen"
 import { VaultInvitesScreen } from "@/screens/VaultInvitesScreen"
 import { VaultDiagnosticsScreen } from "@/screens/VaultDiagnosticsScreen"
+import { VaultSearchScreen } from "@/screens/VaultSearchScreen"
 import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
@@ -72,6 +73,7 @@ const AppStack = () => {
       <Stack.Screen name="VaultShare" component={VaultShareScreen} />
       <Stack.Screen name="VaultInvites" component={VaultInvitesScreen} />
       <Stack.Screen name="VaultDiagnostics" component={VaultDiagnosticsScreen} />
+      <Stack.Screen name="VaultSearch" component={VaultSearchScreen} />
       <Stack.Screen name="ServerUrl" component={ServerUrlScreen} />
       {/** 🔥 Your screens go here */}
       {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}
