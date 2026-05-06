@@ -436,115 +436,144 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
         }
         style={themed($stack)}
       >
-          <PanelCard title="Security Overview" subtitle="Compact view of the current protection posture.">
-            <InfoRow label="Passkey" value={passkeyReady ? "Enabled" : "Not enabled"} />
-            <InfoRow label="Recovery" value={recovery.configured ? "Configured" : "Not configured"} />
-            <InfoRow label="Sync" value={syncStatus.state} />
-            <InfoRow
-              label="Auto-lock"
-              value={
-                privacyPrefs.lockOnBackground ? "On background" : `${privacyPrefs.inactivityLockSeconds}s inactivity`
-              }
-            />
-            <InfoRow label="Trust" value={trust.state} />
-            <InfoRow label="Last unlock" value={formatTimestamp(trust.lastUnlockAt)} />
-            <InfoRow label="Vault meta" value={metaVersion ? `v${metaVersion}` : "n/a"} />
+          <View style={themed($stack)}>
+  <AccordionSection
+    title="Security Overview"
+    subtitle="Protection posture"
+    defaultOpen
+    icon={<Shield size={16} color={theme.colors.vaultHub.vaultHubTextPrimary} />}
+    rightValue={overviewWarnings.length > 0 ? `${overviewWarnings.length} warnings` : "Healthy"}
+    // tone={overviewWarnings.length > 0 ? "warning" : "neutral"}
+  >
+    <View style={themed($overviewGrid)}>
+      <CompactInfoPill label="Passkey" value={passkeyReady ? "Enabled" : "Off"} />
+      <CompactInfoPill label="Recovery" value={recovery.configured ? "Ready" : "Missing"} />
+      <CompactInfoPill label="Sync" value={syncStatus.state} />
+      <CompactInfoPill
+        label="Auto-lock"
+        value={
+          privacyPrefs.lockOnBackground
+            ? "Background"
+            : `${privacyPrefs.inactivityLockSeconds}s`
+        }
+      />
+      <CompactInfoPill label="Trust" value={trust.state} />
+      <CompactInfoPill label="Vault Meta" value={metaVersion ? `v${metaVersion}` : "n/a"} />
+      <CompactInfoPill label="Last Unlock" value={formatTimestamp(trust.lastUnlockAt)} full />
+    </View>
 
-            {overviewWarnings.length > 0 ? (
-              <View style={themed($alertStack)}>
-                {overviewWarnings.map((warning) => (
-                  <AlertRow key={warning} label={warning} />
-                ))}
-              </View>
-            ) : (
-              <Text style={themed($supportText)}>No active warnings.</Text>
-            )}
-          </PanelCard>
+    {overviewWarnings.length > 0 ? (
+      <View style={themed($compactAlertWrap)}>
+        {overviewWarnings.map((warning) => (
+          <CompactWarningChip key={warning} label={warning} />
+        ))}
+      </View>
+    ) : (
+      <Text style={themed($sectionFootnote)}>No active warnings.</Text>
+    )}
+  </AccordionSection>
 
-          <PanelCard
-            title="Session Trust / Step-up Auth"
-            subtitle="Elevated sessions are required for recovery-changing actions and other sensitive flows."
-          >
-            <InfoRow label="Current state" value={trust.state} />
-            <InfoRow label="Elevated until" value={formatTimestamp(trust.elevatedUntil)} />
-            <ActionButton label="Elevate Session" onPress={handleElevate} variant="primary" />
-            {/* <BlobGlassButton
-          title="Get Started"
-          // width={}
-          height={78}
-          onPress={() => {
-            console.log("Pressed")
-          }}
-        /> */}
-          </PanelCard>
+  <AccordionSection
+    title="Session Trust"
+    subtitle="Step-up authentication"
+    icon={<KeyRound size={16} color={theme.colors.vaultHub.vaultHubTextPrimary} />}
+    rightValue={trust.state}
+    tone={trust.state === "elevated" ? "accent" : "neutral"}
+  >
+    <View style={themed($compactMetricRow)}>
+      <CompactInfoPill label="State" value={trust.state} />
+      <CompactInfoPill label="Elevated Until" value={formatTimestamp(trust.elevatedUntil)} />
+    </View>
 
-          <PanelCard
-            title="Recovery / Backup"
-            subtitle={
-              recovery.configured
-                ? "Recovery is available if you lose the device-specific private key."
-                : "Without recovery, device loss may require manual pairing or cause lockout."
-            }
-          >
-            <InfoRow label="Configured" value={recovery.configured ? "Yes" : "No"} />
-            <InfoRow label="Last updated" value={formatTimestamp(recovery.updatedAt)} />
+    <View style={themed($singleActionRow)}>
+      <ActionButton label="Elevate Session" onPress={handleElevate} variant="primary" />
+    </View>
 
-            <TextField
-              label="Recovery Passphrase"
-              placeholder="Enter recovery passphrase"
-              secureTextEntry
-              value={passphrase}
-              onChangeText={setPassphrase}
-              containerStyle={themed($textFieldContainer)}
-              inputWrapperStyle={themed($textFieldWrapper)}
-              style={themed($textFieldInput)}
-              LabelTextProps={{ style: themed($textFieldLabel) }}
-            />
+    <Text style={themed($sectionFootnote)}>
+      Sensitive actions such as backup changes and recovery require step-up.
+    </Text>
+  </AccordionSection>
 
-            <View style={themed($buttonStack)}>
-              <ActionButton label="Set / Update Backup" onPress={handleSetBackup} variant="primary" />
-              <ActionButton label="Recover Keys" onPress={handleRecover} variant="secondary" />
-              <ActionButton label="Remove Backup" onPress={handleDeleteBackup} variant="danger" />
-            </View>
-          </PanelCard>
+  <AccordionSection
+    title="Recovery & Backup"
+    subtitle="Restore access if device keys are lost"
+    icon={<Clock3 size={16} color={theme.colors.vaultHub.vaultHubTextPrimary} />}
+    rightValue={recovery.configured ? "Configured" : "Not set"}
+    tone={recovery.configured ? "accent" : "warning"}
+  >
+    <View style={themed($compactMetricRow)}>
+      <CompactInfoPill label="Configured" value={recovery.configured ? "Yes" : "No"} />
+      <CompactInfoPill label="Updated" value={formatTimestamp(recovery.updatedAt)}  />
+    </View>
 
-          <PanelCard
-            title="Auto-lock & Privacy Protections"
-            subtitle="Session hardening and preview privacy controls."
-          >
-            <SettingRow
-              label="Lock on app background"
-              description="Immediately seals the vault when the app loses focus."
-              value={privacyPrefs.lockOnBackground ? "On" : "Off"}
-              active={privacyPrefs.lockOnBackground}
-              onPress={() => handlePrivacyToggle({ lockOnBackground: !privacyPrefs.lockOnBackground })}
-            />
-            <SettingRow
-              label="Hide sensitive previews"
-              description="Redacts note previews for sensitive classifications."
-              value={privacyPrefs.hideSensitivePreviews ? "On" : "Off"}
-              active={privacyPrefs.hideSensitivePreviews}
-              onPress={() =>
-                handlePrivacyToggle({ hideSensitivePreviews: !privacyPrefs.hideSensitivePreviews })
-              }
-            />
-            <SettingRow
-              label="Inactivity lock"
-              description="Cycles the timeout between 15s, 30s, and 60s."
-              value={`${privacyPrefs.inactivityLockSeconds}s`}
-              active
-              onPress={() =>
-                handlePrivacyToggle({
-                  inactivityLockSeconds:
-                    privacyPrefs.inactivityLockSeconds === 15
-                      ? 30
-                      : privacyPrefs.inactivityLockSeconds === 30
-                        ? 60
-                        : 15,
-                })
-              }
-            />
-          </PanelCard>
+    <View style={themed($recoveryInputShell)}>
+      <TextField
+        label="Recovery Passphrase"
+        placeholder="Enter recovery passphrase"
+        secureTextEntry
+        value={passphrase}
+        onChangeText={setPassphrase}
+        containerStyle={themed($textFieldContainerCompact)}
+        inputWrapperStyle={themed($textFieldWrapperCompact)}
+        style={themed($textFieldInputCompact)}
+        LabelTextProps={{ style: themed($textFieldLabelCompact) }}
+      />
+    </View>
+
+    <View style={themed($actionGrid)}>
+      <ActionButton label="Save Backup" onPress={handleSetBackup} variant="primary" />
+      <ActionButton label="Recover Keys" onPress={handleRecover} variant="secondary" />
+      <ActionButton label="Remove" onPress={handleDeleteBackup} variant="danger" />
+    </View>
+  </AccordionSection>
+
+  <AccordionSection
+    title="Auto-lock & Privacy"
+    subtitle="Session hardening"
+    icon={<Shield size={16} color={theme.colors.vaultHub.vaultHubTextPrimary} />}
+    rightValue="3 controls"
+    tone="neutral"
+  >
+    <View style={themed($toggleCardGrid)}>
+      <CompactToggleCard
+        label="Lock on Background"
+        value={privacyPrefs.lockOnBackground ? "On" : "Off"}
+        active={privacyPrefs.lockOnBackground}
+        onPress={() =>
+          handlePrivacyToggle({ lockOnBackground: !privacyPrefs.lockOnBackground })
+        }
+      />
+
+      <CompactToggleCard
+        label="Hide Previews"
+        value={privacyPrefs.hideSensitivePreviews ? "On" : "Off"}
+        active={privacyPrefs.hideSensitivePreviews}
+        onPress={() =>
+          handlePrivacyToggle({
+            hideSensitivePreviews: !privacyPrefs.hideSensitivePreviews,
+          })
+        }
+      />
+
+      <CompactToggleCard
+        label="Inactivity Lock"
+        value={`${privacyPrefs.inactivityLockSeconds}s`}
+        active
+        full
+        onPress={() =>
+          handlePrivacyToggle({
+            inactivityLockSeconds:
+              privacyPrefs.inactivityLockSeconds === 15
+                ? 30
+                : privacyPrefs.inactivityLockSeconds === 30
+                  ? 60
+                  : 15,
+          })
+        }
+      />
+    </View>
+  </AccordionSection>
+</View>
 
           <View style={themed($securityTileGrid)}>
   <SecurityTileCard
@@ -663,6 +692,136 @@ function PanelCard({
 }
 
 
+function AccordionSection({
+  children,
+  defaultOpen = false,
+  icon,
+  rightValue,
+  subtitle,
+  title,
+  tone = "neutral",
+}: {
+  children: ReactNode
+  defaultOpen?: boolean
+  icon?: ReactNode
+  rightValue?: string
+  subtitle?: string
+  title: string
+  tone?: "neutral" | "accent" | "warning"
+}) {
+  const { themed } = useAppTheme()
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <View
+      style={themed([
+        $accordionCard,
+        tone === "accent" && $accordionCardAccent,
+        tone === "warning" && $accordionCardWarning,
+      ])}
+    >
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        style={({ pressed }) => [themed($accordionHeader), pressed && themed($accordionHeaderPressed)]}
+      >
+        <View style={themed($accordionHeaderLeft)}>
+          {icon ? <View style={themed($accordionIconWrap)}>{icon}</View> : null}
+          <View style={themed($accordionTitleWrap)}>
+            <Text preset="bold" style={themed($accordionTitle)}>
+              {title}
+            </Text>
+            {subtitle ? <Text style={themed($accordionSubtitle)}>{subtitle}</Text> : null}
+          </View>
+        </View>
+
+        <View style={themed($accordionHeaderRight)}>
+          {rightValue ? <Text style={themed($accordionRightValue)}>{rightValue}</Text> : null}
+          <Ionicons
+            name={open ? "chevron-up" : "chevron-down"}
+            size={16}
+            color="#FFFFFF"
+          />
+        </View>
+      </Pressable>
+
+      {open ? <View style={themed($accordionBody)}>{children}</View> : null}
+    </View>
+  )
+}
+
+function CompactInfoPill({
+  label,
+  value,
+  full = false,
+}: {
+  label: string
+  value: string
+  full?: boolean
+}) {
+  const { themed } = useAppTheme()
+
+  return (
+    <View style={themed([$compactInfoPill, full && $compactInfoPillFull])}>
+      <Text style={themed($compactInfoLabel)}>{label}</Text>
+      <Text numberOfLines={1} style={themed($compactInfoValue)}>
+        {value}
+      </Text>
+    </View>
+  )
+}
+
+function CompactWarningChip({ label }: { label: string }) {
+  const { themed, theme } = useAppTheme()
+
+  return (
+    <View style={themed($compactWarningChip)}>
+      <TriangleAlert size={13} color={theme.colors.accentYellow} />
+      <Text style={themed($compactWarningText)}>{label}</Text>
+    </View>
+  )
+}
+
+function CompactToggleCard({
+  active,
+  full = false,
+  label,
+  onPress,
+  value,
+}: {
+  active: boolean
+  full?: boolean
+  label: string
+  onPress: () => void
+  value: string
+}) {
+  const { themed } = useAppTheme()
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        themed([
+          $compactToggleCard,
+          active && $compactToggleCardActive,
+          full && $compactToggleCardFull,
+        ]),
+        pressed && themed($compactToggleCardPressed),
+      ]}
+    >
+      <View style={themed($compactToggleTopRow)}>
+        <Text preset="bold" style={themed($compactToggleLabel)}>
+          {label}
+        </Text>
+        <View style={themed([active ? $compactToggleBadgeActive : $compactToggleBadge, $compactToggleBadgeBase])}>
+          <Text style={themed(active ? $compactToggleBadgeTextActive : $compactToggleBadgeText)}>
+            {value}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  )
+}
+
 function SecurityTileTint({
   tone = "default",
 }: {
@@ -670,38 +829,38 @@ function SecurityTileTint({
 }) {
   const palette = {
     default: {
-      edgeA: "#4D63FF",
-      edgeB: "#7D5CFF",
-      edgeC: "#2B49C8",
-      line: "rgba(183,197,255,0.55)",
+      edgeA: "#4d62ffe5",
+      edgeB: "#27137873",
+      edgeC: "#223aa58e",
+      line: "rgba(37, 59, 146, 0.55)",
     },
     critical: {
-      edgeA: "#FF5A4E",
-      edgeB: "#D61E5B",
-      edgeC: "#9A123A",
+      edgeA: "#ff5a4e74",
+      edgeB: "#530f2679",
+      edgeC: "#9a123b6b",
       line: "rgba(255,210,210,0.52)",
     },
     accent: {
       edgeA: "#8B4DFF",
-      edgeB: "#C02FFF",
-      edgeC: "#6122B8",
+      edgeB: "#62237c",
+      edgeC: "#4a2184",
       line: "rgba(235,216,255,0.55)",
     },
     violet: {
-      edgeA: "#FF2FA8",
-      edgeB: "#B024FF",
+      edgeA: "#9924689b",
+      edgeB: "#491568",
       edgeC: "#6A1598",
       line: "rgba(255,210,238,0.55)",
     },
     blue: {
-      edgeA: "#14A6FF",
-      edgeB: "#007DFF",
-      edgeC: "#0B45B8",
+      edgeA: "#14a5ff72",
+      edgeB: "#203e5f89",
+      edgeC: "#0b45b882",
       line: "rgba(208,236,255,0.52)",
     },
     green: {
-      edgeA: "#80D63A",
-      edgeB: "#0A9A3A",
+      edgeA: "#80d63a8f",
+      edgeB: "#1f5631",
       edgeC: "#1D6E18",
       line: "rgba(230,255,204,0.52)",
     },
@@ -792,10 +951,10 @@ function SecurityTileCard({
 
   const gradientByTone = {
     default: ["rgba(9,13,31,0.98)", "rgba(5,8,22,1)"],
-    critical: ["rgba(16,8,18,0.98)", "rgba(8,5,16,1)"],
+    critical: ["rgba(16, 8, 18, 0.88)", "rgba(8,5,16,1)"],
     accent: ["rgba(15,8,25,0.98)", "rgba(7,5,18,1)"],
-    violet: ["rgba(18,8,24,0.98)", "rgba(7,5,18,1)"],
-    blue: ["rgba(6,10,24,0.98)", "rgba(4,7,18,1)"],
+    violet: ["rgba(18, 8, 24, 0.96)", "rgba(7,5,18,1)"],
+    blue: ["rgb(6, 10, 24)", "rgba(4,7,18,1)"],
     green: ["rgba(8,14,18,0.98)", "rgba(5,9,14,1)"],
   } as const
 
@@ -1373,7 +1532,7 @@ const $buttonStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $actionButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   borderRadius: 22,
-  paddingVertical: spacing.sm,
+  paddingVertical: spacing.xs,
   alignItems: "center",
   justifyContent: "center",
 });
@@ -1401,19 +1560,19 @@ const $actionButtonPressed: ThemedStyle<ViewStyle> = () => ({
 const $actionButtonTextPrimary: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontFamily: typography.primary.semiBold,
-  fontSize: 15
+  fontSize: 14
 });
 
 const $actionButtonTextSecondary: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
   fontFamily: typography.primary.semiBold,
-  fontSize: 15
+  fontSize: 14
 });
 
 const $actionButtonTextDanger: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   color: colors.error,
   fontFamily: typography.primary.semiBold,
-  fontSize: 15
+  fontSize: 14
 });
 
 const $settingRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
@@ -1797,4 +1956,256 @@ const $securityTileIcon: ThemedStyle<TextStyle> = () => ({
   opacity: 0.12, // KEY: keeps it subtle
   color: "#FFFFFF",
   zIndex: 1,
+})
+
+const $accordionCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  borderRadius: 22,
+  padding: spacing.sm,
+  backgroundColor: "rgba(12, 12, 24, 0.56)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+  gap: spacing.xs,
+})
+
+const $accordionCardAccent: ThemedStyle<ViewStyle> = () => ({
+  borderColor: "rgba(255, 154, 219, 0.22)",
+})
+
+const $accordionCardWarning: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: "rgba(221, 215, 125, 0.56)",
+  // backgroundColor: "rgba(52, 50, 28, 0.56)",
+  
+})
+
+const $accordionHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  minHeight: 44,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
+const $accordionHeaderPressed: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.92,
+})
+
+const $accordionHeaderLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
+})
+
+const $accordionIconWrap: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 34,
+  height: 34,
+  borderRadius: 12,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(255,255,255,0.05)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+})
+
+const $accordionTitleWrap: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+})
+
+const $accordionTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 13,
+})
+
+const $accordionSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 11,
+  marginTop: 2,
+})
+
+const $accordionHeaderRight: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $accordionRightValue: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 11,
+})
+
+const $accordionBody: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+  paddingTop: spacing.xs,
+})
+
+const $overviewGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $compactMetricRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $compactInfoPill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  width: "48.8%",
+  minHeight: 58,
+  borderRadius: 16,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+  justifyContent: "center",
+})
+
+const $compactInfoPillFull: ThemedStyle<ViewStyle> = () => ({
+  width: "100%",
+})
+
+const $compactInfoLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 10.5,
+  marginBottom: 3,
+})
+
+const $compactInfoValue: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontFamily: typography.primary.medium,
+  fontSize: 12,
+})
+
+const $compactAlertWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $compactWarningChip: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+  borderRadius: 14,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  backgroundColor: "rgba(255, 214, 90, 0.08)",
+  borderWidth: 1,
+  borderColor: "rgba(255, 214, 90, 0.14)",
+})
+
+const $compactWarningText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextSecondary,
+  fontSize: 11,
+  flex: 1,
+})
+
+const $singleActionRow: ThemedStyle<ViewStyle> = () => ({
+  marginTop: 2,
+})
+
+const $sectionFootnote: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 11,
+  lineHeight: 16,
+})
+
+const $recoveryInputShell: ThemedStyle<ViewStyle> = () => ({
+  marginTop: 2,
+})
+
+const $textFieldContainerCompact: ThemedStyle<ViewStyle> = () => ({
+  marginTop: 0,
+})
+
+const $textFieldWrapperCompact: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  borderRadius: 16,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+  backgroundColor: "rgba(10, 9, 14, 0.82)",
+  paddingHorizontal: spacing.sm,
+  minHeight: 48,
+})
+
+const $textFieldInputCompact: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 13,
+})
+
+const $textFieldLabelCompact: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vaultHub.vaultHubTextSecondary,
+  fontFamily: typography.primary.medium,
+  fontSize: 11,
+})
+
+const $actionGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $toggleCardGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $compactToggleCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  width: "31%",
+  minHeight: 68,
+  borderRadius: 16,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+  justifyContent: "center",
+})
+
+const $compactToggleCardFull: ThemedStyle<ViewStyle> = () => ({
+  width: "31%",
+})
+
+const $compactToggleCardActive: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "rgba(255, 77, 186, 0.08)",
+  borderColor: "rgba(255, 154, 219, 0.24)",
+})
+
+const $compactToggleCardPressed: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.92,
+})
+
+const $compactToggleTopRow: ThemedStyle<ViewStyle> = () => ({
+  gap: 8,
+})
+
+const $compactToggleLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 12,
+})
+
+const $compactToggleBadgeBase: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignSelf: "flex-start",
+  borderRadius: 999,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: 5,
+})
+
+const $compactToggleBadge: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  backgroundColor: "rgba(255,255,255,0.05)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+})
+
+const $compactToggleBadgeActive: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "rgba(255, 77, 186, 0.14)",
+  borderWidth: 1,
+  borderColor: "rgba(255, 154, 219, 0.4)",
+})
+
+const $compactToggleBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextSecondary,
+  fontSize: 11,
+})
+
+const $compactToggleBadgeTextActive: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 11,
 })
