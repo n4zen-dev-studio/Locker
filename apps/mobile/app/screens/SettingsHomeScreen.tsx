@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Cloud,
   Fingerprint,
+  KeyRound,
   Link2,
   RotateCcw,
   Server,
@@ -125,20 +126,28 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
               />
 
               <ControlTile
-                label="Add Another Device"
-                caption="Link new device"
+                label="Recovery Key"
+                caption="Generate or rotate"
                 accent="pink"
-                icon={<Link2 size={18} color={theme.colors.vaultHub.vaultHubAccentPinkSoft} />}
-                onPress={() => navigation.navigate("VaultLinkDevice")}
+                icon={<KeyRound size={18} color={theme.colors.vaultHub.vaultHubAccentPinkSoft} />}
+                onPress={() =>navigation.navigate("VaultRecoverySetup")}
               />
 
-              <ControlTile
+             {__DEV__ && <ControlTile
                 label="Server URL"
                 caption="API endpoint"
                 accent="warm"
                 icon={<Server size={18} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("ServerUrl")}
-              />
+              />}
+
+              {__DEV__ && <ControlTile
+                label="Add Another Device"
+                caption="Link new device"
+                accent="pink"
+                icon={<Link2 size={18} color={theme.colors.vaultHub.vaultHubAccentPinkSoft} />}
+                onPress={() => navigation.navigate("VaultLinkDevice")}
+              />}
 
               <ControlTile
                 label="Entry Codes"
@@ -156,6 +165,7 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
             compact
           >
             <View style={themed($toolStack)}>
+
               <MiniToolRow
                 label="Export & Diagnostics"
                 value="Backup, logs"
@@ -172,13 +182,13 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
                 onPress={() => navigation.navigate("ThreatModel")}
               />
 
-              <MiniToolRow
+              {/* <MiniToolRow
                 label="Replay Onboarding"
                 value="Show setup gate again"
                 accent="neutral"
                 icon={<RotateCcw size={16} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={handleReplayOnboarding}
-              />
+              /> */}
 
               <MiniToolRow
                 label="Log out"

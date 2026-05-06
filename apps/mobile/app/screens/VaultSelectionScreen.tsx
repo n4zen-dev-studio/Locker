@@ -39,6 +39,10 @@ export const VaultSelectionScreen: FC<AppStackScreenProps<"VaultSelection">> =
       navigation.replace("VaultLinkDevice")
     }, [navigation])
 
+    const handleRecoveryAccess = useCallback(() => {
+      navigation.navigate("VaultRecoveryAccess")
+    }, [navigation])
+
     const optionCards = useMemo(
       () => [
         {
@@ -47,6 +51,7 @@ export const VaultSelectionScreen: FC<AppStackScreenProps<"VaultSelection">> =
           title: "Create New Locker Setup",
           description: "Create your account on this device and start with your Personal vault.",
           onPress: () => void handleCreateNew(),
+          actionLabel: "Continue",
           primary: true,
         },
         {
@@ -55,10 +60,20 @@ export const VaultSelectionScreen: FC<AppStackScreenProps<"VaultSelection">> =
           title: "I Already Use Locker",
           description: "Link this device to your existing Locker account and bring over your vault access.",
           onPress: handleLinkExisting,
+          actionLabel: "Link device",
+          primary: false,
+        },
+        {
+          id: "recovery",
+          eyebrow: "Recovery Access",
+          title: "Use Recovery Key",
+          description: "Recover vault access with a saved recovery key and continue linking this device securely.",
+          onPress: handleRecoveryAccess,
+          actionLabel: "Use key",
           primary: false,
         },
       ],
-      [handleCreateNew, handleLinkExisting],
+      [handleCreateNew, handleLinkExisting, handleRecoveryAccess],
     )
 
     return (
@@ -138,7 +153,7 @@ export const VaultSelectionScreen: FC<AppStackScreenProps<"VaultSelection">> =
                         option.primary ? $actionPillTextPrimary : $actionPillTextSecondary,
                       ])}
                     >
-                      {option.primary ? "Continue" : "Link device"}
+                      {option.actionLabel}
                     </Text>
                   </View>
                 </Pressable>

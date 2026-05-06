@@ -165,6 +165,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
         db.prepare("DELETE FROM device_vaults WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM device_pairing_codes WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vault_key_envelopes WHERE vaultId = ?").run(vaultId)
+        db.prepare("DELETE FROM vault_recovery_envelopes WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vault_access_requests WHERE vaultId = ?").run(vaultId)
         db.prepare(
           "INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)"
@@ -213,6 +214,7 @@ export async function registerVaultRoutes(app: FastifyInstance) {
         db.prepare("DELETE FROM device_vaults WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM device_pairing_codes WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vault_key_envelopes WHERE vaultId = ?").run(vaultId)
+        db.prepare("DELETE FROM vault_recovery_envelopes WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vault_access_requests WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vault_members WHERE vaultId = ?").run(vaultId)
         db.prepare("DELETE FROM vaults WHERE id = ?").run(vaultId)

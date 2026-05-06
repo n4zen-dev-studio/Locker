@@ -57,6 +57,8 @@ export type AppStackParamList = {
   RemoteVault: undefined
   VaultPairDevice: undefined
   VaultImportPairing: { vaultId?: string; vaultName?: string; initialPayload?: string } | undefined
+  VaultRecoverySetup: undefined
+  VaultRecoveryAccess: undefined
   VaultQrScanner:
     | {
         mode: "device-link" | "vault-access"
