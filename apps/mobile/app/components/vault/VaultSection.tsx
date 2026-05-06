@@ -1,4 +1,4 @@
-import { LayoutChangeEvent, Pressable, TextStyle, View, ViewStyle } from "react-native";
+import { Dimensions, LayoutChangeEvent, Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-native";
 import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
 
 import { Text } from "@/components/Text";
@@ -40,7 +40,7 @@ export function VaultSection(props: VaultSectionProps) {
       <View style={themed($header)}>
         <View style={themed($headerCopy)}>
           <Text preset="bold" style={themed($title)}>
-            Vault Content
+            Contents
           </Text>
           <Text style={themed($meta)}>
             {items.length} item{items.length === 1 ? "" : "s"} ready
@@ -61,7 +61,11 @@ export function VaultSection(props: VaultSectionProps) {
           {viewMode === "stack" ? (
             <VaultStackCarousel items={items} reducedMotion={reducedMotion} emptyLabel={emptyLabel} onOpenItem={onOpenItem} />
           ) : (
-            <VaultListView items={items} reducedMotion={reducedMotion} emptyLabel={emptyLabel} onOpenItem={onOpenItem} />
+            // <ScrollView scrollEnabled={true} pointerEvents="auto" showsVerticalScrollIndicator={false}>
+              <VaultListView items={items} reducedMotion={reducedMotion} emptyLabel={emptyLabel} onOpenItem={onOpenItem} />
+
+            // </ScrollView>
+
           )}
         </Animated.View>
       </View>
@@ -71,6 +75,7 @@ export function VaultSection(props: VaultSectionProps) {
 
 const $section: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
+  height: Dimensions.get('screen').height * 0.73
 });
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({

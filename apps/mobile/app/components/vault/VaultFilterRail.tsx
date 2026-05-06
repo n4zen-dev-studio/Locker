@@ -46,7 +46,7 @@ export function VaultFilterRail(props: VaultFilterRailProps) {
 const $rail: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   position: "absolute",
   left: 0,
-  top: "50%",
+  top: "20%",
   transform: [{ translateY: -174 }],
   gap: spacing.sm,
   zIndex: 10,
