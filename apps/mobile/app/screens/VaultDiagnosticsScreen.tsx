@@ -82,7 +82,7 @@ export const VaultDiagnosticsScreen: FC<AppStackScreenProps<"VaultDiagnostics">>
             Diagnostics
           </Text>
           <Text preset="subheading" style={themed($subtitle)}>
-            Device & sync health (no secrets)
+            Demo-safe technical state and protected export tools.
           </Text>
         </View>
 
@@ -121,13 +121,11 @@ export const VaultDiagnosticsScreen: FC<AppStackScreenProps<"VaultDiagnostics">>
           </Text>
         </Pressable>
 
-        {__DEV__ ? (
-          <Pressable style={themed($secondaryButton)} onPress={handleExportBackup}>
-            <Text preset="bold" style={themed($secondaryButtonText)}>
-              Export Encrypted Vault Backup
-            </Text>
-          </Pressable>
-        ) : null}
+        <Pressable style={themed($secondaryButton)} onPress={handleExportBackup}>
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            Export Encrypted Vault Backup
+          </Text>
+        </Pressable>
 
         {__DEV__ ? (
           <Pressable style={themed($secondaryButton)} onPress={handleRebuildSearch}>

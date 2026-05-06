@@ -1,11 +1,12 @@
 import { FC } from "react"
-import { Pressable, TextStyle, View, ViewStyle } from "react-native"
+import { Alert, Pressable, TextStyle, View, ViewStyle } from "react-native"
 
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { GlassCard } from "@/components/GlassCard"
 import { GlassHeader } from "@/components/GlassHeader"
 import { AnimatedBlobBackground } from "@/components/AnimatedBlobBackground"
+import { resetPrivacyOnboarding } from "@/locker/storage/onboardingRepo"
 import type { SettingsStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
@@ -16,6 +17,23 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
     const { navigation } = props
     const { themed } = useAppTheme()
     const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
+
+    const handleReplayOnboarding = () => {
+      Alert.alert(
+        "Replay onboarding",
+        "This will reopen the privacy onboarding flow without changing your vault data.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Replay",
+            onPress: () => {
+              resetPrivacyOnboarding()
+              navigation.navigate("VaultOnboarding")
+            },
+          },
+        ],
+      )
+    }
 
     return (
       <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
@@ -38,18 +56,18 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
               </Text>
               <SettingsLink
                 label="Sync Setup"
-                description="Manage your single personal vault connection."
+                description="Manage the single personal vault that syncs to your account."
                 onPress={() => navigation.navigate("RemoteVault")}
               />
               <SettingsLink
                 label="Link Device"
-                description="Pair this device with your account."
+                description="Redeem a trusted-device link and attach this phone to your account."
                 onPress={() => navigation.navigate("VaultLinkDevice")}
               />
               <SettingsLink
-                label="Account & Server"
-                description="Connection status, server URL, and demo-safe account state."
-                onPress={() => navigation.navigate("Profile")}
+                label="Server URL"
+                description="Configure the API endpoint used for linking and personal-vault sync."
+                onPress={() => navigation.navigate("ServerUrl")}
               />
             </GlassCard>
 
@@ -63,9 +81,19 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
                 onPress={() => navigation.navigate("VaultRecovery")}
               />
               <SettingsLink
-                label="Diagnostics"
-                description="Inspect non-secret technical state for portfolio demos."
+                label="Export & Diagnostics"
+                description="Share demo-safe diagnostics and export an encrypted vault backup."
                 onPress={() => navigation.navigate("VaultDiagnostics")}
+              />
+              <SettingsLink
+                label="Threat Model"
+                description="Read what Locker protects against, what it does not, and the security tradeoffs."
+                onPress={() => navigation.navigate("ThreatModel")}
+              />
+              <SettingsLink
+                label="Replay Onboarding"
+                description="Run the privacy-first onboarding flow again from Settings."
+                onPress={handleReplayOnboarding}
               />
             </GlassCard>
           </View>
