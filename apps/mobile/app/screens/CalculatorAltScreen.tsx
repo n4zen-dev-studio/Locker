@@ -1,5 +1,14 @@
-import { FC, useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react"
-import { LayoutChangeEvent, Pressable, StyleSheet, TextStyle, View, ViewStyle } from "react-native"
+import { FC, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react"
+import {
+  Animated,
+  LayoutChangeEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 
 import { Screen } from "@/components/Screen"
@@ -25,6 +34,12 @@ const DEFAULT_DISPLAY = "333"
 
 type AngleMode = "rad" | "deg"
 type EntryMode = "input" | "equals"
+type HistoryEntry = {
+  id: string
+  expression: string
+  result: string
+  sourceExpression: string
+}
 type Range = { start: number; end: number }
 
 const keypadRows = [
@@ -71,12 +86,31 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
     const [secondMode, setSecondMode] = useState(false)
     const [angleMode, setAngleMode] = useState<AngleMode>("rad")
     const [memoryValue, setMemoryValue] = useState<number | null>(null)
+    const [history, setHistory] = useState<HistoryEntry[]>([])
+    const [historyVisible, setHistoryVisible] = useState(false)
+    const historyTranslate = useRef(new Animated.Value(-420)).current
+    const historyOpacity = useRef(new Animated.Value(0)).current
 
     const expressionParts = useMemo(
       () => formatDisplayExpressionParts(displayExpression),
       [displayExpression],
     )
     const heroText = displayValue === "Error" ? "ERR" : formatHeroValue(displayValue)
+
+    useEffect(() => {
+      Animated.parallel([
+        Animated.timing(historyTranslate, {
+          toValue: historyVisible ? 0 : -420,
+          duration: 260,
+          useNativeDriver: true,
+        }),
+        Animated.timing(historyOpacity, {
+          toValue: historyVisible ? 1 : 0,
+          duration: historyVisible ? 220 : 180,
+          useNativeDriver: true,
+        }),
+      ]).start()
+    }, [historyOpacity, historyTranslate, historyVisible])
 
     const setFreshState = useCallback(
       (
@@ -457,7 +491,41 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
       setDisplayValue(result)
       setEntryMode("equals")
       setPreviewMode(false)
+      if (result !== "Error") {
+        setHistory((current) =>
+          [
+            {
+              id: `${Date.now()}-${current.length}`,
+              expression: sourceDisplayExpression,
+              result,
+              sourceExpression,
+            },
+            ...current,
+          ].slice(0, 24),
+        )
+      }
     }, [angleMode, displayExpression, expression, previewMode])
+
+    const toggleHistory = useCallback(() => {
+      setHistoryVisible((value) => !value)
+    }, [])
+
+    const closeHistory = useCallback(() => {
+      setHistoryVisible(false)
+    }, [])
+
+    const handleClearHistory = useCallback(() => {
+      setHistory([])
+    }, [])
+
+    const handleRestoreHistoryItem = useCallback((entry: HistoryEntry) => {
+      setExpression(entry.sourceExpression)
+      setDisplayExpression(entry.expression)
+      setDisplayValue(entry.result)
+      setEntryMode("equals")
+      setPreviewMode(false)
+      setHistoryVisible(false)
+    }, [])
 
     const handleScientificNotation = useCallback(() => {
       if (displayValue === "Error") {
@@ -680,12 +748,73 @@ export const CalculatorAltScreen: FC<AppStackScreenProps<"CalculatorAlt">> =
           />
         </View>
 
-      
+        <Animated.View
+          pointerEvents={historyVisible ? "auto" : "none"}
+          style={[
+            $historyOverlay,
+            {
+              opacity: historyOpacity,
+            },
+          ]}
+        >
+          <Pressable style={$historyBackdrop} onPress={closeHistory} />
+          <Animated.View
+            style={[
+              $historyPanel,
+              {
+                transform: [{ translateY: historyTranslate }],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={["rgba(29, 29, 29, 0.98)", "rgba(17, 17, 17, 0.98)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <View pointerEvents="none" style={$historyPanelBorder} />
+            <View style={$historyHeader}>
+              <Text style={$historyTitle}>History</Text>
+              <Pressable
+                hitSlop={8}
+                onPress={handleClearHistory}
+                style={({ pressed }) => [$clearHistoryButton, pressed && $keyPressed]}
+              >
+                <Text style={$clearHistoryLabel}>Clear History</Text>
+              </Pressable>
+            </View>
+            {history.length === 0 ? (
+              <View style={$historyEmptyState}>
+                <Text style={$historyEmptyText}>No recent calculations yet.</Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={$historyScroll}
+                contentContainerStyle={$historyScrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {history.map((entry) => (
+                  <Pressable
+                    key={entry.id}
+                    onPress={() => handleRestoreHistoryItem(entry)}
+                    style={({ pressed }) => [$historyItem, pressed && $keyPressed]}
+                  >
+                    <Text numberOfLines={1} style={$historyExpression}>
+                      {entry.expression}
+                    </Text>
+                    <Text numberOfLines={1} style={$historyResult}>
+                      {entry.result}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+          </Animated.View>
+        </Animated.View>
 
         <View style={$content}>
-          <Pressable style={{flexDirection: 'row', justifyContent: 'flex-end'}} onPress={() => {}}>
-
-          <History size={25} color={"#f1b219"}  />
+          <Pressable style={$historyTrigger} onPress={toggleHistory}>
+            <History size={25} color={"#f1b219"} />
           </Pressable>
           <View style={$expressionRow}>
             {expressionParts.map((token, index) => (
@@ -1125,6 +1254,125 @@ const $content: ViewStyle = {
   position: "relative",
   zIndex: 1,
   elevation: 1,
+}
+
+const $historyOverlay: ViewStyle = {
+  ...StyleSheet.absoluteFillObject,
+  zIndex: 120,
+  elevation: 120,
+}
+
+const $historyBackdrop: ViewStyle = {
+  ...StyleSheet.absoluteFillObject,
+  backgroundColor: "rgba(0,0,0,0.22)",
+}
+
+const $historyPanel: ViewStyle = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  maxHeight: "48%",
+  paddingTop: 64,
+  paddingHorizontal: 24,
+  paddingBottom: 20,
+  borderBottomLeftRadius: 28,
+  borderBottomRightRadius: 28,
+  overflow: "hidden",
+}
+
+const $historyPanelBorder: ViewStyle = {
+  ...StyleSheet.absoluteFillObject,
+  borderBottomLeftRadius: 28,
+  borderBottomRightRadius: 28,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+}
+
+const $historyHeader: ViewStyle = {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  marginBottom: 18,
+}
+
+const $historyTitle: TextStyle = {
+  fontFamily: typography.primary.medium,
+  fontSize: 18,
+  lineHeight: 22,
+  color: "#efefef",
+  letterSpacing: -0.4,
+}
+
+const $clearHistoryButton: ViewStyle = {
+  paddingHorizontal: 14,
+  paddingVertical: 9,
+  borderRadius: 14,
+  backgroundColor: "rgba(241,178,25,0.14)",
+  borderWidth: 1,
+  borderColor: "rgba(241,178,25,0.28)",
+}
+
+const $clearHistoryLabel: TextStyle = {
+  fontFamily: typography.primary.medium,
+  fontSize: 13,
+  lineHeight: 16,
+  color: "#f1b219",
+  letterSpacing: -0.2,
+}
+
+const $historyScroll: ViewStyle = {
+  flexGrow: 0,
+}
+
+const $historyScrollContent: ViewStyle = {
+  paddingBottom: 8,
+}
+
+const $historyItem: ViewStyle = {
+  paddingVertical: 12,
+  paddingHorizontal: 14,
+  borderRadius: 18,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.05)",
+  marginBottom: 10,
+}
+
+const $historyExpression: TextStyle = {
+  fontFamily: typography.primary.medium,
+  fontSize: 14,
+  lineHeight: 18,
+  color: "#87837f",
+}
+
+const $historyResult: TextStyle = {
+  fontFamily: typography.primary.bold,
+  fontSize: 20,
+  lineHeight: 24,
+  color: "#efefef",
+  marginTop: 4,
+  letterSpacing: -0.5,
+}
+
+const $historyEmptyState: ViewStyle = {
+  paddingVertical: 28,
+  alignItems: "center",
+  justifyContent: "center",
+}
+
+const $historyEmptyText: TextStyle = {
+  fontFamily: typography.primary.medium,
+  fontSize: 14,
+  lineHeight: 18,
+  color: "#87837f",
+}
+
+const $historyTrigger: ViewStyle = {
+  flexDirection: "row",
+  justifyContent: "flex-end",
+  marginBottom: 8,
 }
 
 const $expressionRow: ViewStyle = {
