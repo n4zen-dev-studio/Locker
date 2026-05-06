@@ -77,7 +77,6 @@ const SecurityStackScreen = () => {
   return (
     <SecurityStack.Navigator screenOptions={TRANSPARENT_SCREEN_OPTIONS}>
       <SecurityStack.Screen name="SecurityDashboard" component={SecurityDashboardScreen} />
-      <SecurityStack.Screen name="DecoyVault" component={DecoyVaultScreen} />
     </SecurityStack.Navigator>
   )
 }

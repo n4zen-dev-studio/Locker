@@ -600,10 +600,7 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
           message: "Decoy vault opened from calculator entry code.",
           severity: "info",
         });
-        navigation.navigate("VaultTabs", {
-          screen: "Security",
-          params: { screen: "DecoyVault" },
-        });
+        navigation.navigate("DecoyVault")
         return;
       }
 
