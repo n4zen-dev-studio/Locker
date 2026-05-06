@@ -2,6 +2,8 @@ type ApiEnv = {
   PORT: number
   NODE_ENV: "development" | "test" | "production"
   CORS_ORIGIN: string
+  JWT_SECRET: string
+  API_DB_PATH: string
 }
 
 type AdminEnv = {
@@ -26,7 +28,9 @@ export function getApiEnv(): ApiEnv {
   return {
     PORT: parsePort(process.env.API_PORT, 4000),
     NODE_ENV: parseNodeEnv(process.env.NODE_ENV),
-    CORS_ORIGIN: process.env.API_CORS_ORIGIN || "http://localhost:3000"
+    CORS_ORIGIN: process.env.API_CORS_ORIGIN || "http://localhost:3000",
+    JWT_SECRET: process.env.JWT_SECRET || "dev-secret-change-me",
+    API_DB_PATH: process.env.API_DB_PATH || "./.data/locker.db"
   }
 }
 

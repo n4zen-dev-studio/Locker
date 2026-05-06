@@ -72,6 +72,7 @@ apps/mobile/modules/locker-keystore/android/build
 # Next.js (api)
 ########################################
 apps/api/.data
+apps/api/apps/api/.data
 
 ########################################
 # Expo (if using Dev Client)
