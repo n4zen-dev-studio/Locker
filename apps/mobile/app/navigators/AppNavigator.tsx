@@ -14,7 +14,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler"
 import Config from "@/config"
 import { vaultSession } from "@/locker/session"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
-import { CalculatorScreen } from "@/screens/CalculatorScreen"
 import { CalculatorAltScreen } from "@/screens/CalculatorAltScreen"
 import { VaultTabsNavigator } from "@/navigators/VaultTabsNavigator"
 import { VaultLockedScreen } from "@/screens/VaultLockedScreen"
@@ -120,7 +119,7 @@ const AppStack = () => {
         },
       }}
     >
-      <Stack.Screen name="Calculator" component={CalculatorScreen} />
+      <Stack.Screen name="Calculator" component={CalculatorAltScreen} />
       <Stack.Screen name="CalculatorAlt" component={CalculatorAltScreen} />
       <Stack.Screen name="VaultLocked" component={VaultLockedScreen} />
       <Stack.Screen name="VaultPin" component={VaultPinScreen} />
