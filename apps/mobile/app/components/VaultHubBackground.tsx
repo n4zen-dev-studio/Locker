@@ -288,9 +288,9 @@ export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
 
       <AnimatedView style={[StyleSheet.absoluteFillObject, primaryDotsStyle]}>
         <Svg
-          width={SCREEN_WIDTH}
-          height={SCREEN_HEIGHT}
-          viewBox={`0 0 ${SCREEN_WIDTH} ${SCREEN_HEIGHT}`}
+          width={"100%"}
+          height={"100%"}
+          viewBox={`0 0 ${"100%"} ${"100%"}`}
           style={StyleSheet.absoluteFillObject}
         >
           <Defs>
@@ -314,8 +314,8 @@ export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
           <Rect
             x="0"
             y="0"
-            width={SCREEN_WIDTH}
-            height={SCREEN_HEIGHT}
+            width={"100%"}
+            height={"100%"}
             fill={`url(#${primaryPatternId})`}
           />
         </Svg>
