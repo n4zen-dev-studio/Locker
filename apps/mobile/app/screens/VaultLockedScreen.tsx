@@ -42,12 +42,16 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = functio
     }
 
     if (meta.v === 1) {
+      if (!passkeyReady) {
+        setError("Passkey not supported on this device")
+        return
+      }
       navigation.navigate("VaultPasskeySetup", { mode: "migrate" })
       return
     }
 
     if (!passkeyReady) {
-      navigation.navigate("VaultPasskeySetup", { mode: "recovery" })
+      setError("Passkey not supported on this device")
       return
     }
 

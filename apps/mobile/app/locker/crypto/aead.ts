@@ -4,7 +4,7 @@ import { randomBytes } from "./random"
 
 export type EnvelopeV1 = {
   v: 1
-  alg: "XCHACHA20-POLY1305"
+  alg: "XCHACHA20-POLY1305" | "AES-256-GCM"
   nonce: string
   ct: string
 }
