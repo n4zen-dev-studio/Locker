@@ -118,7 +118,7 @@ export const ThemeProvider: FC<PropsWithChildren<ThemeProviderProps>> = ({
     theme,
     themeContext,
     setThemeContextOverride,
-    toggleTheme, // ✅ add to context value
+    toggleTheme, 
     themed,
   }
 
