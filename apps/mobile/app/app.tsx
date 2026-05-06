@@ -40,6 +40,7 @@ import { registerPushToken } from "./locker/push/expoPushManager"
 import { setupPushListeners } from "./locker/push/pushListeners"
 import { getPrivacyPrefs } from "./locker/security/privacyPrefsRepo"
 import { recordSecurityEvent } from "./locker/security/auditLogRepo"
+import { isBackgroundLockSuppressed } from "./locker/security/backgroundLockSuppression"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
@@ -102,6 +103,10 @@ export function App() {
       if (nextState === "background" || nextState === "inactive") {
         if (backgroundTimer.current) clearTimeout(backgroundTimer.current)
         if (prefs.lockOnBackground) {
+          if (isBackgroundLockSuppressed()) {
+            return
+          }
+
           if (vaultSession.isUnlocked()) {
             recordSecurityEvent({
               type: "auto_lock",
