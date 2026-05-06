@@ -132,6 +132,7 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> =
       <Screen
         preset="fixed"
         contentContainerStyle={themed([$screen, $insets])}
+        keyboardAvoidingEnabled={false}
         systemBarStyle="light"
       >
         <VaultLockBackground reducedMotion={reducedMotion} />
