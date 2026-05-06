@@ -163,7 +163,6 @@ export function VaultStackCarousel(props: VaultStackCarouselProps) {
   }
 
   return (
-    <GestureHandlerRootView>
     <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(320)} style={themed($stack)}>
     
 {/* <View style={{height: 60}}/> */}
@@ -213,7 +212,6 @@ export function VaultStackCarousel(props: VaultStackCarouselProps) {
         </View>
       </View> */}
     </Animated.View>
-    </GestureHandlerRootView>
   );
 }
 

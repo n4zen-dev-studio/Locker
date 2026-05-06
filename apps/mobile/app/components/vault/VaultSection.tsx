@@ -88,12 +88,12 @@ export function VaultSection(props: VaultSectionProps) {
 
 const $section: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
-  height: Dimensions.get('screen').height * 0.73
+  height: Dimensions.get('screen').height * 0.78
 });
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  justifyContent: "space-between",
+  // flexDirection: "column",
+  // justifyContent: "space-between",
   alignItems: "center",
   gap: spacing.md,
 });

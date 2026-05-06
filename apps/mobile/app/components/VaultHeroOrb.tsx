@@ -1027,7 +1027,6 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
 
 
   return (
-    <GestureHandlerRootView style={styles.gestureRoot}>
       <View style={styles.root}>
         <GestureDetector gesture={orbitPanGesture}>
           <View ref={canvasRef} style={styles.canvas} onLayout={onCanvasLayout} collapsable={false}>
@@ -1276,7 +1275,6 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
           </View>
         </GestureDetector>
       </View>
-    </GestureHandlerRootView>
   )
 }
 
