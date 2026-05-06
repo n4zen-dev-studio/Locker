@@ -8,6 +8,8 @@ import { fetchJson, fetchRaw, getApiBaseUrl, putBytes } from "@/locker/net/apiCl
 import { isApiError } from "@/locker/net/errors"
 import { clearRemoteVaultKey, getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { fetchAndInstallVaultKeyEnvelope } from "@/locker/keys/userKeyApi"
+import { parseAttachmentBlobBytes } from "@/locker/attachments/attachmentCodec"
+import { writeEncryptedAttachment } from "@/locker/attachments/attachmentCache"
 import {
   getOutbox,
   getState,
@@ -31,6 +33,7 @@ import { assertValidRemotePayload } from "./validation"
 
 const NOTE_PREFIX = "note-v1-"
 const DELETE_PREFIX = "note-delete-v1-"
+const ATTACHMENT_PREFIX = "att-v1-"
 const INDEX_BLOB_ID = "notes-index-v1"
 const SYNC_KEY_CHECK_BLOB_ID = "sync-key-check-v1"
 
@@ -465,6 +468,31 @@ async function pullChanges(
         continue
       }
 
+
+      // Attachment blobs
+      if (change.blobId.startsWith(ATTACHMENT_PREFIX)) {
+        try {
+          const bytes = await withStep(`PULL: GET blob ${change.blobId}`, () =>
+            fetchRaw(`/v1/vaults/${vaultId}/blobs/${change.blobId}`, {}, { token, signal }),
+          )
+          try {
+            const payload = parseAttachmentBlobBytes(bytes, rvk)
+            if (payload.attId) {
+              await writeEncryptedAttachment(vaultId, payload.attId, bytes)
+            }
+          } catch {
+            errors.push({
+              type: "CORRUPT_PAYLOAD",
+              message: `Attachment decrypt failed for ${change.blobId}`,
+              step: "PULL: GET blob",
+            })
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Attachment fetch failed"
+          errors.push({ type: "NETWORK_ERROR", message, step: "PULL: GET blob" })
+        }
+        continue
+      }
 
       // Only process note + delete blobs
       if (!change.blobId.startsWith(NOTE_PREFIX) && !change.blobId.startsWith(DELETE_PREFIX)) continue

@@ -20,8 +20,19 @@ export type Note = {
   createdAt: string
   updatedAt: string
   vaultId?: string | null
+  attachments?: NoteAttachment[]
   conflictParentNoteId?: string | null
   conflictOriginLamport?: number | null
+}
+
+export type NoteAttachment = {
+  id: string
+  filename: string | null
+  mime: string
+  sizeBytes: number
+  sha256: string
+  blobId: string
+  createdAt: string
 }
 
 type NoteMeta = {
@@ -37,6 +48,7 @@ type EncryptedNoteRecord = {
   updatedAt: string
   title: EnvelopeV1
   body: EnvelopeV1
+  attachments?: EnvelopeV1
   vaultId?: string | null
   conflictParentNoteId?: string | null
   conflictOriginLamport?: number | null
@@ -84,6 +96,7 @@ export function listNotes(vmk: Uint8Array): Note[] {
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
         vaultId: record.vaultId ?? null,
+        attachments: undefined,
         conflictParentNoteId: record.conflictParentNoteId ?? null,
         conflictOriginLamport: record.conflictOriginLamport ?? null,
       })
@@ -116,10 +129,23 @@ export function getNote(id: string, vmk: Uint8Array): Note {
   try {
     const title = bytesToUtf8(decryptV1(vmk, record.title))
     const body = bytesToUtf8(decryptV1(vmk, record.body))
+    let attachments: NoteAttachment[] = []
+    if (record.attachments) {
+      try {
+        const raw = bytesToUtf8(decryptV1(vmk, record.attachments))
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          attachments = parsed as NoteAttachment[]
+        }
+      } catch {
+        attachments = []
+      }
+    }
     return {
       id: record.id,
       title,
       body,
+      attachments,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       vaultId: record.vaultId ?? null,
@@ -137,6 +163,7 @@ export function saveNote(
     title: string
     body: string
     vaultId?: string | null
+    attachments?: NoteAttachment[]
     conflictParentNoteId?: string | null
     conflictOriginLamport?: number | null
   },
@@ -149,12 +176,17 @@ export function saveNote(
   const vaultId = input.vaultId ?? existing?.vaultId ?? null
   const conflictParentNoteId = input.conflictParentNoteId ?? existing?.conflictParentNoteId ?? null
   const conflictOriginLamport = input.conflictOriginLamport ?? existing?.conflictOriginLamport ?? null
+  const existingAttachments = existing?.attachments
+    ? safeDecryptAttachments(existing.attachments, vmk)
+    : []
+  const attachments = input.attachments ?? existingAttachments
 
   const record: EncryptedNoteRecord = buildEncryptedRecord(
     {
       id,
       title: input.title,
       body: input.body,
+      attachments,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       vaultId,
@@ -179,6 +211,7 @@ export function saveNote(
     id,
     title: input.title,
     body: input.body,
+    attachments,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     vaultId,
@@ -267,10 +300,25 @@ function buildEncryptedRecord(note: Note, vmk: Uint8Array): EncryptedNoteRecord 
     updatedAt: note.updatedAt,
     title: encryptV1(vmk, utf8ToBytes(note.title)),
     body: encryptV1(vmk, utf8ToBytes(note.body)),
+    attachments: encryptV1(
+      vmk,
+      utf8ToBytes(JSON.stringify(note.attachments ?? [])),
+    ),
     vaultId: note.vaultId ?? null,
     conflictParentNoteId: note.conflictParentNoteId ?? null,
     conflictOriginLamport: note.conflictOriginLamport ?? null,
   }
+}
+
+function safeDecryptAttachments(env: EnvelopeV1, vmk: Uint8Array): NoteAttachment[] {
+  try {
+    const raw = bytesToUtf8(decryptV1(vmk, env))
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return parsed as NoteAttachment[]
+  } catch {
+    return []
+  }
+  return []
 }
 
 function upsertMeta(metas: NoteMeta[], next: NoteMeta): NoteMeta[] {

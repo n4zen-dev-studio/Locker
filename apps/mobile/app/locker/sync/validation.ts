@@ -33,6 +33,12 @@ export function assertValidRemotePayload(obj: any): asserts obj is RemotePayload
     if (typeof obj.note.body !== "string") throw new Error("Invalid note body")
     if (typeof obj.note.createdAt !== "string") throw new Error("Invalid note createdAt")
     if (typeof obj.note.updatedAt !== "string") throw new Error("Invalid note updatedAt")
+    if (obj.note.attachments !== undefined) {
+      if (!Array.isArray(obj.note.attachments)) throw new Error("Invalid note attachments")
+      for (const att of obj.note.attachments) {
+        if (!isValidAttachment(att)) throw new Error("Invalid note attachment")
+      }
+    }
     if (typeof obj.deviceId !== "string") throw new Error("Invalid note deviceId")
     if (typeof obj.lamport !== "number") throw new Error("Invalid note lamport")
     return
@@ -53,4 +59,16 @@ export function assertValidRemotePayload(obj: any): asserts obj is RemotePayload
   }
 
   throw new Error("Unknown payload type")
+}
+
+function isValidAttachment(att: any): boolean {
+  if (!att || typeof att !== "object") return false
+  if (typeof att.id !== "string") return false
+  if (typeof att.mime !== "string") return false
+  if (typeof att.sizeBytes !== "number") return false
+  if (typeof att.sha256 !== "string") return false
+  if (typeof att.blobId !== "string") return false
+  if (typeof att.createdAt !== "string") return false
+  if (att.filename !== undefined && att.filename !== null && typeof att.filename !== "string") return false
+  return true
 }
