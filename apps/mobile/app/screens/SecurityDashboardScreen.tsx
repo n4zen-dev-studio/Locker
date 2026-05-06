@@ -1,6 +1,7 @@
 import { FC, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AccessibilityInfo,
+  InteractionManager,
   Pressable,
   TextStyle,
   TouchableOpacity,
@@ -8,7 +9,7 @@ import {
   ViewStyle,
   StyleSheet,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import Animated, { Easing, FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated";
 import { Clock3, KeyRound, Shield, Siren, TriangleAlert } from "lucide-react-native";
 
@@ -55,6 +56,7 @@ import Svg, {
   G,
   Line,
 } from "react-native-svg"
+import { useSessionIntroAnimation } from "@/utils/useSessionIntroAnimation";
 
 
 type RecoveryState = {
@@ -71,7 +73,8 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
 ) {
   const { navigation } = props;
   const { themed, theme } = useAppTheme();
-  const $insets = useSafeAreaInsetsStyle(["top", "bottom"]);
+  const $insets = useSafeAreaInsetsStyle(["top"]);
+  const isFocused = useIsFocused();
 
   const [passphrase, setPassphrase] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -86,7 +89,8 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
   const [activityEvents, setActivityEvents] = useState<SecurityAuditEvent[]>([]);
   const [tamperIndicators, setLocalTamperIndicators] = useState<string[]>([]);
   const [reducedMotion, setReducedMotion] = useState(false);
-    const [showAuditLogs, setShowAuditLogs] = useState(false);
+  const [showAuditLogs, setShowAuditLogs] = useState(false);
+  const shouldAnimateIntro = useSessionIntroAnimation("security-dashboard-intro", !reducedMotion);
 
 
   const refreshStatus = useCallback(async () => {
@@ -117,7 +121,12 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
         navigation.replace("VaultLocked");
         return;
       }
-      void refreshStatus();
+
+      const task = InteractionManager.runAfterInteractions(() => {
+        void refreshStatus();
+      });
+
+      return () => task.cancel();
     }, [navigation, refreshStatus]),
   );
 
@@ -128,6 +137,8 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
   }, []);
 
   useEffect(() => {
+    if (!isFocused) return;
+
     const unsub = subscribeTrust(() => setTrust(getTrustSnapshot()));
     const timer = setInterval(() => {
       setSyncStatus(getSyncStatus());
@@ -137,7 +148,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
       unsub();
       clearInterval(timer);
     };
-  }, []);
+  }, [isFocused]);
 
   const handleSetBackup = useCallback(async () => {
     setError(null);
@@ -293,14 +304,15 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
   return (
     <Screen
       preset="scroll"
+      backgroundColor={theme.colors.vaultHub.vaultHubBg}
       style={themed($screen)}
-      contentContainerStyle={themed([$content, $insets, {paddingBottom: spacing.xxxl+30}])}
+      contentContainerStyle={themed([$content, $insets, { paddingBottom: spacing.xxxl + 30 }])}
       systemBarStyle="light"
     >
       <VaultHubBackground reducedMotion={reducedMotion} />
       <Animated.View
         entering={
-          reducedMotion
+          reducedMotion || !shouldAnimateIntro
             ? undefined
             : FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
         }
@@ -341,7 +353,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
 
       <Animated.View
         entering={
-          reducedMotion
+          reducedMotion || !shouldAnimateIntro
             ? undefined
             : FadeInUp.delay(40).duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
         }
@@ -430,7 +442,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
 
       <Animated.View
         entering={
-          reducedMotion
+          reducedMotion || !shouldAnimateIntro
             ? undefined
             : FadeInUp.delay(80).duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
         }
@@ -669,11 +681,13 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
 
 function PanelCard({
   children,
+  contentContainerStyle,
   subtitle,
   title,
   tone = "default",
 }: {
   children: ReactNode;
+  contentContainerStyle?: ViewStyle;
   subtitle?: string;
   title: string;
   tone?: "default" | "critical";
@@ -681,7 +695,7 @@ function PanelCard({
   const { themed } = useAppTheme();
 
   return (
-    <View style={themed([$panel, tone === "critical" && $panelCritical])}>
+    <View style={themed([$panel, tone === "critical" && $panelCritical, contentContainerStyle])}>
       <Text preset="bold" style={themed($sectionTitle)}>
         {title}
       </Text>

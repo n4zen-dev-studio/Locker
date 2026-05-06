@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useMemo } from "react";
+import React, { FC, memo, useEffect, useMemo } from "react";
 import { Dimensions, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { DeviceMotion } from "expo-sensors";
@@ -29,7 +29,7 @@ const clamp = (value: number, min: number, max: number) => {
   return Math.min(Math.max(value, min), max);
 };
 
-export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
+const VaultHubBackgroundComponent: FC<VaultHubBackgroundProps> = ({
   reducedMotion = false,
   dimmed =false,
 }) => {
@@ -459,6 +459,8 @@ export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
     </View>
   );
 };
+
+export const VaultHubBackground = memo(VaultHubBackgroundComponent);
 
 const styles = StyleSheet.create({
   topGlow: {

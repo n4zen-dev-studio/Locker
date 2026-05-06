@@ -24,12 +24,14 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { spacing } from "@/theme/spacing"
+import { useSessionIntroAnimation } from "@/utils/useSessionIntroAnimation"
 
 export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
   function SettingsHomeScreen(props) {
     const { navigation } = props
     const { themed, theme } = useAppTheme()
-    const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
+    const $insets = useSafeAreaInsetsStyle(["top"])
+    const shouldAnimateIntro = useSessionIntroAnimation("settings-home-intro")
 
     const handleReplayOnboarding = () => {
       Alert.alert(
@@ -70,6 +72,7 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
     return (
       <Screen
         preset="scroll"
+        backgroundColor={theme.colors.vaultHub.vaultHubBg}
         style={themed($screen)}
         contentContainerStyle={themed([$content, $insets, { paddingBottom: spacing.xxxl + 28 }])}
         systemBarStyle="light"
@@ -77,7 +80,11 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
         <VaultHubBackground />
 
         <Animated.View
-          entering={FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))}
+          entering={
+            shouldAnimateIntro
+              ? FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
+              : undefined
+          }
           // style={themed($hero)}
         >
           <View style={themed($heroTopRow)}>
@@ -97,7 +104,7 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
           </Text>
 
           <Text style={themed($heroSubtitle)}>
-            Sync, access, diagnostics, and vault tools in a compact control hub.
+            Sync, access, diagnostics, and vault tools control hub.
           </Text>
 
           <View style={themed($heroMetaRow)}>
@@ -108,7 +115,11 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
         </Animated.View>
 
         <Animated.View
-          entering={FadeInUp.delay(30).duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))}
+          entering={
+            shouldAnimateIntro
+              ? FadeInUp.delay(30).duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))
+              : undefined
+          }
           style={themed($stack)}
         >
           <PanelCard
