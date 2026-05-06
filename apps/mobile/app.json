@@ -27,7 +27,10 @@
     },
     "allowBackup": false,
     "edgeToEdgeEnabled": true,
-    "usesCleartextTraffic": true
+    "usesCleartextTraffic": true,
+    "splash": {
+      "backgroundColor": "#1F051A"
+    }
   },
   "ios": {
     "icon": "./assets/images/app-icon-ios.png",
@@ -36,11 +39,17 @@
     "infoPlist": {
       "NSMicrophoneUsageDescription": "Locker uses the microphone so you can create encrypted voice items inside your vault.",
       "NSCameraUsageDescription": "Locker uses the camera so you can scan one-time QR codes for your own devices and vaults."
+    },
+    "splash": {
+      "backgroundColor": "#1F051A"
     }
   },
   "web": {
     "favicon": "./assets/images/app-icon-web-favicon.png",
-    "bundler": "metro"
+    "bundler": "metro",
+    "splash": {
+      "backgroundColor": "#1F051A"
+    }
   },
   "plugins": [
     "expo-localization",
@@ -51,7 +60,7 @@
         "image": "./assets/images/app-icon-android-adaptive-foreground.png",
         "imageWidth": 300,
         "resizeMode": "contain",
-        "backgroundColor": "#191015"
+        "backgroundColor": "#1F051A"
       }
     ],
     [
@@ -84,5 +93,8 @@
     "ignite": {
       "version": "11.4.0"
     }
+  },
+  "splash": {
+    "backgroundColor": "#1F051A"
   }
 }

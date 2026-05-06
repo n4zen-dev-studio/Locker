@@ -35,7 +35,6 @@
     "@expo/metro-runtime": "~6.1.2",
     "@n4zen/locker-keystore": "file:./modules/locker-keystore",
     "@locker/types": "workspace:*",
-    "@lottiefiles/dotlottie-react-native": "^0.8.0",
     "@noble/ciphers": "^1.2.0",
     "@noble/hashes": "^1.4.0",
     "@react-navigation/bottom-tabs": "^7.2.0",
