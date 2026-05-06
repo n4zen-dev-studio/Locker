@@ -1,4 +1,4 @@
-import { FC, useCallback, useState } from "react";
+import { FC, useCallback, useEffect, useState } from "react";
 import { Platform, ScrollView, TextStyle, View, ViewStyle } from "react-native";
 import { KeyRound, Smartphone } from "lucide-react-native";
 
@@ -27,6 +27,7 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes";
 import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
+import { getSuggestedDeviceName } from "@/utils/calc/DeviceInfo";
 
 export const VaultRecoveryAccessScreen: FC<
   AppStackScreenProps<"VaultRecoveryAccess">
@@ -42,6 +43,10 @@ export const VaultRecoveryAccessScreen: FC<
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+   useEffect(() => {
+    getSuggestedDeviceName().then(setDeviceName)
+  }, [])
 
   const handleRecover = useCallback(async () => {
     setError(null);

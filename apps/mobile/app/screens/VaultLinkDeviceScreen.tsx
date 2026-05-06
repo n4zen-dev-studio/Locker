@@ -38,6 +38,7 @@ import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 import { DeviceDTO, UserDTO } from "@locker/types";
+import { getSuggestedDeviceName } from "@/utils/calc/DeviceInfo";
 
 type LinkPayload = {
   t?: string;
@@ -72,6 +73,10 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
         }
       }, [navigation]),
     );
+
+    useEffect(() => {
+      getSuggestedDeviceName().then(setDeviceName)
+    }, [])
 
     const handleRedeem = async () => {
       setError(null);

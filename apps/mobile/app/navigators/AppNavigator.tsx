@@ -52,7 +52,6 @@ const AppStack = () => {
       initialRouteName="Calculator"
       screenOptions={{
         headerShown: false,
-        // navigationBarColor: "transparent",
         contentStyle: {
           backgroundColor: "transparent",
         },
@@ -76,8 +75,6 @@ const AppStack = () => {
       <Stack.Screen name="VaultDiagnostics" component={VaultDiagnosticsScreen} />
       <Stack.Screen name="ThreatModel" component={ThreatModelScreen} />
       <Stack.Screen name="ServerUrl" component={ServerUrlScreen} />
-      {/** 🔥 Your screens go here */}
-      {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}
     </Stack.Navigator>
   )
 }
