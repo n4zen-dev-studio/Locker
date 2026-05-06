@@ -105,6 +105,7 @@ export const colors = {
     vaultAccentPinkSoft: "#FF9ADB",
     vaultGlow: "rgba(255, 77, 186, 0.28)",
     vaultGlow2: "rgba(77, 193, 255, 0.28))",
+    vaultGlow3: "rgba(255, 219, 77, 0.28))",
     vaultRing: "rgba(255, 77, 186, 0.82)",
     vaultBorderSubtle: "rgba(255, 255, 255, 0.08)",
     vaultSurface: "rgba(18, 12, 24, 0.72)",

@@ -404,7 +404,7 @@ export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
         fy="50%"
       >
         <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="1" />
-        <Stop offset="34%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0.18" />
+        <Stop offset="34%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0.7" />
         <Stop offset="68%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0.08" />
         <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0" />
       </RadialGradient>
@@ -418,7 +418,7 @@ export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
   </Svg>
 </AnimatedView>
 
-{/* <AnimatedView style={[styles.centerGlow, centerGlowStyle]}>
+<AnimatedView style={[styles.centerGlow, centerGlowStyle]}>
   <Svg
     width={styles.centerGlowOrb.width}
     height={styles.centerGlowOrb.height}
@@ -434,10 +434,10 @@ export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
         fx="50%"
         fy="50%"
       >
-        <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.42" />
-        <Stop offset="24%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.26" />
-        <Stop offset="52%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.12" />
-        <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0" />
+        <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="1" />
+        <Stop offset="24%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="0.8" />
+        <Stop offset="52%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="0.1" />
+        <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="0" />
       </RadialGradient>
     </Defs>
     <Circle
@@ -447,7 +447,7 @@ export const VaultHubBackground: FC<VaultHubBackgroundProps> = ({
       fill="url(#centerGlowGradient)"
     />
   </Svg>
-</AnimatedView> */}
+</AnimatedView>
 
       <View style={styles.vignetteOverlay} />
     </View>
@@ -462,14 +462,14 @@ const styles = StyleSheet.create({
   },
   bottomGlow: {
     position: "absolute",
-    bottom: 72,
+    bottom: 12,
     left: -132,
   },
   centerGlow: {
     position: "absolute",
-    top: "34%",
+    bottom: "20%",
     alignSelf: "center",
-    marginLeft: -180,
+    marginLeft: 200,
   },
   glowOrb: {
     borderRadius: 999,
