@@ -48,6 +48,7 @@ const $fab: ThemedStyle<ViewStyle> = ({ colors }) => ({
   shadowOffset: { width: 0, height: 8 },
   borderWidth: 1,
   borderColor: "rgba(255, 255, 255, 0.2)",
+  
 })
 
 const $label: ThemedStyle<TextStyle> = ({ colors }) => ({

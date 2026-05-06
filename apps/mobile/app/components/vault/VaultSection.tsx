@@ -59,14 +59,13 @@ export function VaultSection(props: VaultSectionProps) {
             {items.length} item{items.length === 1 ? "" : "s"} ready
           </Text>
         </View>
-
+      </View>
         <View style={themed($controls)}>
           <Pressable onPress={onSortCycle} style={themed($sortPill)}>
             <Text style={themed($sortText)}>Sort: {sort}</Text>
           </Pressable>
           <VaultViewToggle mode={viewMode} onChangeMode={onChangeViewMode} />
         </View>
-      </View>
 
       <View style={themed($workspace)}>
         <VaultFilterRail filter={filter} onChangeFilter={onChangeFilter} reducedMotion={reducedMotion} />
@@ -88,14 +87,18 @@ export function VaultSection(props: VaultSectionProps) {
 
 const $section: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
-  height: Dimensions.get('screen').height * 0.78
+  height: Dimensions.get('screen').height * 0.68
+
 });
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   // flexDirection: "column",
   // justifyContent: "space-between",
-  alignItems: "center",
-  gap: spacing.md,
+  // alignItems: "center",
+  marginTop: -20,
+  minHeight: 40,
+  marginBottom: -5,
+  // gap: spacing.md,
 });
 
 const $headerCopy: ThemedStyle<ViewStyle> = () => ({
@@ -104,6 +107,8 @@ const $headerCopy: ThemedStyle<ViewStyle> = () => ({
 
 const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 18,
+  lineHeight: 20,
 });
 
 const $meta: ThemedStyle<TextStyle> = ({ colors }) => ({

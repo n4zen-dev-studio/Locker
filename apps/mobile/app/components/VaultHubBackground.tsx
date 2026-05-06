@@ -409,10 +409,10 @@ const VaultHubBackgroundComponent: FC<VaultHubBackgroundProps> = ({
               fx="50%"
               fy="50%"
             >
-              <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="1" />
-              <Stop offset="34%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0.7" />
-              <Stop offset="68%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0.08" />
-              <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="0" />
+              <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="1" />
+              <Stop offset="34%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.7" />
+              <Stop offset="68%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0.08" />
+              <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow} stopOpacity="0" />
             </RadialGradient>
           </Defs>
           <Circle
@@ -440,7 +440,7 @@ const VaultHubBackgroundComponent: FC<VaultHubBackgroundProps> = ({
               fx="50%"
               fy="50%"
             >
-              <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="1" />
+              <Stop offset="0%" stopColor={theme.colors.vault.vaultGlow2} stopOpacity="1" />
               <Stop offset="24%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="0.8" />
               <Stop offset="52%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="0.1" />
               <Stop offset="100%" stopColor={theme.colors.vault.vaultGlow3} stopOpacity="0" />
