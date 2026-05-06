@@ -6,10 +6,18 @@ import {
   NavigatorScreenParams,
 } from "@react-navigation/native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import type { VaultImportType, VaultItemType } from "@/locker/vault/types"
 
 export type VaultStackParamList = {
   VaultHome: undefined
-  VaultNote: { noteId?: string; importType?: "image" | "pdf" | "file" } | undefined
+  VaultNote:
+    | {
+        noteId?: string
+        attachmentId?: string
+        importType?: VaultImportType
+        createType?: VaultItemType
+      }
+    | undefined
 }
 
 export type SecurityStackParamList = {

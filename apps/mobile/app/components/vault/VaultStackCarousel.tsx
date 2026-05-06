@@ -41,6 +41,7 @@ function getVaultIcon(type: string): keyof typeof Ionicons.glyphMap {
     case "pdf":
       return "document-attach-outline"; // closest match
     case "file":
+    case "doc":
       return "document-outline";
     case "voice":
       return "mic-outline";
