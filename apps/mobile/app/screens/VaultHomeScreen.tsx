@@ -12,7 +12,8 @@ import { listNotesForVault, Note } from "@/locker/storage/notesRepo"
 import { getMeta } from "@/locker/storage/vaultMetaRepo"
 import { disablePasskeyDevOnly, isPasskeyEnabled } from "@/locker/auth/passkey"
 import { getRemoteVaultId, getRemoteVaultName } from "@/locker/storage/remoteVaultRepo"
-import { getSyncStatus, syncNow } from "@/locker/sync/syncEngine"
+import { getSyncStatus } from "@/locker/sync/syncEngine"
+import { requestSync } from "@/locker/sync/syncCoordinator"
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { getToken } from "@/locker/auth/tokenStore"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
@@ -151,9 +152,9 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
     setError(null)
 
     try {
-      const result = await syncNow()
+      const result = await requestSync("manual", activeVaultId ?? undefined)
 
-      if (result.errors.length > 0) {
+      if (result?.errors?.length > 0) {
         setError(`Sync completed with ${result.errors.length} error(s): ${result.errors[0].type}`)
       }
 

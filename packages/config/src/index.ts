@@ -10,6 +10,9 @@ type ApiEnv = {
   DEV_AUTH_ENABLED: boolean
   ADMIN_ORIGIN: string
   ADMIN_PURGE_ENABLED: boolean
+  RATE_LIMIT_ENABLED: boolean
+  RATE_LIMIT_PER_MINUTE: number
+  MAX_BLOB_BYTES: number
 }
 
 type AdminEnv = {
@@ -50,6 +53,9 @@ export function getApiEnv(): ApiEnv {
     DEV_AUTH_ENABLED: parseBool(process.env.DEV_AUTH_ENABLED, true),
     ADMIN_ORIGIN: process.env.ADMIN_ORIGIN || "http://localhost:3000",
     ADMIN_PURGE_ENABLED: parseBool(process.env.ADMIN_PURGE_ENABLED, false),
+    RATE_LIMIT_ENABLED: parseBool(process.env.RATE_LIMIT_ENABLED, true),
+    RATE_LIMIT_PER_MINUTE: Number(process.env.RATE_LIMIT_PER_MINUTE ?? 120),
+    MAX_BLOB_BYTES: Number(process.env.MAX_BLOB_BYTES ?? 5_000_000),
   }
 }
 

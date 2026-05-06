@@ -3,6 +3,7 @@ import { z } from "zod"
 import crypto from "crypto"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
+import { recordAuditEvent } from "../db/audit"
 
 const inviteCreateSchema = z.object({
   inviteeEmail: z.string().email(),
@@ -41,6 +42,13 @@ export async function registerInviteRoutes(app: FastifyInstance) {
          (id, vaultId, inviterUserId, inviteeEmail, role, status, createdAt)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       ).run(inviteId, vaultId, user.id, email, parse.data.role, "pending", now)
+
+      recordAuditEvent(db, {
+        userId: user.id,
+        vaultId,
+        type: "invite_create",
+        meta: { inviteId, inviteeEmail: email, role: parse.data.role },
+      })
 
       reply.send({
         invite: {
@@ -152,6 +160,12 @@ export async function registerInviteRoutes(app: FastifyInstance) {
       })
 
       tx()
+      recordAuditEvent(db, {
+        userId: user.id,
+        vaultId: invite.vaultId,
+        type: "invite_accept",
+        meta: { inviteId },
+      })
 
       reply.send({ ok: true, vaultId: invite.vaultId })
     }
@@ -187,6 +201,13 @@ export async function registerInviteRoutes(app: FastifyInstance) {
       db.prepare(
         "UPDATE vault_invites SET status = 'revoked', revokedAt = ? WHERE id = ?"
       ).run(now, inviteId)
+
+      recordAuditEvent(db, {
+        userId: user.id,
+        vaultId: invite.vaultId,
+        type: "invite_revoke",
+        meta: { inviteId },
+      })
 
       reply.send({ ok: true })
     }

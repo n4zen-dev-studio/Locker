@@ -4,6 +4,9 @@ import crypto from "crypto"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
 import { signToken } from "../auth/jwt"
+import { rateLimit } from "../middleware/rateLimit"
+import { getApiEnv } from "@locker/config"
+import { recordAuditEvent } from "../db/audit"
 
 const deviceSchema = z.object({
   name: z.string().min(1),
@@ -19,6 +22,13 @@ const redeemSchema = z.object({
 const LINK_CODE_TTL_MS = 10 * 60 * 1000
 
 export async function registerDeviceRoutes(app: FastifyInstance) {
+  const env = getApiEnv()
+  const redeemLimiter = rateLimit({
+    enabled: env.RATE_LIMIT_ENABLED,
+    windowMs: 60_000,
+    max: env.RATE_LIMIT_PER_MINUTE,
+    getKey: (req) => `redeem:${req.ip}`,
+  })
   app.post("/v1/devices/register", { preHandler: authMiddleware }, async (request, reply) => {
     const parse = deviceSchema.safeParse(request.body)
     if (!parse.success) {
@@ -60,6 +70,8 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
   })
 
   app.post("/v1/devices/link-code/redeem", async (request, reply) => {
+    await redeemLimiter(request, reply)
+    if (reply.sent) return
     const parse = redeemSchema.safeParse(request.body)
     if (!parse.success) {
       reply.code(400).send({ error: "Invalid body" })
@@ -121,6 +133,11 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
     tx()
 
     const token = signToken({ sub: user.id, email: user.email ?? user.id })
+    recordAuditEvent(db, {
+      userId: user.id,
+      type: "linkcode_redeem",
+      meta: { deviceId: device.id, platform: device.platform },
+    })
     reply.send({ token, user, device })
   })
 }

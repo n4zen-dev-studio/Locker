@@ -3,6 +3,7 @@ import { z } from "zod"
 import crypto from "crypto"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
+import { recordAuditEvent } from "../db/audit"
 
 const upsertEnvelopeSchema = z.object({
   userId: z.string().min(1),
@@ -51,6 +52,12 @@ export async function registerKeyEnvelopeRoutes(app: FastifyInstance) {
       })
 
       tx()
+      recordAuditEvent(db, {
+        userId: user.id,
+        vaultId,
+        type: "key_envelope_upsert",
+        meta: { targetUserId: parse.data.userId, alg: parse.data.alg },
+      })
 
       reply.send({ ok: true })
     }

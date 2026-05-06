@@ -4,6 +4,10 @@ import { getAdminEnv } from "@locker/config"
 import { createApiClient, getStoredToken } from "../../../lib/api"
 
 type NotesListResponse = { notes: string[] }
+type VaultHealthResponse = { vaultId: string; blobCount: number; changeCount: number; memberCount: number; lastActivity?: string | null }
+type AuditEvent = { id: number; userId: string; vaultId: string | null; type: string; meta?: any; createdAt: string }
+type AuditResponse = { events: AuditEvent[]; nextCursor: number }
+type VaultMember = { userId: string; email?: string | null; role: string; createdAt: string }
 
 type ViewState = {
   blobId: string
@@ -45,6 +49,9 @@ export default function VaultNotesPage() {
   const api = useMemo(() => createApiClient(token), [token])
 
   const [notes, setNotes] = useState<string[]>([])
+  const [health, setHealth] = useState<VaultHealthResponse | null>(null)
+  const [audit, setAudit] = useState<AuditEvent[]>([])
+  const [members, setMembers] = useState<VaultMember[]>([])
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<ViewState | null>(null)
   const [editMode, setEditMode] = useState<"json" | "base64">("json")
@@ -67,6 +74,77 @@ export default function VaultNotesPage() {
       setNotes(data.notes || [])
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load notes"
+      setError(message)
+    }
+  }
+
+  async function loadHealth() {
+    if (!vaultId) return
+    try {
+      const data = await api.request<VaultHealthResponse>(`/v1/vaults/${vaultId}/health`)
+      setHealth(data)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load health"
+      setError(message)
+    }
+  }
+
+  async function loadAudit() {
+    if (!vaultId) return
+    try {
+      const data = await api.request<AuditResponse>(`/v1/vaults/${vaultId}/audit?cursor=0&limit=50`)
+      setAudit(data.events || [])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load audit events"
+      setError(message)
+    }
+  }
+
+  async function loadMembers() {
+    if (!vaultId) return
+    try {
+      const data = await api.request<{ members: VaultMember[] }>(`/v1/vaults/${vaultId}/members`)
+      setMembers(data.members || [])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load members"
+      setError(message)
+    }
+  }
+
+  async function requestRotation() {
+    if (!vaultId) return
+    try {
+      await api.request(`/v1/vaults/${vaultId}/rotate-rvk`, { method: "POST" })
+      alert("Rotation request recorded. Owner device should rotate RVK.")
+      await loadAudit()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to request rotation"
+      setError(message)
+    }
+  }
+
+  async function requestEnvelopeResend() {
+    if (!vaultId) return
+    try {
+      await api.request(`/v1/vaults/${vaultId}/envelope-requests`, { method: "POST" })
+      alert("Envelope resend requested.")
+      await loadAudit()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to request resend"
+      setError(message)
+    }
+  }
+
+  async function revokeMember(userId: string) {
+    if (!vaultId) return
+    const ok = window.confirm("Revoke this member from the vault?")
+    if (!ok) return
+    try {
+      await api.request(`/v1/vaults/${vaultId}/members/${userId}`, { method: "DELETE" })
+      await loadMembers()
+      await loadAudit()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to revoke member"
       setError(message)
     }
   }
@@ -152,6 +230,9 @@ export default function VaultNotesPage() {
 
   useEffect(() => {
     void loadNotes()
+    void loadHealth()
+    void loadAudit()
+    void loadMembers()
   }, [vaultId])
 
   return (
@@ -166,12 +247,70 @@ export default function VaultNotesPage() {
         <button onClick={() => loadNotes()} style={{ padding: "8px 12px" }}>
           Refresh Notes
         </button>
+        <button onClick={() => loadAudit()} style={{ padding: "8px 12px" }}>
+          Refresh Audit
+        </button>
+        <button onClick={() => loadHealth()} style={{ padding: "8px 12px" }}>
+          Refresh Health
+        </button>
         <button onClick={() => router.push("/dashboard")} style={{ padding: "8px 12px" }}>
           Back to Dashboard
         </button>
       </div>
 
       {error ? <p style={{ color: "crimson", marginTop: 12 }}>{error}</p> : null}
+
+      <section style={{ marginTop: 24 }}>
+        <h2>Vault Health</h2>
+        {health ? (
+          <ul>
+            <li>Blob count: {health.blobCount}</li>
+            <li>Change count: {health.changeCount}</li>
+            <li>Member count: {health.memberCount}</li>
+            <li>Last activity: {health.lastActivity ?? "n/a"}</li>
+          </ul>
+        ) : (
+          <p>No health data yet.</p>
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button onClick={() => requestRotation()}>Request RVK Rotation</button>
+          <button onClick={() => requestEnvelopeResend()}>Request Envelope Resend</button>
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>Members</h2>
+        {members.length === 0 ? (
+          <p>No members found.</p>
+        ) : (
+          <ul>
+            {members.map((member) => (
+              <li key={member.userId} style={{ marginBottom: 8 }}>
+                <div>{member.email ?? member.userId} — {member.role}</div>
+                <button onClick={() => revokeMember(member.userId)}>Revoke</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>Vault Activity</h2>
+        {audit.length === 0 ? (
+          <p>No audit events yet.</p>
+        ) : (
+          <ul>
+            {audit.map((event) => (
+              <li key={event.id} style={{ marginBottom: 8 }}>
+                <div>
+                  [{event.createdAt}] {event.type} — user {event.userId}
+                </div>
+                {event.meta ? <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(event.meta, null, 2)}</pre> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section style={{ marginTop: 24 }}>
         <h2>Note Blobs</h2>

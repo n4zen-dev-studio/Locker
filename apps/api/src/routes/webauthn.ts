@@ -13,6 +13,8 @@ import { getApiEnv } from "@locker/config"
 import { getDb } from "../db/db"
 import { signToken } from "../auth/jwt"
 import { authMiddleware } from "../middleware/auth"
+import { rateLimit } from "../middleware/rateLimit"
+import { recordAuditEvent } from "../db/audit"
 
 const DISCOVERABLE_USER_ID = "__discoverable__"
 
@@ -72,8 +74,16 @@ const toUserID = (id: string) => new TextEncoder().encode(id)
 
 export async function registerWebAuthnRoutes(app: FastifyInstance) {
   const env = getApiEnv()
+  const authLimiter = rateLimit({
+    enabled: env.RATE_LIMIT_ENABLED,
+    windowMs: 60_000,
+    max: env.RATE_LIMIT_PER_MINUTE,
+    getKey: (req) => `auth:${req.ip}`,
+  })
 
   app.post("/v1/auth/webauthn/register/options", async (request, reply) => {
+    await authLimiter(request, reply)
+    if (reply.sent) return
     const parse = registerOptionsSchema.safeParse(request.body)
     if (!parse.success) {
       reply.code(400).send({ error: "Invalid body" })
@@ -126,6 +136,8 @@ export async function registerWebAuthnRoutes(app: FastifyInstance) {
   })
 
   app.post("/v1/auth/webauthn/register/verify", async (request, reply) => {
+    await authLimiter(request, reply)
+    if (reply.sent) return
     const parse = registerVerifySchema.safeParse(request.body)
     if (!parse.success) {
       reply.code(400).send({ error: "Invalid body" })
@@ -226,12 +238,15 @@ if (serverDerivedId && serverDerivedId !== credentialId) {
     }
 
     const token = signToken({ sub: user.id, email: user.email ?? user.id })
+    recordAuditEvent(db, { userId: user.id, type: "login_webauthn", meta: { flow: "register" } })
     reply.send({ token, user })
 
   })
 
   // Targeted sign-in (email/userId) uses allowCredentials
   app.post("/v1/auth/webauthn/authenticate/options", async (request, reply) => {
+    await authLimiter(request, reply)
+    if (reply.sent) return
     const parse = authOptionsSchema.safeParse(request.body)
     if (!parse.success) {
       reply.code(400).send({ error: "Invalid body" })
@@ -278,7 +293,9 @@ if (serverDerivedId && serverDerivedId !== credentialId) {
   })
 
   // Discoverable sign-in (no allowCredentials, user derived from credentialId)
-  app.post("/v1/auth/webauthn/authenticate/options/discoverable", async (_request, reply) => {
+  app.post("/v1/auth/webauthn/authenticate/options/discoverable", async (request, reply) => {
+    await authLimiter(request, reply)
+    if (reply.sent) return
     const db = getDb()
     const options = await generateAuthenticationOptions({
       rpID: env.RP_ID,
@@ -294,6 +311,8 @@ if (serverDerivedId && serverDerivedId !== credentialId) {
   })
 
   app.post("/v1/auth/webauthn/authenticate/verify", async (request, reply) => {
+    await authLimiter(request, reply)
+    if (reply.sent) return
     const parse = authVerifySchema.safeParse(request.body)
     if (!parse.success) {
       reply.code(400).send({ error: "Invalid body" })
@@ -383,6 +402,7 @@ console.log("[webauthn] db has:", db.prepare("SELECT credentialId FROM webauthn_
     }
 
     const token = signToken({ sub: user.id, email: user.email ?? user.id })
+    recordAuditEvent(db, { userId: user.id, type: "login_webauthn", meta: { flow: "authenticate" } })
     reply.send({ token, user })
 
   })

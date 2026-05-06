@@ -18,7 +18,8 @@ import { bytesToUtf8, utf8ToBytes } from "@/locker/crypto/encoding"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { VaultDTO } from "@locker/types"
 import { listNoteIds } from "@/locker/storage/notesRepo"
-import { getSyncStatus, setNetworkOnline, syncNow } from "@/locker/sync/syncEngine"
+import { getSyncStatus, setNetworkOnline } from "@/locker/sync/syncEngine"
+import { requestSync } from "@/locker/sync/syncCoordinator"
 import { clearNoteRemoteMeta, clearTombstonesForVault, getState, setLastCursor, setOutbox } from "@/locker/sync/syncStateRepo"
 import { clearRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 
@@ -202,11 +203,11 @@ export const RemoteVaultScreen: FC<AppStackScreenProps<"RemoteVault">> = functio
     setError(null)
     setStatus(null)
     try {
-      const result = await syncNow()
-      if (result.errors.length > 0) {
+      const result = await requestSync("manual", vaultId ?? undefined)
+      if (result?.errors?.length > 0) {
         setStatus(`Sync complete with ${result.errors.length} error(s): ${result.errors[0].type}`)
       } else {
-        setStatus(`Sync complete: pushed ${result.pushed}, pulled ${result.pulled}, conflicts ${result.conflicts}`)
+        setStatus(`Sync complete: pushed ${result?.pushed ?? 0}, pulled ${result?.pulled ?? 0}, conflicts ${result?.conflicts ?? 0}`)
       }
       setSyncStatus(getSyncStatus())
     } catch (err) {

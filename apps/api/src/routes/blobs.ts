@@ -3,13 +3,22 @@ import crypto from "crypto"
 import { getDb } from "../db/db"
 import { authMiddleware } from "../middleware/auth"
 import { deleteBlob, getBlob, putBlob } from "../blobStore/fsBlobStore"
-
-const MAX_BLOB_BYTES = 50 * 1024 * 1024
+import { getApiEnv } from "@locker/config"
+import { rateLimit } from "../middleware/rateLimit"
+import { recordAuditEvent } from "../db/audit"
 
 export async function registerBlobRoutes(app: FastifyInstance) {
+  const env = getApiEnv()
+  const blobLimiter = rateLimit({
+    enabled: env.RATE_LIMIT_ENABLED,
+    windowMs: 60_000,
+    max: env.RATE_LIMIT_PER_MINUTE,
+    getKey: (req) => `blob:${req.user?.id ?? req.ip}`,
+  })
+
   app.put(
     "/v1/vaults/:vaultId/blobs/:blobId",
-    { preHandler: authMiddleware },
+    { preHandler: [authMiddleware, blobLimiter] },
     async (request, reply) => {
       const user = request.user!
       const { vaultId, blobId } = request.params as { vaultId: string; blobId: string }
@@ -31,7 +40,7 @@ export async function registerBlobRoutes(app: FastifyInstance) {
       if (member.role === "viewer") return reply.code(403).send({ error: "Insufficient role" })
 
       const body = await readBody(request)
-      if (body.length > MAX_BLOB_BYTES) return reply.code(413).send({ error: "Payload too large" })
+      if (body.length > env.MAX_BLOB_BYTES) return reply.code(413).send({ error: "Payload too large" })
 
       const hash = crypto.createHash("sha256").update(body).digest("hex")
       if (hash !== sha256) return reply.code(400).send({ error: "sha256 mismatch" })
@@ -59,6 +68,12 @@ export async function registerBlobRoutes(app: FastifyInstance) {
 
       try {
         tx()
+        recordAuditEvent(db, {
+          userId: user.id,
+          vaultId,
+          type: "blob_put",
+          meta: { blobId, sizeBytes: body.length, sha256: hash },
+        })
       } catch (e) {
         // If DB write fails, we must not leave a "blob_put" without DB state.
         // Best-effort cleanup: you can optionally delete the blob file here if you add a deleteBlob().
@@ -138,6 +153,7 @@ export async function registerBlobRoutes(app: FastifyInstance) {
       })
 
       tx()
+      recordAuditEvent(db, { userId: user.id, vaultId, type: "blob_del", meta: { blobId } })
 
       reply.send({ ok: true })
     }

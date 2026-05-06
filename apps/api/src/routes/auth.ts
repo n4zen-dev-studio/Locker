@@ -5,36 +5,27 @@ import { getDb } from "../db/db"
 import { signToken } from "../auth/jwt"
 import { getApiEnv } from "@locker/config"
 import { authMiddleware } from "../middleware/auth"
+import { rateLimit } from "../middleware/rateLimit"
+import { recordAuditEvent } from "../db/audit"
 
 const loginSchema = z.object({
   email: z.string().email()
 })
 
-const rateWindowMs = 60_000
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now()
-  const record = rateLimitMap.get(ip)
-  if (!record || record.resetAt < now) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + rateWindowMs })
-    return false
-  }
-  record.count += 1
-  return record.count > 10
-}
-
 export async function registerAuthRoutes(app: FastifyInstance) {
   const env = getApiEnv()
   const devAuthEnabled = env.DEV_AUTH_ENABLED
+  const authLimiter = rateLimit({
+    enabled: env.RATE_LIMIT_ENABLED,
+    windowMs: 60_000,
+    max: env.RATE_LIMIT_PER_MINUTE,
+    getKey: (req) => `auth:${req.ip}`,
+  })
   app.post("/v1/auth/dev-login", async (request, reply) => {
+    await authLimiter(request, reply)
+    if (reply.sent) return
     if (!devAuthEnabled) {
       reply.code(403).send({ error: "Dev auth disabled" })
-      return
-    }
-    const ip = request.ip
-    if (isRateLimited(ip)) {
-      reply.code(429).send({ error: "Too many attempts" })
       return
     }
 
@@ -68,6 +59,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     }
 
     const token = signToken({ sub: user.id, email: user.email })
+    const ip = request.ip
+    recordAuditEvent(db, { userId: user.id, type: "login_dev", meta: { ip } })
     reply.send({ token, user })
   })
 
