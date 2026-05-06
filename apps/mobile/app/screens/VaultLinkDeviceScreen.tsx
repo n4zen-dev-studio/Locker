@@ -88,7 +88,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
             platform: Platform.OS === "ios" ? "ios" : "android",
           }),
         },
-        { baseUrl: apiBase, token: null },
+        { baseUrl: apiBase, auth: "none" },
       )
 
       await setToken(data.token)

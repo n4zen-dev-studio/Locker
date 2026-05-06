@@ -16,6 +16,15 @@ type NotePayload = {
   deleted?: boolean
 }
 
+type TombstonePayload = {
+  v: 1
+  type: "note-delete"
+  noteId: string
+  deletedAt: string
+  deviceId: string
+  lamport: number
+}
+
 type IndexPayload = {
   v: 1
   type: "notes-index"
@@ -45,6 +54,7 @@ export function enqueueUpsertNoteData(
     id: randomId(),
     type: "upsert_note",
     noteId: note.id,
+    deviceId,
     vaultId,
     blobId,
     bytesB64: bytesToBase64(bytes),
@@ -52,6 +62,7 @@ export function enqueueUpsertNoteData(
     contentType: CONTENT_TYPE,
     createdAt: new Date().toISOString(),
     attempts: 0,
+    nextRetryAt: undefined,
     noteUpdatedAt: note.updatedAt,
     lamport,
   }
@@ -67,26 +78,21 @@ export function enqueueDeleteNoteData(
 ): void {
   const lamport = nextLamport()
   const now = new Date().toISOString()
-  const payload: NotePayload = {
+  const payload: TombstonePayload = {
     v: 1,
-    type: "note",
-    note: {
-      id: noteId,
-      title: "",
-      body: "",
-      createdAt,
-      updatedAt: now,
-    },
+    type: "note-delete",
+    noteId,
+    deletedAt: now,
     deviceId,
     lamport,
-    deleted: true,
   }
   const bytes = encryptJsonToBlobBytes(rvk, payload)
-  const blobId = `note-v1-${noteId}`
+  const blobId = `note-delete-v1-${noteId}`
   const op: OutboxOp = {
     id: randomId(),
     type: "delete_note",
     noteId,
+    deviceId,
     vaultId,
     blobId,
     bytesB64: bytesToBase64(bytes),
@@ -94,6 +100,7 @@ export function enqueueDeleteNoteData(
     contentType: CONTENT_TYPE,
     createdAt: now,
     attempts: 0,
+    nextRetryAt: undefined,
     noteUpdatedAt: now,
     lamport,
   }
@@ -119,6 +126,7 @@ export function enqueueUpdateIndexData(
   const op: OutboxOp = {
     id: randomId(),
     type: "update_index",
+    deviceId,
     vaultId,
     blobId: "notes-index-v1",
     bytesB64: bytesToBase64(bytes),
@@ -126,6 +134,7 @@ export function enqueueUpdateIndexData(
     contentType: CONTENT_TYPE,
     createdAt: new Date().toISOString(),
     attempts: 0,
+    nextRetryAt: undefined,
     lamport,
   }
   setOutbox([op, ...getOutbox()])

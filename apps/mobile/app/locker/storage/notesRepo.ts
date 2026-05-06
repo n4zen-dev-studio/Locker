@@ -18,6 +18,8 @@ export type Note = {
   createdAt: string
   updatedAt: string
   vaultId?: string | null
+  conflictParentNoteId?: string | null
+  conflictOriginLamport?: number | null
 }
 
 type NoteMeta = {
@@ -34,28 +36,64 @@ type EncryptedNoteRecord = {
   title: EnvelopeV1
   body: EnvelopeV1
   vaultId?: string | null
+  conflictParentNoteId?: string | null
+  conflictOriginLamport?: number | null
 }
 
 export function listNotes(vmk: Uint8Array): Note[] {
   const metas = load<NoteMeta[]>(NOTES_LIST_KEY) ?? []
-  return metas.map((meta) => {
+
+  const notes: Note[] = []
+  let mutated = false
+  const cleanedMetas: NoteMeta[] = []
+
+  for (const meta of metas) {
     const record = load<EncryptedNoteRecord>(NOTE_KEY_PREFIX + meta.id)
-    if (!record) throw new VaultDataError()
+
+    // Missing record -> drop meta (self heal)
+    if (!record) {
+      mutated = true
+      continue
+    }
+
     try {
       const title = bytesToUtf8(decryptV1(vmk, record.title))
-      return {
+
+      // Keep meta + note
+      cleanedMetas.push({
+        id: record.id,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        vaultId: record.vaultId ?? null,
+      })
+
+      notes.push({
         id: record.id,
         title,
         body: "",
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
         vaultId: record.vaultId ?? null,
-      }
+        conflictParentNoteId: record.conflictParentNoteId ?? null,
+        conflictOriginLamport: record.conflictOriginLamport ?? null,
+      })
     } catch {
-      throw new VaultDataError()
+      // Decrypt failed -> record is unreadable with current VMK
+      // Keep storage record for forensics, but remove it from listing index so UI works.
+      mutated = true
+      continue
     }
-  })
+  }
+
+  if (mutated) {
+    // Ensure stable ordering after cleanup
+    const next = cleanedMetas.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+    save(NOTES_LIST_KEY, next)
+  }
+
+  return notes
 }
+
 
 export function listNotesForVault(vmk: Uint8Array, vaultId: string | null): Note[] {
   return listNotes(vmk).filter((note) => (note.vaultId ?? null) === (vaultId ?? null))
@@ -75,6 +113,8 @@ export function getNote(id: string, vmk: Uint8Array): Note {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       vaultId: record.vaultId ?? null,
+      conflictParentNoteId: record.conflictParentNoteId ?? null,
+      conflictOriginLamport: record.conflictOriginLamport ?? null,
     }
   } catch {
     throw new VaultDataError()
@@ -82,7 +122,14 @@ export function getNote(id: string, vmk: Uint8Array): Note {
 }
 
 export function saveNote(
-  input: { id?: string; title: string; body: string; vaultId?: string | null },
+  input: {
+    id?: string
+    title: string
+    body: string
+    vaultId?: string | null
+    conflictParentNoteId?: string | null
+    conflictOriginLamport?: number | null
+  },
   vmk: Uint8Array,
   options?: { suppressSync?: boolean },
 ): Note {
@@ -90,6 +137,8 @@ export function saveNote(
   const existing = input.id ? load<EncryptedNoteRecord>(NOTE_KEY_PREFIX + input.id) : null
   const id = input.id ?? generateId()
   const vaultId = input.vaultId ?? existing?.vaultId ?? null
+  const conflictParentNoteId = input.conflictParentNoteId ?? existing?.conflictParentNoteId ?? null
+  const conflictOriginLamport = input.conflictOriginLamport ?? existing?.conflictOriginLamport ?? null
 
   const record: EncryptedNoteRecord = buildEncryptedRecord(
     {
@@ -99,6 +148,8 @@ export function saveNote(
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       vaultId,
+      conflictParentNoteId,
+      conflictOriginLamport,
     },
     vmk,
   )
@@ -121,6 +172,8 @@ export function saveNote(
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     vaultId,
+    conflictParentNoteId,
+    conflictOriginLamport,
   }
 
   if (!options?.suppressSync) {
@@ -199,6 +252,8 @@ function buildEncryptedRecord(note: Note, vmk: Uint8Array): EncryptedNoteRecord 
     title: encryptV1(vmk, utf8ToBytes(note.title)),
     body: encryptV1(vmk, utf8ToBytes(note.body)),
     vaultId: note.vaultId ?? null,
+    conflictParentNoteId: note.conflictParentNoteId ?? null,
+    conflictOriginLamport: note.conflictOriginLamport ?? null,
   }
 }
 

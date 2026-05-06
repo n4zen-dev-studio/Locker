@@ -17,6 +17,7 @@ import { sha256Hex } from "@/locker/crypto/sha"
 import { utf8ToBytes } from "@/locker/crypto/encoding"
 import { VaultDTO, DeviceDTO } from "@locker/types"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
+import { putAndVerifySyncKeyCheck } from "@/locker/sync/syncKeyCheck"
 
 export const VaultSwitcherScreen: FC<AppStackScreenProps<"VaultSwitcher">> = function VaultSwitcherScreen(
   props,
@@ -68,30 +69,18 @@ export const VaultSwitcherScreen: FC<AppStackScreenProps<"VaultSwitcher">> = fun
   }
 
   const uploadSyncKeyCheck = async (vaultId: string, rvk: Uint8Array) => {
-    const payload = {
-      v: 1,
-      type: "sync-key-check",
-      vaultId,
-      createdAt: new Date().toISOString(),
-    }
-    const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(payload)))
-    const bytes = utf8ToBytes(JSON.stringify(envelope))
-    const sha256 = sha256Hex(bytes)
-    await fetchJson<{ ok: boolean }>(
-      `/v1/vaults/${vaultId}/blobs/sync-key-check-v1?sha256=${sha256}`,
-      {
-        method: "PUT",
-        headers: { "content-type": "application/octet-stream" },
-        body: bytes,
-      },
-    )
+    await putAndVerifySyncKeyCheck(vaultId, rvk)
   }
 
   const loadDevices = useCallback(async (vaultId: string) => {
     try {
       const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/devices`)
-      setDeviceCounts((prev) => ({ ...prev, [vaultId]: data.devices.length }))
-      setStatus(`Vault ${vaultId} devices: ${data.devices.length}`)
+    setDeviceCounts((prev) => {
+      const next = { ...prev, [vaultId]: data.devices.length }
+      if (__DEV__) console.log("[deviceCounts] set", { vaultId, count: data.devices.length, next })
+      return next
+    })
+          setStatus(`Vault ${vaultId} devices: ${data.devices.length}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load devices"
       setError(message)
@@ -162,7 +151,7 @@ export const VaultSwitcherScreen: FC<AppStackScreenProps<"VaultSwitcher">> = fun
               <Text style={themed($vaultId)}>{vault.id}</Text>
               <Text style={themed($metaText)}>Role: {vault.role ?? "member"}</Text>
               <Text style={themed($metaText)}>
-                Devices: {deviceCounts[vault.id] ?? "?"}
+                Devices: {deviceCounts[vault.id] ?? "1"}
               </Text>
             </View>
             <View style={themed($vaultActions)}>

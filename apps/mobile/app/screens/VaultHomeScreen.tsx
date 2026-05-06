@@ -32,21 +32,46 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
   const [syncStatus, setSyncStatus] = useState(() => getSyncStatus())
   const [tokenPresent, setTokenPresent] = useState(false)
   const [rvkPresent, setRvkPresent] = useState(false)
+  const unlocked = vaultSession.isUnlocked()
 
-  const activeVaultId = getRemoteVaultId()
-  const activeVaultName = getRemoteVaultName()
+
+  const [activeVaultId, setActiveVaultId] = useState<string | null>(() => getRemoteVaultId())
+  const [activeVaultName, setActiveVaultName] = useState<string | null>(() => getRemoteVaultName())
+
+  const refreshActiveVault = useCallback(() => {
+    setActiveVaultId(getRemoteVaultId())
+    setActiveVaultName(getRemoteVaultName())
+  }, [])
+
+
 
   const refreshNotes = useCallback(() => {
+    if (!vaultSession.isUnlocked()) {
+      console.log("[home] vault locked")
+      return
+    }
+
     const key = vaultSession.getKey()
-    if (!key) return
+    if (!key) {
+      console.log("[home] no vmk")
+      return
+    }
+
+    const vaultId = activeVaultId ?? null
+
     try {
-      setNotes(listNotesForVault(key, activeVaultId ?? null))
-      setLocalNotes(listNotesForVault(key, null))
+      const vaultNotes = listNotesForVault(key, activeVaultId ?? null)
+      const localOnly = listNotesForVault(key, null)
+      console.log("[home] vaultNotes:", vaultNotes.length, "localNotes:", localOnly.length)
+      setNotes(vaultNotes)
+      setLocalNotes(localOnly)
       setError(null)
-    } catch {
+    } catch (e) {
+      console.log("[home] list error", e)
       setError("Vault data error")
     }
   }, [activeVaultId])
+
 
   const refreshMeta = useCallback(async () => {
     const meta = getMeta()
@@ -77,6 +102,7 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
         navigation.replace("VaultLocked")
         return
       }
+      refreshActiveVault()
       refreshNotes()
       refreshMeta()
       refreshSyncPrereqs().catch(() => undefined)
@@ -90,6 +116,9 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
           navigation.replace("VaultLocked")
         }
       })
+      refreshActiveVault()
+      refreshNotes()
+      refreshSyncPrereqs().catch(() => undefined)
       return () => sub.remove()
     }, [navigation]),
   )
@@ -105,25 +134,38 @@ export const VaultHomeScreen: FC<AppStackScreenProps<"VaultHome">> = function Va
     return () => clearInterval(timer)
   }, [])
 
+
   const syncReason = useMemo(() => {
     if (!activeVaultId) return "Select a remote vault"
     if (!tokenPresent) return "Link device"
-    if (!vaultSession.isUnlocked()) return "Unlock vault"
+    if (!unlocked) return "Unlock vault"
     if (!rvkPresent) return "Create sync key"
     return null
-  }, [activeVaultId, tokenPresent, rvkPresent])
+  }, [activeVaultId, tokenPresent, rvkPresent, unlocked])
 
   const handleSyncNow = async () => {
     if (syncReason) return
+
+    setError(null)
+
     try {
-      await syncNow()
-      setSyncStatus(getSyncStatus())
+      const result = await syncNow()
+
+      if (result.errors.length > 0) {
+        setError(`Sync completed with ${result.errors.length} error(s): ${result.errors[0].type}`)
+      }
+
+      // ✅ IMPORTANT: re-read from storage after pull wrote notes
+      refreshNotes()
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sync failed"
       setError(message)
+    } finally {
       setSyncStatus(getSyncStatus())
     }
   }
+
+  
 
   const handleLock = () => {
     vaultSession.clear()

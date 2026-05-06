@@ -17,12 +17,13 @@ import { sha256Hex } from "@/locker/crypto/sha"
 import { bytesToUtf8, utf8ToBytes } from "@/locker/crypto/encoding"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { getSyncStatus, setNetworkOnline, syncNow } from "@/locker/sync/syncEngine"
-import { clearNoteRemoteMeta, getState, setLastCursor, setOutbox } from "@/locker/sync/syncStateRepo"
+import { clearNoteRemoteMeta, clearTombstonesForVault, getState, setLastCursor, setOutbox } from "@/locker/sync/syncStateRepo"
 import { clearRemoteVaultKey, getRemoteVaultKey, setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { randomBytes } from "@/locker/crypto/random"
 import { decryptBlobBytesToJson, encryptJsonToBlobBytes } from "@/locker/sync/remoteCodec"
 import { listNoteIds } from "@/locker/storage/notesRepo"
 import type { DeviceDTO } from "@locker/types"
+import { putAndVerifySyncKeyCheck } from "@/locker/sync/syncKeyCheck"
 
 const BLOB_ID = "vault-meta-v1"
 const SYNC_KEY_CHECK_BLOB_ID = "sync-key-check-v1"
@@ -48,14 +49,6 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
   const vaultId = getRemoteVaultId()
   const vaultName = getRemoteVaultName()
   const vmk = vaultSession.getKey()
-const canCreateSyncKey =
-  !!vaultId &&
-  !!tokenPresent &&
-  !!vmk &&
-  !offline &&
-  !rvkPresent
-
-
 
 
   const refreshPrereqs = useCallback(async () => {
@@ -63,7 +56,7 @@ const canCreateSyncKey =
     setTokenPresent(!!token)
     if (vaultId) {
       const rvk = await getRemoteVaultKey(vaultId)
-      setRvkPresent(!!rvk)
+      setRvkPresent(!!rvk && rvk.length === 32)
     } else {
       setRvkPresent(false)
     }
@@ -121,55 +114,147 @@ const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/de
     return null
   }, [vaultId, rvkPresent])
 
-  
-
+  const canCreateSyncKey = !!vaultId && tokenPresent && !!vmk && !offline
   const handleCreateSyncKey = async () => {
-    if (rvkPresent) return
     if (!vaultId) return
     setError(null)
     setStatus(null)
     try {
-      const rvk = randomBytes(32)
-      await setRemoteVaultKey(vaultId, rvk)
-      await uploadSyncKeyCheck(vaultId, rvk)
+      const token = await getToken()
+      if (!token) throw new Error("Link device first")
+
+      let rvk = await getRemoteVaultKey(vaultId)
+      if (!rvk || rvk.length !== 32) {
+        rvk = randomBytes(32)
+        await setRemoteVaultKey(vaultId, rvk)
+      }
+
+      await putAndVerifySyncKeyCheck(vaultId, rvk, { deviceId: account?.device.id ?? "unknown" })
       setRvkPresent(true)
-      setStatus("Sync key created for this vault")
+      setStatus("Sync key initialized for this vault")
+      await refreshPrereqs()
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create sync key"
       setError(message)
     }
   }
 
-  const uploadSyncKeyCheck = async (id: string, rvk: Uint8Array) => {
-    const payload = {
-      v: 1,
-      type: "sync-key-check",
-      vaultId: id,
-      createdAt: new Date().toISOString(),
-      deviceId: account?.device.id ?? "unknown",
+
+
+  // const uploadSyncKeyCheck = async (id: string, rvk: Uint8Array) => {
+  //   const payload = {
+  //     v: 1,
+  //     type: "sync-key-check",
+  //     vaultId: id,
+  //     createdAt: new Date().toISOString(),
+  //     deviceId: account?.device.id ?? "unknown",
+  //   }
+  //   const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(payload)))
+  //   const envelopeBytes = utf8ToBytes(JSON.stringify(envelope))
+  //   const sha256 = sha256Hex(envelopeBytes)
+  //   const token = await getToken()
+  //   if (!token) throw new Error("Link device first")
+
+  //   await fetchRaw(
+  //     `/v1/vaults/${id}/blobs/${SYNC_KEY_CHECK_BLOB_ID}?sha256=${sha256}`,
+  //     {
+  //       method: "PUT",
+  //       headers: {
+  //         "content-type": "application/octet-stream",
+  //         authorization: `Bearer ${token}`,
+  //       },
+  //       // IMPORTANT: send bytes, not JSON
+  //       body: envelopeBytes,
+  //     },
+  //     { token }, // if your fetchRaw supports token options; remove if it doesn't
+  //   )
+
+
+  // }
+
+  const handleInitSyncKeyCheck = async () => {
+    if (!vaultId) return
+    setError(null)
+    setStatus(null)
+    try {
+      const token = await getToken()
+      if (!token) throw new Error("Link device first")
+
+      let rvk = await getRemoteVaultKey(vaultId)
+      if (!rvk || rvk.length !== 32) {
+        // owner path: create RVK if missing
+        rvk = randomBytes(32)
+        await setRemoteVaultKey(vaultId, rvk)
+        setRvkPresent(true)
+      }
+
+      await putAndVerifySyncKeyCheck(vaultId, rvk, { deviceId: account?.device.id ?? "unknown" })
+      setStatus("Sync key check initialized. You can sync now.")
+      await refreshPrereqs()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Init failed"
+      setError(msg)
     }
-    const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(payload)))
-    const envelopeBytes = utf8ToBytes(JSON.stringify(envelope))
-    const sha256 = sha256Hex(envelopeBytes)
-    const token = await getToken()
-    if (!token) throw new Error("Link device first")
-
-    await fetchRaw(
-      `/v1/vaults/${id}/blobs/${SYNC_KEY_CHECK_BLOB_ID}?sha256=${sha256}`,
-      {
-        method: "PUT",
-        headers: {
-          "content-type": "application/octet-stream",
-          authorization: `Bearer ${token}`,
-        },
-        // IMPORTANT: send bytes, not JSON
-        body: envelopeBytes,
-      },
-      { token }, // if your fetchRaw supports token options; remove if it doesn't
-    )
-
-
   }
+
+
+  // const uploadSyncKeyCheck = async (id: string, rvk: Uint8Array) => {
+  //   const token = await getToken()
+  //   if (!token) throw new Error("Link device first")
+
+  //   const payload = {
+  //     v: 1,
+  //     type: "sync-key-check",
+  //     vaultId: id,
+  //     createdAt: new Date().toISOString(),
+  //     deviceId: account?.device.id ?? "unknown",
+  //   }
+
+  //   // NOTE: remote boundary => RVK encrypt
+  //   const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(payload)))
+
+  //   // IMPORTANT: send bytes of JSON(envelope) as octet-stream
+  //   const bodyBytes = utf8ToBytes(JSON.stringify(envelope))
+  //   const sha256 = sha256Hex(bodyBytes)
+
+  //   await fetchRaw(
+  //     `/v1/vaults/${id}/blobs/${SYNC_KEY_CHECK_BLOB_ID}?sha256=${sha256}`,
+  //     {
+  //       method: "PUT",
+  //       headers: { "content-type": "application/octet-stream" },
+  //       body: bodyBytes as any,
+  //     },
+  //     { token },
+  //   )
+  //   // await fetchRaw(
+  //   //   `/v1/vaults/${id}/blobs/${SYNC_KEY_CHECK_BLOB_ID}?sha256=${sha256}`,
+  //   //   {
+  //   //     method: "PUT",
+  //   //     headers: { "content-type": "application/octet-stream" },
+  //   //     body: bodyBytes as any,
+  //   //   },
+  //   //   { token },
+  //   // )
+
+  //   // Verify immediately (this catches wrong vault / wrong baseUrl / wrong auth)
+  //   const verifyBytes = await fetchRaw(
+  //     `/v1/vaults/${id}/blobs/${SYNC_KEY_CHECK_BLOB_ID}`,
+  //     {},
+  //     { token },
+  //   )
+
+  //   // Must decrypt with RVK
+  //   const verifyPayload = decryptBlobBytesToJson<any>(rvk, verifyBytes)
+  //   if (verifyPayload?.type !== "sync-key-check" || verifyPayload?.vaultId !== id) {
+  //     throw new Error("Sync key check verification failed after upload.")
+  //   }
+  // }
+
+
+
+
+  
+
 
   const handleUploadMeta = async () => {
     setError(null)
@@ -265,7 +350,11 @@ const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/de
     setStatus(null)
     try {
       const result = await syncNow()
-      setStatus(`Sync complete: pushed ${result.pushed}, pulled ${result.pulled}, conflicts ${result.conflicts}`)
+      if (result.errors.length > 0) {
+        setStatus(`Sync complete with ${result.errors.length} error(s): ${result.errors[0].type}`)
+      } else {
+        setStatus(`Sync complete: pushed ${result.pushed}, pulled ${result.pulled}, conflicts ${result.conflicts}`)
+      }
       setSyncStatus(getSyncStatus())
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sync failed"
@@ -361,16 +450,11 @@ const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/de
           }
           const newBytes = encryptJsonToBlobBytes(rvk, payload)
           const sha256 = sha256Hex(newBytes)
-          const token = await getToken()
-if (!token) throw new Error("Link device first")
-          await fetchRaw(
+          await fetchJson<{ ok: boolean }>(
             `/v1/vaults/${vaultId}/blobs/${change.blobId}?sha256=${sha256}`,
             {
               method: "PUT",
-              headers: {
-                "content-type": "application/octet-stream",
-                authorization: `Bearer ${token}`,
-              },
+              headers: { "content-type": "application/octet-stream" },
               body: newBytes,
             },
           )
@@ -409,6 +493,7 @@ if (!token) throw new Error("Link device first")
     if (!vaultId) return
     setLastCursor(0)
     setOutbox([])
+    clearTombstonesForVault(vaultId)
     listNoteIds(vaultId).forEach((id) => clearNoteRemoteMeta(id))
     setStatus("Local sync state cleared")
   }
@@ -557,6 +642,7 @@ if (!token) throw new Error("Link device first")
           <Text style={themed($metaText)}>Last cursor: {getState().lastCursor}</Text>
           <Text style={themed($metaText)}>Queue size: {getState().outbox.length}</Text>
           <Text style={themed($metaText)}>Last sync: {getState().lastSyncAt ?? "n/a"}</Text>
+          <Text style={themed($metaText)}>API base: {apiBaseUrl}</Text>
           <Pressable style={themed($secondaryButton)} onPress={handleReencryptRemote}>
             <Text preset="bold" style={themed($secondaryButtonText)}>
               Re-encrypt Remote with Sync Key
