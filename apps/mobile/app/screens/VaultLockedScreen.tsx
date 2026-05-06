@@ -1,4 +1,4 @@
-import { FC, useCallback, useEffect, useState } from "react";
+import { FC, useCallback, useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Pressable,
@@ -32,7 +32,7 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> =
     const { navigation } = props;
     const { themed } = useAppTheme();
     const $insets = useSafeAreaInsetsStyle(["top", "bottom"]);
-
+const didAutoPromptPasskey = useRef(false)
     const [metaVersion, setMetaVersion] = useState<1 | 2 | null>(null);
     const [passkeyReady, setPasskeyReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -73,8 +73,8 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> =
       return () => subscription.remove();
     }, []);
 
-    const handlePasskey = async () => {
-      setError(null);
+const handlePasskey = useCallback(async () => {
+        setError(null);
       setAuthenticating(true);
       const meta = getMeta();
       if (!meta) {
@@ -126,7 +126,18 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> =
       } finally {
         setAuthenticating(false);
       }
-    };
+    }, [navigation, passkeyReady])
+
+
+    useEffect(() => {
+  if (didAutoPromptPasskey.current) return
+  if (!passkeyReady) return
+  if (authenticating) return
+
+  didAutoPromptPasskey.current = true
+  void handlePasskey()
+}, [passkeyReady, authenticating, handlePasskey])
+
 
     return (
       <Screen
