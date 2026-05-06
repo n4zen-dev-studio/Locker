@@ -6,6 +6,7 @@ import { base64ToBytes, bytesToBase64 } from "@/locker/crypto/encoding"
 import { sha256Hex } from "@/locker/crypto/sha"
 import { fetchJson, fetchRaw, getApiBaseUrl } from "@/locker/net/apiClient"
 import { clearRemoteVaultKey, getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
+import { fetchAndInstallVaultKeyEnvelope } from "@/locker/keys/userKeyApi"
 import {
   getOutbox,
   getState,
@@ -136,7 +137,13 @@ export async function syncNow(): Promise<{ pushed: number; pulled: number; confl
   if (!vmk) {
     throw new Error("Vault is locked")
   }
-  const rvk = await getRemoteVaultKey(vaultId)
+  let rvk = await getRemoteVaultKey(vaultId)
+  if (!rvk || rvk.length !== 32) {
+    const refreshed = await fetchAndInstallVaultKeyEnvelope(vaultId)
+    if (refreshed && refreshed.length === 32) {
+      rvk = refreshed
+    }
+  }
   if (!rvk || rvk.length !== 32) {
     throw new Error("Sync key missing on this device. Pair this device to receive the sync key.")
   }
@@ -145,7 +152,7 @@ export async function syncNow(): Promise<{ pushed: number; pulled: number; confl
 
 
 
-  await ensureSyncKeyCheck(vaultId, token, rvk)
+  rvk = await ensureSyncKeyCheckWithRefresh(vaultId, token, rvk)
 
 
   status = { state: "syncing" }
@@ -224,9 +231,29 @@ async function ensureSyncKeyCheck(vaultId: string, token: string, rvk: Uint8Arra
     }
   } catch (err) {
     if (isUnauthorized(err)) throw new Error("Session expired. Please link again.")
-    if (isForbidden(err)) throw new Error("No access to this vault.")
+    if (isForbidden(err)) throw new Error("Access revoked for this vault.")
     if (isNotFound(err)) {
       throw new Error("Sync key not initialized for this vault. Create sync key on the owner device.")
+    }
+    throw err
+  }
+}
+
+async function ensureSyncKeyCheckWithRefresh(
+  vaultId: string,
+  token: string,
+  rvk: Uint8Array,
+): Promise<Uint8Array> {
+  try {
+    await ensureSyncKeyCheck(vaultId, token, rvk)
+    return rvk
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Wrong sync key")) {
+      const refreshed = await fetchAndInstallVaultKeyEnvelope(vaultId)
+      if (refreshed && refreshed.length === 32) {
+        await ensureSyncKeyCheck(vaultId, token, refreshed)
+        return refreshed
+      }
     }
     throw err
   }

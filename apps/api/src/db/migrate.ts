@@ -78,6 +78,36 @@ export function runMigrations(db: Database.Database): void {
       PRIMARY KEY (userId, type)
     );
 
+    CREATE TABLE IF NOT EXISTS user_keys (
+      userId TEXT PRIMARY KEY,
+      alg TEXT NOT NULL,
+      publicKey TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      rotatedAt TEXT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS vault_invites (
+      id TEXT PRIMARY KEY,
+      vaultId TEXT NOT NULL,
+      inviterUserId TEXT NOT NULL,
+      inviteeEmail TEXT NOT NULL,
+      role TEXT NOT NULL,
+      status TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      acceptedAt TEXT NULL,
+      revokedAt TEXT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS vault_key_envelopes (
+      id TEXT PRIMARY KEY,
+      vaultId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      alg TEXT NOT NULL,
+      envelopeB64 TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      UNIQUE(vaultId, userId)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_blobs_vault_created ON blobs (vaultId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_changes_vault_id ON changes (vaultId, id);
   `)

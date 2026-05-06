@@ -21,6 +21,44 @@ export type VaultDTO = {
   role?: string
 }
 
+export type UserKeyDTO = {
+  userId: string
+  alg: string
+  publicKey: string
+  createdAt: string
+  rotatedAt?: string | null
+}
+
+export type VaultInviteDTO = {
+  id: string
+  vaultId: string
+  vaultName?: string
+  inviterUserId: string
+  inviterEmail?: string | null
+  inviteeEmail: string
+  role: string
+  status: string
+  createdAt: string
+  acceptedAt?: string | null
+  revokedAt?: string | null
+}
+
+export type VaultMemberDTO = {
+  userId: string
+  email?: string | null
+  role: string
+  createdAt: string
+}
+
+export type VaultKeyEnvelopeDTO = {
+  id?: string
+  vaultId?: string
+  userId: string
+  alg: string
+  envelopeB64?: string
+  createdAt?: string
+}
+
 export type BlobRefDTO = {
   id: string
   vaultId: string

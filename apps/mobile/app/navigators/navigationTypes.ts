@@ -30,6 +30,8 @@ export type AppStackParamList = {
   RemoteVault: undefined
   VaultPairDevice: undefined
   VaultImportPairing: undefined
+  VaultShare: undefined
+  VaultInvites: undefined
   ServerUrl: undefined
   Welcome: undefined
   Login: undefined

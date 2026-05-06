@@ -66,8 +66,8 @@ export const VaultSettingsScreen: FC<AppStackScreenProps<"VaultSettings">> = fun
     if (!vaultId) return
     try {
       const token = await getToken()
-if (!token) return
-const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/devices`, {}, { token })
+      if (!token) return
+      const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/devices`, {}, { token })
 
       // const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/devices`)
       setDeviceCount(data.devices.length)
@@ -588,6 +588,22 @@ const data = await fetchJson<{ devices: DeviceDTO[] }>(`/v1/vaults/${vaultId}/de
         <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultImportPairing")}>
           <Text preset="bold" style={themed($secondaryButtonText)}>
             Import Pairing (Paste)
+          </Text>
+        </Pressable>
+      </View>
+
+      <View style={themed($card)}>
+        <Text preset="bold" style={themed($sectionTitle)}>
+          Vault Sharing
+        </Text>
+        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultShare")}>
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            Manage Members
+          </Text>
+        </Pressable>
+        <Pressable style={themed($secondaryButton)} onPress={() => navigation.navigate("VaultInvites")}>
+          <Text preset="bold" style={themed($secondaryButtonText)}>
+            View Invites
           </Text>
         </Pressable>
       </View>

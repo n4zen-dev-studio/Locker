@@ -187,6 +187,66 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       reply.send({ notes: rows.map((row) => row.id) })
     }
   )
+
+  app.get(
+    "/v1/vaults/:vaultId/members",
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const user = request.user!
+      const { vaultId } = request.params as { vaultId: string }
+      const db = getDb()
+
+      const member = db.prepare(
+        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
+      ).get(vaultId, user.id) as { role?: string } | undefined
+
+      if (!member) {
+        reply.code(403).send({ error: "Forbidden" })
+        return
+      }
+
+      const rows = db.prepare(
+        `SELECT vm.userId, u.email, vm.role, vm.createdAt
+         FROM vault_members vm
+         LEFT JOIN users u ON u.id = vm.userId
+         WHERE vm.vaultId = ?
+         ORDER BY vm.createdAt ASC`
+      ).all(vaultId)
+
+      reply.send({ members: rows })
+    }
+  )
+
+  app.delete(
+    "/v1/vaults/:vaultId/members/:userId",
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const user = request.user!
+      const { vaultId, userId } = request.params as { vaultId: string; userId: string }
+      const db = getDb()
+
+      const member = db.prepare(
+        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
+      ).get(vaultId, user.id) as { role?: string } | undefined
+
+      if (!member || member.role !== "owner") {
+        reply.code(403).send({ error: "Forbidden" })
+        return
+      }
+
+      const now = new Date().toISOString()
+      const tx = db.transaction(() => {
+        db.prepare("DELETE FROM vault_members WHERE vaultId = ? AND userId = ?")
+          .run(vaultId, userId)
+        db.prepare("INSERT INTO changes (vaultId, type, blobId, createdAt) VALUES (?, ?, ?, ?)")
+          .run(vaultId, "vault_meta", null, now)
+      })
+
+      tx()
+
+      reply.send({ ok: true })
+    }
+  )
 }
 
 async function deleteVaultBlobFolder(vaultId: string): Promise<void> {
