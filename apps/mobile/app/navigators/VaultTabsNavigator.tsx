@@ -35,6 +35,7 @@ import type {
 } from "@/navigators/navigationTypes";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 import { Home, Settings, Shield } from "lucide-react-native";
+import * as Haptics from "expo-haptics"
 
 const Tabs = createBottomTabNavigator<VaultTabsParamList>();
 const VaultStack = createNativeStackNavigator<VaultStackParamList>();
@@ -249,6 +250,13 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 const pressTime = nowMs();
                 lastPressRef.current = { name: route.name, time: pressTime };
                 logTabs(`press ${route.name} at ${pressTime.toFixed(1)}`);
+
+                 if (!isFocused) {
+                    void Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Confirm)
+                  } else {
+                    // optional: softer feedback if tapping active tab
+                    void Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Context_Click)
+                  }
 
                 if (isFocused) return;
 

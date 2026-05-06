@@ -27,6 +27,9 @@ import Animated, {
   FadeIn,
   FadeInDown,
   FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
 
@@ -74,6 +77,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { GlowFab } from "@/components/GlowFab";
 import { spacing } from "@/theme/spacing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RefreshCw } from "lucide-react-native";
 
 function nowMs() {
   return globalThis.performance?.now?.() ?? Date.now();
@@ -119,6 +123,12 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
     const lastNotesRefreshRef = useRef(0);
     const renderCountRef = useRef(0);
 
+    const rotate = useSharedValue(0)
+
+const animatedStyle = useAnimatedStyle(() => ({
+  transform: [{ rotate: `${rotate.value}deg` }],
+}))
+
     if (__DEV__) {
       renderCountRef.current += 1;
       console.log("[VaultHome] render", renderCountRef.current);
@@ -143,8 +153,18 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
     const [reducedMotion, setReducedMotion] = useState(false);
     const [vaultSectionY, setVaultSectionY] = useState(0);
     const unlocked = vaultSession.isUnlocked();
-    const scrollEnabled = true;
+    const [scrollEnabled, setScrollEnabled] = useState(false)
 
+    const onScroll = (e) => {
+      const y = e.nativeEvent.contentOffset.y
+
+      if (y > 200) { // your threshold
+        setScrollEnabled(true)
+      }else {
+        setScrollEnabled(false)
+
+      }
+    }
     const [activeVaultId, setActiveVaultId] = useState<string | null>(() =>
       getRemoteVaultId(),
     );
@@ -350,7 +370,19 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
     }, [activeVaultId, rvkPresent, tokenPresent, unlocked]);
 
     const handleSyncNow = useCallback(async () => {
-      if (syncReason) return;
+        rotate.value = 0
+
+rotate.value = withTiming(
+    360,
+    {
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+    },
+    () => {
+      rotate.value = 0
+    }
+  )
+        if (syncReason) return;
 
       setError(null);
       setRefreshing(true);
@@ -377,6 +409,8 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
     const handleLock = useCallback(() => {
       vaultSession.clear();
     }, []);
+
+    
 
     const handleDisablePasskey = useCallback(async () => {
       await disablePasskeyDevOnly();
@@ -594,6 +628,7 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
         contentContainerStyle={themed([$screen, ])}
         keyboardAvoidingEnabled={false}
         systemBarStyle="light"
+        
       >
         <VaultHubBackground active={isFocused} reducedMotion={true} />
         <ScrollView
@@ -601,18 +636,21 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
           bounces={false}
           overScrollMode="never"
           scrollEnabled={scrollEnabled}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+                
           contentContainerStyle={themed([
             $content,
             { paddingBottom: spacing.xl * 3 + safeInsets.bottom },
             $insets,
           ])}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleSyncNow}
-              enabled={!scrollEnabled}
-            />
-          }
+          // refreshControl={
+          //   <RefreshControl
+          //     refreshing={refreshing}
+          //     onRefresh={handleSyncNow}
+          //     enabled={!scrollEnabled}
+          //   />
+          // }
           showsVerticalScrollIndicator={false}
         >
           <Animated.View
@@ -683,32 +721,45 @@ const VaultNotesHomeScreenComponent: FC<VaultStackScreenProps<"VaultHome">> =
           </View> */}
             {availableVaults.length > 1 ? (
               <View style={themed($vaultSwitcher)}>
-                {[...availableVaults]
-                  .sort((a, b) => {
-                    if ((a.name ?? "").toLowerCase() === "personal") return -1;
-                    if ((b.name ?? "").toLowerCase() === "personal") return 1;
-                    return 0;
-                  })
-                  .map((vault) => (
-                    <Pressable
-                      key={vault.id}
-                      style={themed([
-                        $vaultChip,
-                        activeVaultId === vault.id && $vaultChipActive,
-                      ])}
-                      onPress={() => handleSwitchVault(vault.id, vault.name)}
-                    >
-                      <Text
-                        style={themed([
-                          $vaultChipText,
-                          activeVaultId === vault.id && $vaultChipTextActive,
-                        ])}
-                      >
-                        {vault.name ?? "Vault"}
-                      </Text>
-                    </Pressable>
-                  ))}
-              </View>
+  {[...availableVaults]
+    .sort((a, b) => {
+      if ((a.name ?? "").toLowerCase() === "personal") return -1
+      if ((b.name ?? "").toLowerCase() === "personal") return 1
+      return 0
+    })
+    .map((vault) => (
+      <Pressable
+        key={vault.id}
+        style={themed([
+          $vaultChip,
+          activeVaultId === vault.id && $vaultChipActive,
+        ])}
+        onPress={() => handleSwitchVault(vault.id, vault.name)}
+      >
+        <Text
+          style={themed([
+            $vaultChipText,
+            activeVaultId === vault.id && $vaultChipTextActive,
+          ])}
+        >
+          {vault.name ?? "Vault"}
+        </Text>
+      </Pressable>
+    ))}
+
+  {/* 🔄 Refresh button */}
+      <Pressable
+      style={({ pressed }) => [
+        themed($vaultRefreshButton),
+        pressed && { opacity: 0.6, transform: [{ scale: 0.96 }] },
+      ]}
+          onPress={handleSyncNow}
+        >
+      <Animated.View style={animatedStyle}>
+        <RefreshCw size={18} color="#ffffffcc" />
+      </Animated.View>
+        </Pressable>
+      </View>
             ) : null}
           </Animated.View>
 
@@ -1161,3 +1212,16 @@ const $devButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 const $devText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.vaultHub.vaultHubMuted,
 });
+
+
+const $vaultRefreshButton: ThemedStyle<ViewStyle> = () => ({
+  marginLeft: 8,
+  paddingHorizontal: 12,
+  minHeight: 36,
+  borderRadius: 16,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(255,255,255,0.05)",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+})

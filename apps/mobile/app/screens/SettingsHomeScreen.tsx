@@ -214,7 +214,7 @@ const SettingsHomeScreenComponent: FC<
               />
             )}
 
-            {__DEV__ && (
+            {/* {__DEV__ && ( */}
               <ControlTile
                 label="Add Another Device"
                 caption="Link new device"
@@ -227,7 +227,7 @@ const SettingsHomeScreenComponent: FC<
                 }
                 onPress={() => navigation.navigate("VaultLinkDevice")}
               />
-            )}
+            {/* )} */}
 
             <ControlTile
               label="Entry Codes"

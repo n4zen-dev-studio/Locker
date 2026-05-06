@@ -8,11 +8,14 @@ import {
   ViewStyle,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
+  runOnJS,
   SharedValue,
   useAnimatedStyle,
   useSharedValue,
+  withDecay,
   withDelay,
   withSequence,
   withTiming,
@@ -31,6 +34,7 @@ import Svg, {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAppTheme } from "@/theme/context";
 import { ThemedStyle } from "@/theme/types";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 
 type VaultHeroOrbAction = {
   id: string;
@@ -58,7 +62,10 @@ const SATELLITE_RADIUS = SATELLITE_SIZE / 2;
 
 const CORE_SIZE = 152;
 const INNER_CORE_SIZE = 120;
-
+const DRAG_ROTATION_MULTIPLIER = 1.5;
+const RELEASE_VELOCITY_MULTIPLIER = 1.5;
+const ROTATION_DECELERATION = 0.998;
+const DRAG_TOUCH_SCALE = 1.03;
 const SLOT_LAYOUT = [
   { angle: -90, distance: 122 },
   { angle: -18, distance: 122 },
@@ -407,6 +414,10 @@ function SatelliteOrb({
     ],
   }));
 
+  const gradientUprightStyle = useAnimatedStyle(() => ({
+  transform: [{ rotate: `${-orbitRotation.value}rad` }],
+}));
+
   const handlePressIn = () => {
     if (isOrbitDraggingRef.current) return;
     press.value = withTiming(1, { duration: 100 });
@@ -452,6 +463,8 @@ function SatelliteOrb({
             { borderColor: palette.ring, shadowColor: palette.glow },
           ]}
         >
+          <Animated.View style={gradientUprightStyle}>
+
           <LinearGradient
             colors={[
               "rgba(241, 241, 241, 0.5)",
@@ -463,6 +476,8 @@ function SatelliteOrb({
             style={styles.satelliteShell}
           >
             </LinearGradient>
+            </Animated.View>
+<Animated.View style={[StyleSheet.absoluteFillObject, gradientUprightStyle]}>
             <LinearGradient
               colors={[palette.shellTop, palette.shellBottom]}
               start={{ x: 0.28, y: 0.40 }}
@@ -473,7 +488,7 @@ function SatelliteOrb({
                 pointerEvents="none"
                 style={[
                   styles.satelliteHighlightOverlay,
-                  highlightUprightStyle,
+                  // highlightUprightStyle,
                 ]}
               >
                 <View style={styles.satelliteTopHighlight} />
@@ -483,14 +498,15 @@ function SatelliteOrb({
                 <GlowBlob size={70} color={palette.glow} opacity={0.3} />
               </View> */}
 
-              <AnimatedView style={iconUprightStyle}>
+              {/* <AnimatedView style={iconUprightStyle}> */}
                 <MaterialCommunityIcons
                   name={ICON_MAP[action.icon]}
                   size={34}
                   color={palette.icon}
                 />
-              </AnimatedView>
+              {/* </AnimatedView> */}
             </LinearGradient>
+            </Animated.View>
           
         </View>
       </AnimatedView>
@@ -508,17 +524,53 @@ function useStableGradientId(prefix: string) {
 export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
   actions,
   reducedMotion = true,
+  active = true,
+  onOrbitDragStateChange,
 }) => {
+  // const isOrbitDraggingRef = useRef(false);
+  // const { theme, themed } = useAppTheme();
+
+  // const heroActions = useMemo(() => actions.slice(0, 5), [actions]);
+
+  // const connectorsIn = useSharedValue(reducedMotion ? 1 : 0);
+  // const orbitRotation = useSharedValue(0);
+
+  // const coreGradientId = useStableGradientId("vault-core");
+  // const bloomGradientId = useStableGradientId("vault-bloom");
+    const canvasRef = useRef<View>(null);
   const isOrbitDraggingRef = useRef(false);
+  const frameRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+  const [canvasCenter, setCanvasCenter] = React.useState({ x: 0, y: 0 });
   const { theme, themed } = useAppTheme();
 
   const heroActions = useMemo(() => actions.slice(0, 5), [actions]);
 
   const connectorsIn = useSharedValue(reducedMotion ? 1 : 0);
   const orbitRotation = useSharedValue(0);
+  const orbitTouchScale = useSharedValue(1);
+  const lastTouchAngle = useSharedValue(0);
+  const lastTouchTime = useSharedValue(0);
+  const angularVelocity = useSharedValue(0);
 
   const coreGradientId = useStableGradientId("vault-core");
   const bloomGradientId = useStableGradientId("vault-bloom");
+
+  const notifyOrbitDragState = (isDragging: boolean) => {
+    isOrbitDraggingRef.current = isDragging;
+    onOrbitDragStateChange?.(isDragging);
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (reducedMotion) return;
@@ -537,10 +589,99 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
   const orbitLayerStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${orbitRotation.value}rad` }],
   }));
+   const onCanvasLayout = () => {
+    if (!active) return;
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+    }
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null;
+      if (!active || !isMountedRef.current || !canvasRef.current) return;
+      try {
+        canvasRef.current.measureInWindow((x, y, width, height) => {
+          if (!isMountedRef.current || !active) return;
+          setCanvasCenter({
+            x: x + width / 2,
+            y: y + height / 2,
+          });
+        });
+      } catch (error) {
+        if (__DEV__) {
+          console.log("[vault-hero-orb] skipped stale measureInWindow", {
+            active,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    });
+  };
+  function normalizeAngleDelta(delta: number) {
+  "worklet";
+  if (delta > Math.PI) return delta - Math.PI * 2;
+  if (delta < -Math.PI) return delta + Math.PI * 2;
+  return delta;
+}
+    const orbitPanGesture = Gesture.Pan()
+    .minDistance(3)
+    .shouldCancelWhenOutside(false)
+    .onBegin((event) => {
+      cancelAnimation(orbitRotation);
+      orbitTouchScale.value = withTiming(DRAG_TOUCH_SCALE, { duration: 320 });
+      runOnJS(notifyOrbitDragState)(true);
+
+      const dx = event.absoluteX - canvasCenter.x;
+      const dy = event.absoluteY - canvasCenter.y;
+
+      lastTouchAngle.value = Math.atan2(dy, dx);
+      lastTouchTime.value = Date.now();
+      angularVelocity.value = 0;
+    })
+    .onUpdate((event) => {
+      const dx = event.absoluteX - canvasCenter.x;
+      const dy = event.absoluteY - canvasCenter.y;
+      const currentAngle = Math.atan2(dy, dx);
+
+      const delta = normalizeAngleDelta(currentAngle - lastTouchAngle.value);
+      if (!Number.isFinite(delta)) return;
+
+      orbitRotation.value += delta * DRAG_ROTATION_MULTIPLIER;
+
+      const now = Date.now();
+      const dt = Math.max((now - lastTouchTime.value) / 1000, 0.001);
+      const nextVelocity = (delta / dt) * DRAG_ROTATION_MULTIPLIER;
+
+      if (Number.isFinite(nextVelocity)) {
+        angularVelocity.value = nextVelocity;
+      }
+
+      lastTouchAngle.value = currentAngle;
+      lastTouchTime.value = now;
+    })
+    .onEnd(() => {
+      orbitTouchScale.value = withTiming(1, { duration: 320 });
+      runOnJS(notifyOrbitDragState)(false);
+
+      if (Number.isFinite(angularVelocity.value)) {
+        orbitRotation.value = withDecay({
+          velocity: angularVelocity.value * RELEASE_VELOCITY_MULTIPLIER,
+          deceleration: ROTATION_DECELERATION,
+        });
+      }
+    })
+    .onFinalize(() => {
+      orbitTouchScale.value = withTiming(1, { duration: 180 });
+      runOnJS(notifyOrbitDragState)(false);
+    });
 
   return (
+    <GestureHandlerRootView>
     <View style={styles.root}>
-      <View style={styles.canvas} collapsable={false}>
+      <GestureDetector gesture={orbitPanGesture}>
+          <View
+            ref={canvasRef}
+            style={styles.canvas}
+            onLayout={onCanvasLayout}
+     collapsable={false}>
         <View pointerEvents="none" style={styles.heroDotField}>
           <HeroDotField />
         </View>
@@ -749,7 +890,9 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
           </View>
         </View>
       </View>
+      </GestureDetector>
     </View>
+    </GestureHandlerRootView>
   );
 };
 
