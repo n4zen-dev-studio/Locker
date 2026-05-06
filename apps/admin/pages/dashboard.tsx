@@ -66,6 +66,32 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleDeleteVault(vaultId: string) {
+    if (!token) return
+    const confirmation = window.prompt("Type DELETE to confirm vault deletion")
+    if (confirmation !== "DELETE") return
+    try {
+      await api.request<{ ok: boolean }>(`/v1/vaults/${vaultId}`, { method: "DELETE" })
+      await loadVaults()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Delete vault failed"
+      setError(message)
+    }
+  }
+
+  async function handlePurgeVault(vaultId: string) {
+    if (!token) return
+    const confirmation = window.confirm("This permanently deletes all data. Continue?")
+    if (!confirmation) return
+    try {
+      await api.request<{ ok: boolean }>(`/v1/vaults/${vaultId}/purge`, { method: "DELETE" })
+      await loadVaults()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Purge vault failed"
+      setError(message)
+    }
+  }
+
   async function loadPasskeys() {
     if (!token) return
     const data = await api.request<{ passkeys: Passkey[] }>("/v1/me/passkeys")
@@ -179,8 +205,14 @@ export default function DashboardPage() {
         ) : (
           <ul>
             {vaults.map((vault) => (
-              <li key={vault.id}>
-                {vault.name} — {vault.id}
+              <li key={vault.id} style={{ marginBottom: 8 }}>
+                <div>{vault.name} — {vault.id}</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                  <button onClick={() => handleDeleteVault(vault.id)}>Delete Vault</button>
+                  {env.NEXT_PUBLIC_ADMIN_PURGE_ENABLED === "true" ? (
+                    <button onClick={() => handlePurgeVault(vault.id)}>Purge Vault</button>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>

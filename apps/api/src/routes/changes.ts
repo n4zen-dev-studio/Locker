@@ -16,6 +16,18 @@ export async function registerChangeRoutes(app: FastifyInstance) {
       const limit = Math.min(Number((request.query as { limit?: string }).limit ?? "50"), 200)
 
       const db = getDb()
+      const vault = db.prepare("SELECT deletedAt FROM vaults WHERE id = ?").get(vaultId) as
+        | { deletedAt?: string | null }
+        | undefined
+      if (!vault) {
+        reply.code(404).send({ error: "Not found" })
+        return
+      }
+      if (vault.deletedAt) {
+        reply.code(404).send({ error: "Vault deleted" })
+        return
+      }
+
       const member = db
         .prepare("SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?")
         .get(vaultId, user.id) as MemberRow | undefined

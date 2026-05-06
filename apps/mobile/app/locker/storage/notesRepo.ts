@@ -3,6 +3,10 @@ import { bytesToBase64, bytesToUtf8, utf8ToBytes } from "../crypto/encoding"
 import { randomBytes } from "../crypto/random"
 import { load, remove, save } from "@/utils/storage"
 import { VaultDataError } from "./errors"
+import { getAccount } from "./accountRepo"
+import { getRemoteVaultId } from "./remoteVaultRepo"
+import { getRemoteVaultKey } from "./remoteKeyRepo"
+import { enqueueDeleteNoteData, enqueueUpdateIndexData, enqueueUpsertNoteData } from "../sync/queue"
 
 const NOTES_LIST_KEY = "locker:notes:v1:list"
 const NOTE_KEY_PREFIX = "locker:notes:v1:note:"
@@ -13,12 +17,14 @@ export type Note = {
   body: string
   createdAt: string
   updatedAt: string
+  vaultId?: string | null
 }
 
 type NoteMeta = {
   id: string
   createdAt: string
   updatedAt: string
+  vaultId?: string | null
 }
 
 type EncryptedNoteRecord = {
@@ -27,6 +33,7 @@ type EncryptedNoteRecord = {
   updatedAt: string
   title: EnvelopeV1
   body: EnvelopeV1
+  vaultId?: string | null
 }
 
 export function listNotes(vmk: Uint8Array): Note[] {
@@ -42,11 +49,16 @@ export function listNotes(vmk: Uint8Array): Note[] {
         body: "",
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
+        vaultId: record.vaultId ?? null,
       }
     } catch {
       throw new VaultDataError()
     }
   })
+}
+
+export function listNotesForVault(vmk: Uint8Array, vaultId: string | null): Note[] {
+  return listNotes(vmk).filter((note) => (note.vaultId ?? null) === (vaultId ?? null))
 }
 
 export function getNote(id: string, vmk: Uint8Array): Note {
@@ -62,6 +74,7 @@ export function getNote(id: string, vmk: Uint8Array): Note {
       body,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
+      vaultId: record.vaultId ?? null,
     }
   } catch {
     throw new VaultDataError()
@@ -69,20 +82,26 @@ export function getNote(id: string, vmk: Uint8Array): Note {
 }
 
 export function saveNote(
-  input: { id?: string; title: string; body: string },
+  input: { id?: string; title: string; body: string; vaultId?: string | null },
   vmk: Uint8Array,
+  options?: { suppressSync?: boolean },
 ): Note {
   const now = new Date().toISOString()
   const existing = input.id ? load<EncryptedNoteRecord>(NOTE_KEY_PREFIX + input.id) : null
   const id = input.id ?? generateId()
+  const vaultId = input.vaultId ?? existing?.vaultId ?? null
 
-  const record: EncryptedNoteRecord = {
-    id,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-    title: encryptV1(vmk, utf8ToBytes(input.title)),
-    body: encryptV1(vmk, utf8ToBytes(input.body)),
-  }
+  const record: EncryptedNoteRecord = buildEncryptedRecord(
+    {
+      id,
+      title: input.title,
+      body: input.body,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      vaultId,
+    },
+    vmk,
+  )
 
   save(NOTE_KEY_PREFIX + id, record)
 
@@ -91,31 +110,96 @@ export function saveNote(
     id,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    vaultId,
   })
   save(NOTES_LIST_KEY, updatedMetas)
 
-  return {
+  const note = {
     id,
     title: input.title,
     body: input.body,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    vaultId,
   }
+
+  if (!options?.suppressSync) {
+    const deviceId = getAccount()?.device.id
+    const remoteVaultId = note.vaultId ?? getRemoteVaultId()
+    if (deviceId && remoteVaultId) {
+      void getRemoteVaultKey(remoteVaultId).then((rvk) => {
+        if (!rvk) return
+        enqueueUpsertNoteData(note, remoteVaultId, rvk, deviceId)
+        enqueueUpdateIndexData(listNoteIds(remoteVaultId), remoteVaultId, rvk, deviceId)
+      })
+    }
+  }
+
+  return note
 }
 
-export function deleteNote(id: string): void {
+export function saveNoteFromSync(note: Note, vmk: Uint8Array, vaultId?: string | null): void {
+  const withVault = { ...note, vaultId: vaultId ?? note.vaultId ?? null }
+  const record = buildEncryptedRecord(withVault, vmk)
+  save(NOTE_KEY_PREFIX + note.id, record)
+
+  const metas = load<NoteMeta[]>(NOTES_LIST_KEY) ?? []
+  const updatedMetas = upsertMeta(metas, {
+    id: note.id,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+    vaultId: record.vaultId ?? null,
+  })
+  save(NOTES_LIST_KEY, updatedMetas)
+}
+
+export function deleteNote(
+  id: string,
+  vmk?: Uint8Array,
+  options?: { suppressSync?: boolean },
+): void {
+  const record = load<EncryptedNoteRecord>(NOTE_KEY_PREFIX + id)
   remove(NOTE_KEY_PREFIX + id)
   const metas = load<NoteMeta[]>(NOTES_LIST_KEY) ?? []
   save(
     NOTES_LIST_KEY,
     metas.filter((meta) => meta.id !== id),
   )
+
+  if (!options?.suppressSync && vmk) {
+    const deviceId = getAccount()?.device.id
+    const remoteVaultId = record?.vaultId ?? getRemoteVaultId()
+    if (deviceId && remoteVaultId) {
+      const createdAt = record?.createdAt ?? new Date().toISOString()
+      void getRemoteVaultKey(remoteVaultId).then((rvk) => {
+        if (!rvk) return
+        enqueueDeleteNoteData(id, createdAt, remoteVaultId, rvk, deviceId)
+        enqueueUpdateIndexData(listNoteIds(remoteVaultId), remoteVaultId, rvk, deviceId)
+      })
+    }
+  }
 }
 
 export function resetNotes(): void {
   const metas = load<NoteMeta[]>(NOTES_LIST_KEY) ?? []
   metas.forEach((meta) => remove(NOTE_KEY_PREFIX + meta.id))
   remove(NOTES_LIST_KEY)
+}
+
+export function listNoteIds(vaultId?: string | null): string[] {
+  const metas = load<NoteMeta[]>(NOTES_LIST_KEY) ?? []
+  return metas.filter((meta) => (meta.vaultId ?? null) === (vaultId ?? null)).map((meta) => meta.id)
+}
+
+function buildEncryptedRecord(note: Note, vmk: Uint8Array): EncryptedNoteRecord {
+  return {
+    id: note.id,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+    title: encryptV1(vmk, utf8ToBytes(note.title)),
+    body: encryptV1(vmk, utf8ToBytes(note.body)),
+    vaultId: note.vaultId ?? null,
+  }
 }
 
 function upsertMeta(metas: NoteMeta[], next: NoteMeta): NoteMeta[] {
