@@ -1,5 +1,5 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react"
-import { Alert, AppState, Image, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
+import { Alert, AppState, Image, ImageStyle, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 import * as DocumentPicker from "expo-document-picker"
 import * as FileSystem from "expo-file-system"
@@ -11,7 +11,15 @@ import type { VaultStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
-import { deleteNote, getNote, listNoteIds, NoteAttachment, saveNote } from "@/locker/storage/notesRepo"
+import {
+  deleteNote,
+  getNote,
+  listNoteIds,
+  moveNoteToTrash,
+  NoteAttachment,
+  restoreNote,
+  saveNote,
+} from "@/locker/storage/notesRepo"
 import { getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
@@ -24,7 +32,19 @@ import { getAccount } from "@/locker/storage/accountRepo"
 import { requestSync } from "@/locker/sync/syncCoordinator"
 import { fetchJson, fetchRaw } from "@/locker/net/apiClient"
 import { getToken } from "@/locker/auth/tokenStore"
-import type { VaultMemberDTO } from "@locker/types"
+import {
+  DEFAULT_VAULT_CLASSIFICATION,
+  getVaultItemTypeFromMime,
+  VAULT_CLASSIFICATIONS,
+  VaultClassification,
+} from "@/locker/vault/types"
+
+type VaultMemberRecord = {
+  userId: string
+  role?: "owner" | "admin" | "editor" | "viewer"
+}
+
+const fileSystemCompat = FileSystem as any
 
 export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function VaultNoteScreen(
   props,
@@ -36,6 +56,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
   const [vaultId, setVaultId] = useState<string | null>(null)
+  const [classification, setClassification] = useState<VaultClassification>(DEFAULT_VAULT_CLASSIFICATION)
+  const [deletedAt, setDeletedAt] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<NoteAttachment[]>([])
   const [attachmentStates, setAttachmentStates] = useState<Record<string, AttachmentUiState>>({})
   const [role, setRole] = useState<"owner" | "admin" | "editor" | "viewer" | "unknown">("unknown")
@@ -44,6 +66,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   const noteId = route.params?.noteId
   const canAddAttachments = role !== "viewer"
+  const attachmentScope = vaultId ?? LOCAL_ATTACHMENT_SCOPE
 
   const loadNote = useCallback(() => {
     const key = vaultSession.getKey()
@@ -53,6 +76,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       setTitle(note.title)
       setBody(note.body)
       setVaultId(note.vaultId ?? null)
+      setClassification(note.classification ?? DEFAULT_VAULT_CLASSIFICATION)
+      setDeletedAt(note.deletedAt ?? null)
       setAttachments(note.attachments ?? [])
       setIsExisting(true)
       setError(null)
@@ -88,6 +113,8 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       setTitle("")
       setBody("")
       setVaultId(getRemoteVaultId())
+      setClassification(DEFAULT_VAULT_CLASSIFICATION)
+      setDeletedAt(null)
       setAttachments([])
       setError(null)
     }
@@ -96,11 +123,42 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
   const handleSave = () => {
     const key = vaultSession.getKey()
     if (!key) return
-    const saved = saveNote({ id: noteId, title: title.trim(), body, vaultId, attachments }, key)
+    const saved = saveNote(
+      { id: noteId, title: title.trim(), body, classification, deletedAt, vaultId, attachments },
+      key,
+    )
     navigation.replace("VaultNote", { noteId: saved.id })
   }
 
-  const handleDelete = () => {
+  const handleMoveToTrash = () => {
+    if (!noteId) return
+    const key = vaultSession.getKey()
+    if (!key) return
+    try {
+      const saved = moveNoteToTrash(noteId, key)
+      if (!saved) return
+      setDeletedAt(saved.deletedAt ?? null)
+      setError(null)
+    } catch {
+      setError("Failed to move note to trash")
+    }
+  }
+
+  const handleRestore = () => {
+    if (!noteId) return
+    const key = vaultSession.getKey()
+    if (!key) return
+    try {
+      const saved = restoreNote(noteId, key)
+      if (!saved) return
+      setDeletedAt(saved.deletedAt ?? null)
+      setError(null)
+    } catch {
+      setError("Failed to restore note")
+    }
+  }
+
+  const handlePermanentDelete = () => {
     if (!noteId) return
     const key = vaultSession.getKey()
     deleteNote(noteId, key ?? undefined)
@@ -118,7 +176,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       return
     }
     try {
-      const data = await fetchJson<{ members: VaultMemberDTO[] }>(`/v1/vaults/${vaultId}/members`)
+      const data = await fetchJson<{ members: VaultMemberRecord[] }>(`/v1/vaults/${vaultId}/members`)
       const member = data.members?.find((m) => m.userId === account.user.id)
       setRole((member?.role as any) || "unknown")
     } catch {
@@ -128,14 +186,23 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   const downloadAttachment = useCallback(
     async (att: NoteAttachment, options?: { silent?: boolean }) => {
-      if (!vaultId) return
-      const rvk = await getRemoteVaultKey(vaultId)
-      if (!rvk) {
-        if (!options?.silent) setError("Missing RVK for this vault")
+      const key = vaultId ? await getRemoteVaultKey(vaultId) : vaultSession.getKey()
+      if (!key) {
+        if (!options?.silent) setError("Missing attachment key")
         return
       }
       setAttachmentStates((prev) => ({ ...prev, [att.id]: { status: "downloading" } }))
       try {
+        if (!vaultId) {
+          const bytes = await readEncryptedAttachment(attachmentScope, att.id)
+          if (!bytes) throw new Error("Attachment not cached")
+          const payload = parseAttachmentBlobBytes(bytes, key)
+          const dataUri = payload.mime.startsWith("image/")
+            ? `data:${payload.mime};base64,${bytesToBase64(payload.fileBytes)}`
+            : undefined
+          setAttachmentStates((prev) => ({ ...prev, [att.id]: { status: "ready", dataUri } }))
+          return
+        }
         const token = await getToken()
         if (!token) throw new Error("Link device first")
         const bytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${att.blobId}`, {}, { token })
@@ -146,10 +213,10 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           }))
           return
         }
-        await writeEncryptedAttachment(vaultId, att.id, bytes)
+        await writeEncryptedAttachment(attachmentScope, att.id, bytes)
         let payload: ReturnType<typeof parseAttachmentBlobBytes> | null = null
         try {
-          payload = parseAttachmentBlobBytes(bytes, rvk)
+          payload = parseAttachmentBlobBytes(bytes, key)
         } catch {
           setAttachmentStates((prev) => ({
             ...prev,
@@ -174,29 +241,29 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         if (!options?.silent) setError(message)
       }
     },
-    [vaultId],
+    [attachmentScope, vaultId],
   )
 
   const refreshAttachmentStates = useCallback(async () => {
-    if (!vaultId || attachments.length === 0) return
-    const rvk = await getRemoteVaultKey(vaultId)
-    if (!rvk) return
+    if (attachments.length === 0) return
+    const key = vaultId ? await getRemoteVaultKey(vaultId) : vaultSession.getKey()
+    if (!key) return
 
     let cancelled = false
 
     const run = async () => {
       for (const att of attachments) {
         if (cancelled) return
-        const cached = await hasEncryptedAttachment(vaultId, att.id)
+        const cached = await hasEncryptedAttachment(attachmentScope, att.id)
         if (!cached) {
-          if (att.sizeBytes <= AUTO_DOWNLOAD_MAX_BYTES) {
+          if (vaultId && att.sizeBytes <= AUTO_DOWNLOAD_MAX_BYTES) {
             void downloadAttachment(att, { silent: true })
           }
           continue
         }
 
         try {
-          const bytes = await readEncryptedAttachment(vaultId, att.id)
+          const bytes = await readEncryptedAttachment(attachmentScope, att.id)
           if (!bytes) continue
           if (att.sha256 && sha256Hex(bytes) !== att.sha256) {
             setAttachmentStates((prev) => ({
@@ -205,7 +272,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
             }))
             continue
           }
-          const payload = parseAttachmentBlobBytes(bytes, rvk)
+          const payload = parseAttachmentBlobBytes(bytes, key)
           if (payload.attId !== att.id) {
             setAttachmentStates((prev) => ({
               ...prev,
@@ -233,7 +300,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     return () => {
       cancelled = true
     }
-  }, [attachments, vaultId, downloadAttachment])
+  }, [attachmentScope, attachments, vaultId, downloadAttachment])
 
   useFocusEffect(
     useCallback(() => {
@@ -247,19 +314,19 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
 
   const openAttachment = useCallback(
     async (att: NoteAttachment) => {
-      if (!vaultId) return
-      const rvk = await getRemoteVaultKey(vaultId)
-      if (!rvk) {
-        setError("Missing RVK for this vault")
+      const key = vaultId ? await getRemoteVaultKey(vaultId) : vaultSession.getKey()
+      if (!key) {
+        setError("Missing attachment key")
         return
       }
       try {
-        let bytes = await readEncryptedAttachment(vaultId, att.id)
+        let bytes = await readEncryptedAttachment(attachmentScope, att.id)
         if (!bytes) {
+          if (!vaultId) throw new Error("Attachment not cached on this device")
           const token = await getToken()
           if (!token) throw new Error("Link device first")
           bytes = await fetchRaw(`/v1/vaults/${vaultId}/blobs/${att.blobId}`, {}, { token })
-          await writeEncryptedAttachment(vaultId, att.id, bytes)
+          await writeEncryptedAttachment(attachmentScope, att.id, bytes)
         }
         if (att.sha256 && sha256Hex(bytes) !== att.sha256) {
           setAttachmentStates((prev) => ({
@@ -270,7 +337,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         }
         let payload: ReturnType<typeof parseAttachmentBlobBytes> | null = null
         try {
-          payload = parseAttachmentBlobBytes(bytes, rvk)
+          payload = parseAttachmentBlobBytes(bytes, key)
         } catch {
           setAttachmentStates((prev) => ({
             ...prev,
@@ -279,12 +346,12 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
           throw new Error("Unreadable attachment")
         }
         const filename = payload.filename ?? att.filename ?? `attachment-${att.id}`
-        const dir = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? ""}locker/attachments`
+        const dir = `${fileSystemCompat.cacheDirectory ?? fileSystemCompat.documentDirectory ?? ""}locker/attachments`
         await FileSystem.makeDirectoryAsync(dir, { intermediates: true })
         const safeName = filename.replace(/[\\/]/g, "_")
         const path = `${dir}/${safeName}`
         await FileSystem.writeAsStringAsync(path, bytesToBase64(payload.fileBytes), {
-          encoding: FileSystem.EncodingType.Base64,
+          encoding: fileSystemCompat.EncodingType.Base64,
         })
         const canShare = await Sharing.isAvailableAsync()
         if (!canShare) {
@@ -297,15 +364,11 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         setError(message)
       }
     },
-    [vaultId],
+    [attachmentScope, vaultId],
   )
 
-  const handleAddAttachment = useCallback(async () => {
+  const handleAddAttachment = useCallback(async (kind: "image" | "pdf" | "file" = "file") => {
     if (!vaultSession.isUnlocked()) return
-    if (!vaultId) {
-      setError("Select a remote vault to add attachments")
-      return
-    }
     if (!canAddAttachments) {
       setError("Viewers cannot add attachments")
       return
@@ -313,26 +376,31 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     const vmk = vaultSession.getKey()
     if (!vmk) return
 
-    let activeNoteId = noteId
-    if (!activeNoteId) {
-      const saved = saveNote({ title: title.trim(), body, vaultId, attachments }, vmk)
-      activeNoteId = saved.id
-      setIsExisting(true)
-      setVaultId(saved.vaultId ?? null)
-      navigation.replace("VaultNote", { noteId: saved.id })
-    }
-
     const picked = await DocumentPicker.getDocumentAsync({
       multiple: false,
       copyToCacheDirectory: true,
-      type: "*/*",
+      type: kind === "image" ? "image/*" : kind === "pdf" ? "application/pdf" : "*/*",
     })
     if (picked.canceled) return
     const asset = picked.assets?.[0]
     if (!asset?.uri) return
 
+    let activeNoteId = noteId
+    if (!activeNoteId) {
+      const initialTitle = title.trim() || stripExtension(asset.name) || "Imported File"
+      const saved = saveNote(
+        { title: initialTitle, body, classification, deletedAt, vaultId, attachments },
+        vmk,
+      )
+      activeNoteId = saved.id
+      setIsExisting(true)
+      setTitle(saved.title)
+      setVaultId(saved.vaultId ?? null)
+      navigation.replace("VaultNote", { noteId: saved.id })
+    }
+
     const fileBase64 = await FileSystem.readAsStringAsync(asset.uri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: fileSystemCompat.EncodingType.Base64,
     })
     const fileBytes = base64ToBytes(fileBase64)
     if (fileBytes.length > MAX_ATTACHMENT_BYTES) {
@@ -340,16 +408,16 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       return
     }
 
-    const rvk = await getRemoteVaultKey(vaultId)
-    if (!rvk) {
-      setError("Missing RVK for this vault")
+    const attachmentKey = vaultId ? await getRemoteVaultKey(vaultId) : vmk
+    if (!attachmentKey) {
+      setError("Missing attachment key for this note")
       return
     }
 
     const attId = generateAttachmentId()
     const mime = asset.mimeType ?? "application/octet-stream"
     const blobBytes = buildAttachmentBlobBytes({
-      rvk,
+      rvk: attachmentKey,
       noteId: activeNoteId,
       attId,
       fileBytes,
@@ -367,11 +435,19 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
       createdAt: new Date().toISOString(),
     }
 
-    await writeEncryptedAttachment(vaultId, attId, blobBytes)
+    await writeEncryptedAttachment(attachmentScope, attId, blobBytes)
 
     const nextAttachments = [...attachments, record]
     const saved = saveNote(
-      { id: activeNoteId, title: title.trim(), body, vaultId, attachments: nextAttachments },
+      {
+        id: activeNoteId,
+        title: title.trim() || stripExtension(asset.name) || "Imported File",
+        body,
+        classification,
+        deletedAt,
+        vaultId,
+        attachments: nextAttachments,
+      },
       vmk,
       { suppressSync: true },
     )
@@ -382,13 +458,24 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
     setAttachmentStates((prev) => ({ ...prev, [attId]: { status: "ready", dataUri } }))
 
     const deviceId = getAccount()?.device.id
-    if (deviceId) {
-      enqueueUpdateIndexData(listNoteIds(vaultId), vaultId, rvk, deviceId)
-      enqueueUpsertNoteData(saved, vaultId, rvk, deviceId)
+    if (deviceId && vaultId) {
+      enqueueUpdateIndexData(listNoteIds(vaultId), vaultId, attachmentKey, deviceId)
+      enqueueUpsertNoteData(saved, vaultId, attachmentKey, deviceId)
       enqueueUpsertAttachmentBlob({ vaultId, bytes: blobBytes, noteId: activeNoteId, attId })
       void requestSync("note_change", vaultId)
     }
-  }, [attachments, body, canAddAttachments, navigation, noteId, title, vaultId])
+  }, [attachmentScope, attachments, body, canAddAttachments, classification, deletedAt, navigation, noteId, title, vaultId])
+
+  useEffect(() => {
+    const importType = route.params?.importType
+    if (!importType || !vaultSession.isUnlocked()) return
+    if (deletedAt) return
+    const timer = setTimeout(() => {
+      void handleAddAttachment(importType)
+      navigation.setParams({ importType: undefined })
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [deletedAt, handleAddAttachment, navigation, route.params?.importType])
 
   const attachmentInfo = useMemo(() => {
     return attachments.map((att) => ({
@@ -429,6 +516,26 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         />
       </View>
 
+      <View style={themed($classificationSection)}>
+        <Text preset="subheading" style={themed($sectionTitle)}>
+          Classification
+        </Text>
+        <View style={themed($chipRow)}>
+          {VAULT_CLASSIFICATIONS.map((option) => {
+            const selected = option === classification
+            return (
+              <Pressable
+                key={option}
+                style={themed([$chip, selected && $chipSelected])}
+                onPress={() => setClassification(option)}
+              >
+                <Text style={themed(selected ? $chipTextSelected : $chipText)}>{option}</Text>
+              </Pressable>
+            )
+          })}
+        </View>
+      </View>
+
       <View style={themed($attachmentSection)}>
         <Text preset="subheading" style={themed($sectionTitle)}>
           Attachments
@@ -452,7 +559,7 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
                   {att.filename ?? "Attachment"}
                 </Text>
                 <Text style={themed($attachmentMeta)}>
-                  {formatBytes(att.sizeBytes)} · {att.mime}
+                  {formatBytes(att.sizeBytes)} · {att.mime} · {getVaultItemTypeFromMime(att.mime)}
                 </Text>
                 {state.status === "corrupt" ? (
                   <Text style={themed($attachmentError)}>Unreadable attachment</Text>
@@ -482,17 +589,37 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         )}
 
         {isExisting ? (
-          <Pressable
-            style={themed([$secondaryButton, !canAddAttachments && $disabledButton])}
-            onPress={() => void handleAddAttachment()}
-            disabled={!canAddAttachments}
-          >
-            <Text preset="bold" style={themed($secondaryButtonText)}>
-              Add Attachment
-            </Text>
-          </Pressable>
+          <View style={themed($quickActionRow)}>
+            <Pressable
+              style={themed([$secondaryButton, $quickActionButton, !canAddAttachments && $disabledButton])}
+              onPress={() => void handleAddAttachment("image")}
+              disabled={!canAddAttachments}
+            >
+              <Text preset="bold" style={themed($secondaryButtonText)}>
+                Import Image
+              </Text>
+            </Pressable>
+            <Pressable
+              style={themed([$secondaryButton, $quickActionButton, !canAddAttachments && $disabledButton])}
+              onPress={() => void handleAddAttachment("pdf")}
+              disabled={!canAddAttachments}
+            >
+              <Text preset="bold" style={themed($secondaryButtonText)}>
+                Import PDF
+              </Text>
+            </Pressable>
+            <Pressable
+              style={themed([$secondaryButton, $quickActionButton, !canAddAttachments && $disabledButton])}
+              onPress={() => void handleAddAttachment("file")}
+              disabled={!canAddAttachments}
+            >
+              <Text preset="bold" style={themed($secondaryButtonText)}>
+                Import File
+              </Text>
+            </Pressable>
+          </View>
         ) : (
-          <Text style={themed($attachmentMeta)}>Save the note to add attachments.</Text>
+          <Text style={themed($attachmentMeta)}>Import actions will create the note if needed.</Text>
         )}
         {!canAddAttachments ? (
           <Text style={themed($attachmentMeta)}>Viewer role cannot upload attachments.</Text>
@@ -505,12 +632,30 @@ export const VaultNoteScreen: FC<VaultStackScreenProps<"VaultNote">> = function 
         </Text>
       </Pressable>
 
-      {isExisting ? (
-        <Pressable style={themed($deleteButton)} onPress={handleDelete}>
+      {isExisting && !deletedAt ? (
+        <Pressable style={themed($deleteButton)} onPress={handleMoveToTrash}>
           <Text preset="bold" style={themed($deleteButtonText)}>
-            Delete Note
+            Move To Trash
           </Text>
         </Pressable>
+      ) : null}
+
+      {isExisting && deletedAt ? (
+        <View style={themed($trashedActions)}>
+          <Text style={themed($attachmentMeta)}>
+            Trashed {new Date(deletedAt).toLocaleString()}
+          </Text>
+          <Pressable style={themed($secondaryButton)} onPress={handleRestore}>
+            <Text preset="bold" style={themed($secondaryButtonText)}>
+              Restore Note
+            </Text>
+          </Pressable>
+          <Pressable style={themed($deleteButton)} onPress={handlePermanentDelete}>
+            <Text preset="bold" style={themed($deleteButtonText)}>
+              Delete Permanently
+            </Text>
+          </Pressable>
+        </View>
       ) : null}
     </Screen>
   )
@@ -522,6 +667,7 @@ type AttachmentUiState = {
   error?: string
 }
 
+const LOCAL_ATTACHMENT_SCOPE = "__local__"
 const MAX_ATTACHMENT_BYTES = 5_000_000
 const AUTO_DOWNLOAD_MAX_BYTES = 200_000
 
@@ -529,6 +675,12 @@ function formatBytes(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`
   if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} KB`
   return `${bytes} B`
+}
+
+function stripExtension(filename?: string | null): string {
+  if (!filename) return ""
+  const index = filename.lastIndexOf(".")
+  return index > 0 ? filename.slice(0, index) : filename
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
@@ -607,6 +759,39 @@ const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
   marginBottom: 12,
 })
 
+const $classificationSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginBottom: spacing.lg,
+})
+
+const $chipRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.sm,
+})
+
+const $chip: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  borderRadius: 999,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.18)",
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.xs,
+})
+
+const $chipSelected: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  backgroundColor: colors.accentPink,
+  borderColor: colors.accentPink,
+})
+
+const $chipText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral300,
+  fontSize: 12,
+})
+
+const $chipTextSelected: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral100,
+  fontSize: 12,
+})
+
 const $attachmentSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginBottom: spacing.lg,
 })
@@ -641,7 +826,7 @@ const $attachmentPlaceholderText: ThemedStyle<TextStyle> = ({ colors }) => ({
   fontSize: 12,
 })
 
-const $attachmentImage: ThemedStyle<ViewStyle> = () => ({
+const $attachmentImage: ThemedStyle<ImageStyle> = () => ({
   width: 52,
   height: 52,
   borderRadius: 12,
@@ -686,6 +871,15 @@ const $attachmentButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
 const $disabledButton: ThemedStyle<ViewStyle> = () => ({
   opacity: 0.5,
 })
+
+const $quickActionRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $quickActionButton: ThemedStyle<ViewStyle> = () => ({
+  marginBottom: 0,
+})
+
 const $secondaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: colors.glass,
   borderRadius: 14,
@@ -697,4 +891,9 @@ const $secondaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 
 const $secondaryButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textStrong,
+})
+
+const $trashedActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+  marginBottom: spacing.lg,
 })

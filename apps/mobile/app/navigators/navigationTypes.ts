@@ -9,7 +9,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 export type VaultStackParamList = {
   VaultHome: undefined
-  VaultNote: { noteId?: string } | undefined
+  VaultNote: { noteId?: string; importType?: "image" | "pdf" | "file" } | undefined
 }
 
 export type SyncStackParamList = {

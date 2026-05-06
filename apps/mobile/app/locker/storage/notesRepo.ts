@@ -9,6 +9,10 @@ import { getRemoteVaultKey } from "./remoteKeyRepo"
 import { enqueueDeleteNoteData, enqueueUpdateIndexData, enqueueUpsertNoteData } from "../sync/queue"
 import { requestSync } from "../sync/syncCoordinator"
 import { deleteNoteFromIndex, indexNote } from "@/locker/search/searchRepo"
+import {
+  DEFAULT_VAULT_CLASSIFICATION,
+  VaultClassification,
+} from "@/locker/vault/types"
 
 const NOTES_LIST_KEY = "locker:notes:v1:list"
 const NOTE_KEY_PREFIX = "locker:notes:v1:note:"
@@ -19,6 +23,8 @@ export type Note = {
   body: string
   createdAt: string
   updatedAt: string
+  classification: VaultClassification
+  deletedAt?: string | null
   vaultId?: string | null
   attachments?: NoteAttachment[]
   conflictParentNoteId?: string | null
@@ -39,6 +45,8 @@ type NoteMeta = {
   id: string
   createdAt: string
   updatedAt: string
+  classification?: VaultClassification
+  deletedAt?: string | null
   vaultId?: string | null
 }
 
@@ -49,6 +57,8 @@ type EncryptedNoteRecord = {
   title: EnvelopeV1
   body: EnvelopeV1
   attachments?: EnvelopeV1
+  classification?: VaultClassification
+  deletedAt?: string | null
   vaultId?: string | null
   conflictParentNoteId?: string | null
   conflictOriginLamport?: number | null
@@ -86,17 +96,21 @@ export function listNotes(vmk: Uint8Array): Note[] {
         id: record.id,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
+        classification: record.classification ?? DEFAULT_VAULT_CLASSIFICATION,
+        deletedAt: record.deletedAt ?? null,
         vaultId: record.vaultId ?? null,
       })
 
       notes.push({
         id: record.id,
         title,
-        body: "",
+        body: bytesToUtf8(decryptV1(vmk, record.body)),
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
+        classification: record.classification ?? DEFAULT_VAULT_CLASSIFICATION,
+        deletedAt: record.deletedAt ?? null,
         vaultId: record.vaultId ?? null,
-        attachments: undefined,
+        attachments: record.attachments ? safeDecryptAttachments(record.attachments, vmk) : [],
         conflictParentNoteId: record.conflictParentNoteId ?? null,
         conflictOriginLamport: record.conflictOriginLamport ?? null,
       })
@@ -148,6 +162,8 @@ export function getNote(id: string, vmk: Uint8Array): Note {
       attachments,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
+      classification: record.classification ?? DEFAULT_VAULT_CLASSIFICATION,
+      deletedAt: record.deletedAt ?? null,
       vaultId: record.vaultId ?? null,
       conflictParentNoteId: record.conflictParentNoteId ?? null,
       conflictOriginLamport: record.conflictOriginLamport ?? null,
@@ -162,6 +178,8 @@ export function saveNote(
     id?: string
     title: string
     body: string
+    classification?: VaultClassification
+    deletedAt?: string | null
     vaultId?: string | null
     attachments?: NoteAttachment[]
     conflictParentNoteId?: string | null
@@ -174,6 +192,8 @@ export function saveNote(
   const existing = input.id ? load<EncryptedNoteRecord>(NOTE_KEY_PREFIX + input.id) : null
   const id = input.id ?? generateId()
   const vaultId = input.vaultId ?? existing?.vaultId ?? null
+  const classification = input.classification ?? existing?.classification ?? DEFAULT_VAULT_CLASSIFICATION
+  const deletedAt = input.deletedAt ?? existing?.deletedAt ?? null
   const conflictParentNoteId = input.conflictParentNoteId ?? existing?.conflictParentNoteId ?? null
   const conflictOriginLamport = input.conflictOriginLamport ?? existing?.conflictOriginLamport ?? null
   const existingAttachments = existing?.attachments
@@ -189,6 +209,8 @@ export function saveNote(
       attachments,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
+      classification,
+      deletedAt,
       vaultId,
       conflictParentNoteId,
       conflictOriginLamport,
@@ -203,6 +225,8 @@ export function saveNote(
     id,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    classification,
+    deletedAt,
     vaultId,
   })
   save(NOTES_LIST_KEY, updatedMetas)
@@ -214,6 +238,8 @@ export function saveNote(
     attachments,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    classification,
+    deletedAt,
     vaultId,
     conflictParentNoteId,
     conflictOriginLamport,
@@ -247,6 +273,8 @@ export function saveNoteFromSync(note: Note, vmk: Uint8Array, vaultId?: string |
     id: note.id,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
+    classification: note.classification ?? DEFAULT_VAULT_CLASSIFICATION,
+    deletedAt: note.deletedAt ?? null,
     vaultId: record.vaultId ?? null,
   })
   save(NOTES_LIST_KEY, updatedMetas)
@@ -290,7 +318,19 @@ export function resetNotes(): void {
 
 export function listNoteIds(vaultId?: string | null): string[] {
   const metas = load<NoteMeta[]>(NOTES_LIST_KEY) ?? []
-  return metas.filter((meta) => (meta.vaultId ?? null) === (vaultId ?? null)).map((meta) => meta.id)
+  return metas
+    .filter((meta) => (meta.vaultId ?? null) === (vaultId ?? null) && !meta.deletedAt)
+    .map((meta) => meta.id)
+}
+
+export function moveNoteToTrash(id: string, vmk: Uint8Array): Note | null {
+  const existing = getNote(id, vmk)
+  return saveNote({ ...existing, deletedAt: new Date().toISOString() }, vmk)
+}
+
+export function restoreNote(id: string, vmk: Uint8Array): Note | null {
+  const existing = getNote(id, vmk)
+  return saveNote({ ...existing, deletedAt: null }, vmk)
 }
 
 function buildEncryptedRecord(note: Note, vmk: Uint8Array): EncryptedNoteRecord {
@@ -304,6 +344,8 @@ function buildEncryptedRecord(note: Note, vmk: Uint8Array): EncryptedNoteRecord 
       vmk,
       utf8ToBytes(JSON.stringify(note.attachments ?? [])),
     ),
+    classification: note.classification ?? DEFAULT_VAULT_CLASSIFICATION,
+    deletedAt: note.deletedAt ?? null,
     vaultId: note.vaultId ?? null,
     conflictParentNoteId: note.conflictParentNoteId ?? null,
     conflictOriginLamport: note.conflictOriginLamport ?? null,

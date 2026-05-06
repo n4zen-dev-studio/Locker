@@ -4,6 +4,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  TextInput,
   TextStyle,
   View,
   ViewStyle,
@@ -30,12 +31,20 @@ import { getRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { getToken } from "@/locker/auth/tokenStore"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { ensureUserKeypairUploaded } from "@/locker/keys/userKeyApi"
+import {
+  getVaultItemTypeFromMime,
+  isSensitiveClassification,
+  VaultClassification,
+} from "@/locker/vault/types"
+
+type VaultFilter = "all" | "notes" | "images" | "pdfs" | "files" | "sensitive" | "recent" | "deleted"
+type VaultSort = "updated" | "created" | "title" | "classification"
 
 export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = function VaultNotesHomeScreen(
   props,
 ) {
   const { navigation } = props
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
   const [notes, setNotes] = useState<Note[]>([])
@@ -47,6 +56,9 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
   const [tokenPresent, setTokenPresent] = useState(false)
   const [rvkPresent, setRvkPresent] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [query, setQuery] = useState("")
+  const [filter, setFilter] = useState<VaultFilter>("all")
+  const [sort, setSort] = useState<VaultSort>("updated")
   const unlocked = vaultSession.isUnlocked()
 
   const [activeVaultId, setActiveVaultId] = useState<string | null>(() => getRemoteVaultId())
@@ -176,6 +188,76 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
     refreshMeta().catch(() => undefined)
   }
 
+  const items = useMemo(() => {
+    const noteMap = new Map<string, Note>()
+    ;[...notes, ...localNotes].forEach((note) => noteMap.set(note.id, note))
+
+    const list: VaultListItem[] = []
+    for (const note of noteMap.values()) {
+      const syncStatus = note.vaultId ? "cloud" : "local"
+      list.push({
+        id: `note:${note.id}`,
+        noteId: note.id,
+        type: "note",
+        title: note.title || "Untitled",
+        preview: note.body,
+        updatedAt: note.updatedAt,
+        createdAt: note.createdAt,
+        classification: note.classification,
+        deleted: !!note.deletedAt,
+        syncStatus,
+      })
+
+      for (const attachment of note.attachments ?? []) {
+        list.push({
+          id: `attachment:${attachment.id}`,
+          noteId: note.id,
+          attachmentId: attachment.id,
+          type: getVaultItemTypeFromMime(attachment.mime),
+          title: attachment.filename ?? "Attachment",
+          preview: attachment.mime,
+          updatedAt: note.updatedAt,
+          createdAt: attachment.createdAt,
+          classification: note.classification,
+          deleted: !!note.deletedAt,
+          syncStatus,
+        })
+      }
+    }
+
+    return list
+  }, [localNotes, notes])
+
+  const visibleItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    return items
+      .filter((item) => {
+        if (filter === "deleted") return item.deleted
+        if (item.deleted) return false
+        if (filter === "notes") return item.type === "note"
+        if (filter === "images") return item.type === "image"
+        if (filter === "pdfs") return item.type === "pdf"
+        if (filter === "files") return item.type === "file"
+        if (filter === "sensitive") return isSensitiveClassification(item.classification)
+        if (filter === "recent") return Date.now() - new Date(item.updatedAt).getTime() <= RECENT_WINDOW_MS
+        return true
+      })
+      .filter((item) => {
+        if (!normalizedQuery) return true
+        const haystack = [
+          item.title,
+          item.preview,
+          item.classification,
+          item.type,
+          item.syncStatus,
+        ]
+          .join(" ")
+          .toLowerCase()
+        return haystack.includes(normalizedQuery)
+      })
+      .sort((a, b) => compareVaultItems(a, b, sort))
+  }, [filter, items, query, sort])
+
   return (
     <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
       <AnimatedBlobBackground>
@@ -222,14 +304,51 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
           contentContainerStyle={themed($content)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleSyncNow} />}
         >
-          <Pressable style={themed($primaryAction)} onPress={() => navigation.navigate("VaultNote")}>
-            <Text preset="bold" style={themed($primaryActionText)}>
-              New Secure Note
-            </Text>
-          </Pressable>
+          <View style={themed($quickActionsRow)}>
+            <QuickAction label="New Note" onPress={() => navigation.navigate("VaultNote")} />
+            <QuickAction
+              label="Import Image"
+              onPress={() => navigation.navigate("VaultNote", { importType: "image" })}
+            />
+            <QuickAction
+              label="Import PDF"
+              onPress={() => navigation.navigate("VaultNote", { importType: "pdf" })}
+            />
+            <QuickAction
+              label="Import File"
+              onPress={() => navigation.navigate("VaultNote", { importType: "file" })}
+            />
+          </View>
 
-          <Pressable style={themed($searchButton)} onPress={() => navigation.navigate("VaultSearch")}>
-            <Text style={themed($searchText)}>Search notes…</Text>
+          <View style={themed($searchButton)}>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search vault content"
+              placeholderTextColor={theme.colors.textMuted}
+              style={themed($searchInput)}
+            />
+          </View>
+
+          <View style={themed($filterRow)}>
+            {FILTER_OPTIONS.map((option) => {
+              const selected = option.value === filter
+              return (
+                <Pressable
+                  key={option.value}
+                  style={themed([$filterChip, selected && $filterChipSelected])}
+                  onPress={() => setFilter(option.value)}
+                >
+                  <Text style={themed(selected ? $filterChipTextSelected : $filterChipText)}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </View>
+
+          <Pressable style={themed($sortButton)} onPress={() => setSort(nextVaultSort(sort))}>
+            <Text style={themed($sortButtonText)}>Sort: {sort}</Text>
           </Pressable>
 
           {syncReason ? (
@@ -245,46 +364,42 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
           ) : null}
 
           <Text preset="bold" style={themed($sectionTitle)}>
-            Notes
+            Vault Content
           </Text>
-          {notes.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <View style={themed($emptyCard)}>
-              <Text style={themed($emptyText)}>No notes in this vault yet.</Text>
+              <Text style={themed($emptyText)}>
+                {filter === "deleted" ? "Trash is empty." : "No matching vault items yet."}
+              </Text>
             </View>
           ) : (
-            notes.map((note) => (
+            visibleItems.map((item) => (
               <Pressable
-                key={note.id}
+                key={item.id}
                 style={({ pressed }) => [themed($noteCard), pressed && themed($notePressed)]}
-                onPress={() => navigation.navigate("VaultNote", { noteId: note.id })}
+                onPress={() => navigation.navigate("VaultNote", { noteId: item.noteId })}
               >
-                <Text preset="bold" style={themed($noteTitle)} numberOfLines={1}>
-                  {note.title || "Untitled"}
+                <View style={themed($itemHeader)}>
+                  <Text preset="bold" style={themed($noteTitle)} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <View style={themed($itemMetaBadges)}>
+                    <Text style={themed($itemBadge)}>{item.type.toUpperCase()}</Text>
+                    <Text style={themed($itemBadge)}>{item.classification}</Text>
+                    <Text style={themed($itemBadge)}>{item.syncStatus}</Text>
+                  </View>
+                </View>
+                <Text style={themed($noteMeta)}>
+                  Updated {new Date(item.updatedAt).toLocaleString()}
                 </Text>
-                <Text style={themed($noteMeta)}>{new Date(note.updatedAt).toLocaleString()}</Text>
+                <Text style={themed($noteMeta)} numberOfLines={2}>
+                  {isSensitiveClassification(item.classification)
+                    ? `Preview hidden for ${item.classification}`
+                    : item.preview || "No preview available"}
+                </Text>
               </Pressable>
             ))
           )}
-
-          {localNotes.length > 0 ? (
-            <View style={themed($section)}>
-              <Text preset="bold" style={themed($sectionTitle)}>
-                Local Only
-              </Text>
-              {localNotes.map((note) => (
-                <Pressable
-                  key={note.id}
-                  style={({ pressed }) => [themed($noteCard), pressed && themed($notePressed)]}
-                  onPress={() => navigation.navigate("VaultNote", { noteId: note.id })}
-                >
-                  <Text preset="bold" style={themed($noteTitle)} numberOfLines={1}>
-                    {note.title || "Untitled"}
-                  </Text>
-                  <Text style={themed($noteMeta)}>{new Date(note.updatedAt).toLocaleString()}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
 
           {__DEV__ && metaVersion === 2 ? (
             <Pressable style={themed($devButton)} onPress={handleDisablePasskey}>
@@ -297,6 +412,58 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
       </AnimatedBlobBackground>
     </Screen>
   )
+}
+
+const QuickAction = ({ label, onPress }: { label: string; onPress: () => void }) => {
+  const { themed } = useAppTheme()
+
+  return (
+    <Pressable style={themed($primaryAction)} onPress={onPress}>
+      <Text preset="bold" style={themed($primaryActionText)}>
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
+type VaultListItem = {
+  id: string
+  noteId: string
+  attachmentId?: string
+  type: "note" | "image" | "pdf" | "file"
+  title: string
+  preview: string
+  updatedAt: string
+  createdAt: string
+  classification: VaultClassification
+  deleted: boolean
+  syncStatus: "cloud" | "local"
+}
+
+const RECENT_WINDOW_MS = 1000 * 60 * 60 * 24 * 14
+const FILTER_OPTIONS: Array<{ label: string; value: VaultFilter }> = [
+  { label: "All", value: "all" },
+  { label: "Notes", value: "notes" },
+  { label: "Images", value: "images" },
+  { label: "PDFs", value: "pdfs" },
+  { label: "Files", value: "files" },
+  { label: "Sensitive", value: "sensitive" },
+  { label: "Recent", value: "recent" },
+  { label: "Trash", value: "deleted" },
+]
+
+function nextVaultSort(current: VaultSort): VaultSort {
+  if (current === "updated") return "created"
+  if (current === "created") return "title"
+  if (current === "title") return "classification"
+  return "updated"
+}
+
+function compareVaultItems(a: VaultListItem, b: VaultListItem, sort: VaultSort): number {
+  if (sort === "created") return b.createdAt.localeCompare(a.createdAt)
+  if (sort === "title") return a.title.localeCompare(b.title)
+  if (sort === "classification") return a.classification.localeCompare(b.classification)
+  return b.updatedAt.localeCompare(a.updatedAt)
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ colors }) => ({
@@ -362,24 +529,76 @@ const $primaryAction: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: colors.accentPink,
   borderRadius: 16,
   paddingVertical: spacing.md,
+  paddingHorizontal: spacing.md,
   alignItems: "center",
 })
 
 const $primaryActionText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
+  fontSize: 12,
 })
 
 const $searchButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: colors.glass,
   borderRadius: 16,
-  paddingVertical: spacing.md,
   paddingHorizontal: spacing.md,
+  paddingVertical: spacing.sm,
   borderWidth: 1,
   borderColor: colors.glassBorder,
 })
 
-const $searchText: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $searchInput: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
+  color: colors.textStrong,
+  minHeight: 24,
+})
+
+const $quickActionsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.sm,
+})
+
+const $filterRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.sm,
+})
+
+const $filterChip: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  borderRadius: 999,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.14)",
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.xs,
+})
+
+const $filterChipSelected: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  backgroundColor: colors.glassHeavy,
+  borderColor: colors.accentPink,
+})
+
+const $filterChipText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textMuted,
+  fontSize: 12,
+})
+
+const $filterChipTextSelected: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textStrong,
+  fontSize: 12,
+})
+
+const $sortButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  alignSelf: "flex-start",
+  borderRadius: 999,
+  borderWidth: 1,
+  borderColor: colors.glassBorder,
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.xs,
+})
+
+const $sortButtonText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+  fontSize: 12,
 })
 
 const $syncHint: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -402,6 +621,27 @@ const $noteCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   padding: spacing.md,
   borderWidth: 1,
   borderColor: colors.glassBorder,
+})
+
+const $itemHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: spacing.sm,
+  marginBottom: 4,
+})
+
+const $itemMetaBadges: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+  gap: spacing.xs,
+  flexShrink: 1,
+})
+
+const $itemBadge: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+  fontSize: 10,
 })
 
 const $notePressed: ThemedStyle<ViewStyle> = () => ({
