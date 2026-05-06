@@ -1,5 +1,5 @@
 import { FC, useCallback, useState } from "react"
-import { Alert, Pressable, TextStyle, View, ViewStyle } from "react-native"
+import { Alert, Platform, Pressable, TextInput, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
 import { Screen } from "@/components/Screen"
@@ -11,6 +11,8 @@ import { vaultSession } from "@/locker/session"
 import { clearToken, getToken } from "@/locker/auth/tokenStore"
 import { AccountState, clearAccount, getAccount } from "@/locker/storage/accountRepo"
 import { clearRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { getServerUrl, setServerUrl, clearServerUrl } from "@/locker/storage/serverConfigRepo"
+import { getApiBaseUrl, normalizeApiBaseUrl } from "@/locker/net/apiClient"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
 export const VaultAccountScreen: FC<AppStackScreenProps<"VaultAccount">> = function VaultAccountScreen(
@@ -22,11 +24,20 @@ export const VaultAccountScreen: FC<AppStackScreenProps<"VaultAccount">> = funct
 
   const [account, setAccount] = useState<AccountState | null>(null)
   const [token, setTokenState] = useState<string | null>(null)
+  const [apiUrlInput, setApiUrlInput] = useState("")
+  const [apiUrlStatus, setApiUrlStatus] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     const storedToken = await getToken()
     setTokenState(storedToken)
     setAccount(getAccount())
+    const storedUrl = getServerUrl()
+    if (storedUrl) {
+      setApiUrlInput(storedUrl)
+      return
+    }
+    const platformDefault = Platform.OS === "android" ? "http://10.0.2.2:4000" : "http://localhost:4000"
+    setApiUrlInput(platformDefault)
   }, [])
 
   useFocusEffect(
@@ -57,6 +68,19 @@ export const VaultAccountScreen: FC<AppStackScreenProps<"VaultAccount">> = funct
   }
 
   const connected = !!token && !!account
+
+  const handleSaveApiUrl = () => {
+    const normalized = normalizeApiBaseUrl(apiUrlInput)
+    setServerUrl(normalized)
+    setApiUrlStatus(`Saved: ${normalized}`)
+  }
+
+  const handleResetApiUrl = () => {
+    clearServerUrl()
+    const platformDefault = Platform.OS === "android" ? "http://10.0.2.2:4000" : "http://localhost:4000"
+    setApiUrlInput(platformDefault)
+    setApiUrlStatus(`Reset to: ${platformDefault}`)
+  }
 
   return (
     <Screen preset="fixed" contentContainerStyle={themed([$screen, $insets])}>
@@ -113,6 +137,35 @@ export const VaultAccountScreen: FC<AppStackScreenProps<"VaultAccount">> = funct
           </Text>
         </Pressable>
       ) : null}
+
+      {__DEV__ ? (
+        <View style={themed($devCard)}>
+          <Text preset="bold" style={themed($statusText)}>
+            API Base URL (Dev)
+          </Text>
+          <Text style={themed($detailText)}>
+            Current: {getApiBaseUrl()}
+          </Text>
+          <TextInput
+            value={apiUrlInput}
+            onChangeText={setApiUrlInput}
+            placeholder="http://192.168.0.10:4000"
+            placeholderTextColor="#9aa0a6"
+            style={themed($input)}
+          />
+          {apiUrlStatus ? <Text style={themed($detailText)}>{apiUrlStatus}</Text> : null}
+          <Pressable style={themed($primaryButton)} onPress={handleSaveApiUrl}>
+            <Text preset="bold" style={themed($primaryButtonText)}>
+              Save API URL
+            </Text>
+          </Pressable>
+          <Pressable style={themed($secondaryButton)} onPress={handleResetApiUrl}>
+            <Text preset="bold" style={themed($secondaryButtonText)}>
+              Reset to Default
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </Screen>
   )
 }
@@ -145,6 +198,15 @@ const $card: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginBottom: spacing.lg,
 })
 
+const $devCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  backgroundColor: "rgba(255, 255, 255, 0.08)",
+  borderRadius: 18,
+  padding: spacing.lg,
+  borderWidth: 1,
+  borderColor: "rgba(255, 255, 255, 0.15)",
+  marginBottom: spacing.lg,
+})
+
 const $statusText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral100,
   marginBottom: 6,
@@ -157,6 +219,18 @@ const $detailGroup: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 const $detailText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.palette.neutral300,
   fontSize: 13,
+})
+
+const $input: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
+  backgroundColor: "rgba(255, 255, 255, 0.08)",
+  borderRadius: 14,
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.sm,
+  color: colors.palette.neutral100,
+  borderWidth: 1,
+  borderColor: "rgba(255, 255, 255, 0.15)",
+  marginTop: spacing.sm,
+  marginBottom: spacing.md,
 })
 
 const $primaryButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
