@@ -136,11 +136,6 @@ const refreshSyncPrereqs = useCallback(async (vaultId?: string | null) => {
 
   useFocusEffect(
     useCallback(() => {
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked");
-        return;
-      }
-
       const task = InteractionManager.runAfterInteractions(() => {
         refreshActiveVault();
         refreshNotes();
@@ -151,18 +146,8 @@ const refreshSyncPrereqs = useCallback(async (vaultId?: string | null) => {
       });
 
       return () => task.cancel();
-    }, [navigation, refreshActiveVault, refreshMeta, refreshNotes, refreshSyncPrereqs]),
+    }, [refreshActiveVault, refreshMeta, refreshNotes, refreshSyncPrereqs]),
   );
-
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && !vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked");
-      }
-    });
-
-    return () => sub.remove();
-  }, [navigation]);
 
   useEffect(() => {
     refreshMeta().catch(() => undefined);
@@ -214,8 +199,6 @@ const refreshSyncPrereqs = useCallback(async (vaultId?: string | null) => {
 
   const handleLock = () => {
     vaultSession.clear();
-    navigation.popToTop();
-    navigation.replace("Calculator");
   };
 
   const handleDisablePasskey = async () => {

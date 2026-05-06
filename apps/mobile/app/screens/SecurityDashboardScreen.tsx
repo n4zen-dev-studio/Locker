@@ -118,17 +118,12 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
 
   useFocusEffect(
     useCallback(() => {
-      if (!vaultSession.isUnlocked()) {
-        navigation.replace("VaultLocked");
-        return;
-      }
-
       const task = InteractionManager.runAfterInteractions(() => {
         void refreshStatus();
       });
 
       return () => task.cancel();
-    }, [navigation, refreshStatus]),
+    }, [refreshStatus]),
   );
 
   useEffect(() => {
@@ -230,9 +225,7 @@ export const SecurityDashboardScreen: FC<SecurityStackScreenProps<"SecurityDashb
       severity: "critical",
     });
     vaultSession.clear();
-    navigation.popToTop();
-    navigation.replace("Calculator");
-  }, [navigation]);
+  }, []);
 
   const handlePrivacyToggle = useCallback((next: Partial<typeof privacyPrefs>) => {
     const updated = setPrivacyPrefs(next);

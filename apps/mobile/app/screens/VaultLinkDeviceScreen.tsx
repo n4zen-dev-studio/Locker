@@ -25,7 +25,6 @@ import {
   formatDeviceLinkCode,
   normalizeDeviceLinkCode,
 } from "@/locker/linking/deviceLinkPayload";
-import { vaultSession } from "@/locker/session";
 import { setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo";
 import { getServerUrl, setServerUrl } from "@/locker/storage/serverConfigRepo";
 import { AccountState, setAccount } from "@/locker/storage/accountRepo";
@@ -65,14 +64,6 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
         setPayload(initialPayload);
       }
     }, [initialPayload]);
-
-    useFocusEffect(
-      useCallback(() => {
-        if (!vaultSession.isUnlocked()) {
-          navigation.replace("VaultLocked");
-        }
-      }, [navigation]),
-    );
 
     useEffect(() => {
       getSuggestedDeviceName().then(setDeviceName)
