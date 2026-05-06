@@ -99,8 +99,8 @@ export function BlobGlassButton({
   disabled,
   style,
   textStyle,
-  rimColor = "#07010D",
-  outerShadowColor = "#000000",
+  rimColor = "#070608",
+  outerShadowColor = "#b27ab6",
   ...rest
 }: BlobGlassButtonProps) {
   const press = useSharedValue(0)
@@ -243,7 +243,7 @@ export function BlobGlassButton({
           styles.outerShell,
           {
             borderRadius: outerRadius,
-            backgroundColor: rimColor,
+            // backgroundColor: rimColor,
           },
         ]}
       >
@@ -261,9 +261,9 @@ export function BlobGlassButton({
         >
           <LinearGradient
             colors={[
-              "#FCF9FF",
-              "#F3E9FB",
-              "#EFD9FB",
+              "#0c0c0d",
+              "#0a070c",
+              "#0d090f",
             ]}
             start={{ x: 0, y: 0.15 }}
             end={{ x: 1, y: 0.85 }}
@@ -313,8 +313,8 @@ export function BlobGlassButton({
               gradientId="leftGlow"
               width={innerWidth * 0.92}
               height={innerHeight * 1.52}
-              coreColor="#8A33F0"
-              midColor="#B976F4"
+              coreColor="#f033ed"
+              midColor="#f476ee"
               opacity={0.95}
             />
           </AnimatedView>
@@ -336,8 +336,8 @@ export function BlobGlassButton({
               gradientId="rightGlow"
               width={innerWidth * 0.72}
               height={innerHeight * 1.22}
-              coreColor="#DA96F3"
-              midColor="#E9B8F7"
+              coreColor="#f396e8"
+              midColor="#efa6da"
               opacity={0.9}
             />
           </AnimatedView>
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F8F2FF",
+    backgroundColor: "#0f0e0f",
   },
 
   blobWrap: {
@@ -421,11 +421,11 @@ const styles = StyleSheet.create({
   innerStroke: {
     ...StyleSheet.absoluteFillObject,
     borderWidth: 1.2,
-    borderColor: "rgba(255,255,255,0.42)",
+    borderColor: "rgba(255, 223, 223, 0.42)",
   },
 
   label: {
-    color: "#FFFFFF",
+    color: "#000000",
     fontWeight: "400",
     letterSpacing: -1.4,
     textAlign: "center",

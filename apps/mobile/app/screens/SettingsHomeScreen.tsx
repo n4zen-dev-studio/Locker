@@ -1,21 +1,31 @@
-import { FC } from "react"
+import { FC, ReactNode } from "react"
 import { Alert, Pressable, TextStyle, View, ViewStyle } from "react-native"
+import Animated, { Easing, FadeInDown, FadeInUp } from "react-native-reanimated"
+import {
+  ChevronRight,
+  Cloud,
+  Fingerprint,
+  Link2,
+  RotateCcw,
+  Server,
+  ShieldAlert,
+  Stethoscope,
+} from "lucide-react-native"
 
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
-import { GlassCard } from "@/components/GlassCard"
-import { GlassHeader } from "@/components/GlassHeader"
-import { AnimatedBlobBackground } from "@/components/AnimatedBlobBackground"
+import { VaultHubBackground } from "@/components/VaultHubBackground"
 import { resetPrivacyOnboarding } from "@/locker/storage/onboardingRepo"
 import type { SettingsStackScreenProps } from "@/navigators/navigationTypes"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
+import { spacing } from "@/theme/spacing"
 
 export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
   function SettingsHomeScreen(props) {
     const { navigation } = props
-    const { themed } = useAppTheme()
+    const { themed, theme } = useAppTheme()
     const $insets = useSafeAreaInsetsStyle(["top", "bottom"])
 
     const handleReplayOnboarding = () => {
@@ -36,147 +46,524 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
     }
 
     return (
-      <Screen preset="scroll" contentContainerStyle={themed([$screen, $insets])}>
-        <AnimatedBlobBackground>
-          <View style={themed($headerWrap)}>
-            <GlassHeader>
-              <Text preset="heading" style={themed($title)}>
+      <Screen
+        preset="scroll"
+        style={themed($screen)}
+        contentContainerStyle={themed([$content, $insets, { paddingBottom: spacing.xxxl + 28 }])}
+        systemBarStyle="light"
+      >
+        <VaultHubBackground />
+
+        <Animated.View
+          entering={FadeInDown.duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))}
+          // style={themed($hero)}
+        >
+          <View style={themed($heroTopRow)}>
+            {/* <View style={themed($heroBadge)}> */}
+              <Text size="xxs" style={themed($heroEyebrow)}>
                 Settings
               </Text>
-              <Text preset="subheading" style={themed($subtitle)}>
-                Device, sync, diagnostics, and vault preferences
-              </Text>
-            </GlassHeader>
+            {/* </View> */}
+
+            <View style={themed($heroStatusPill)}>
+              <Text style={themed($heroStatusText)}>Vault Control</Text>
+            </View>
           </View>
 
-          <View style={themed($content)}>
-            <GlassCard>
-              <Text preset="bold" style={themed($sectionTitle)}>
-                Sync & Device
-              </Text>
-              <SettingsLink
+          <Text preset="heading" style={themed($heroTitle)}>
+            System Controls
+          </Text>
+
+          <Text style={themed($heroSubtitle)}>
+            Sync, access, diagnostics, and vault tools in a compact control hub.
+          </Text>
+
+          <View style={themed($heroMetaRow)}>
+            <HeroChip label="Sync" tone="blue" />
+            <HeroChip label="Access" tone="pink" />
+            <HeroChip label="Tools" tone="warm" />
+          </View>
+        </Animated.View>
+
+        <Animated.View
+          entering={FadeInUp.delay(30).duration(360).easing(Easing.bezier(0.22, 1, 0.36, 1))}
+          style={themed($stack)}
+        >
+          <PanelCard
+            title="Primary Controls"
+            subtitle="Core setup and vault access."
+            compact
+          >
+            <View style={themed($grid)}>
+              <ControlTile
                 label="Sync Setup"
-                description="Manage the single personal vault that syncs to your account."
+                caption="Vault sync"
+                accent="blue"
+                icon={<Cloud size={18} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("RemoteVault")}
               />
-              <SettingsLink
+
+              <ControlTile
                 label="Link Device"
-                description="Redeem a trusted-device link and attach this phone to your account."
+                caption="Trusted device"
+                accent="pink"
+                icon={<Link2 size={18} color={theme.colors.vaultHub.vaultHubAccentPinkSoft} />}
                 onPress={() => navigation.navigate("VaultLinkDevice")}
               />
-              <SettingsLink
+
+              <ControlTile
                 label="Server URL"
-                description="Configure the API endpoint used for linking and personal-vault sync."
+                caption="API endpoint"
+                accent="warm"
+                icon={<Server size={18} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("ServerUrl")}
               />
-            </GlassCard>
 
-            <GlassCard>
-              <Text preset="bold" style={themed($sectionTitle)}>
-                Calculator Shortcuts
-              </Text>
-              <SettingsLink
-                label="Calculator Entry Codes"
-                description='Set the exact calculator shortcut codes for the real vault and the decoy vault. These do not replace passkey protection.'
+              <ControlTile
+                label="Entry Codes"
+                caption="Calculator access"
+                accent="pink"
+                icon={<Fingerprint size={18} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("CalculatorEntryCodes")}
               />
-            </GlassCard>
+            </View>
+          </PanelCard>
 
-            <GlassCard>
-              <Text preset="bold" style={themed($sectionTitle)}>
-                Vault Tools
-              </Text>
-              <SettingsLink
+          <PanelCard
+            title="Vault Tools"
+            subtitle="Diagnostics, security, and reset tools."
+            compact
+          >
+            <View style={themed($toolStack)}>
+              <MiniToolRow
                 label="Export & Diagnostics"
-                description="Share demo-safe diagnostics and export an encrypted vault backup."
+                value="Backup, logs"
+                accent="blue"
+                icon={<Stethoscope size={16} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("VaultDiagnostics")}
               />
-              <SettingsLink
+
+              <MiniToolRow
                 label="Threat Model"
-                description="Read what Locker protects against, what it does not, and the security tradeoffs."
+                value="Security guide"
+                accent="warm"
+                icon={<ShieldAlert size={16} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("ThreatModel")}
               />
-              <SettingsLink
+
+              <MiniToolRow
                 label="Replay Onboarding"
-                description="Run the privacy-first onboarding flow again from Settings."
+                value="Run flow again"
+                accent="neutral"
+                icon={<RotateCcw size={16} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={handleReplayOnboarding}
               />
-            </GlassCard>
-          </View>
-        </AnimatedBlobBackground>
+            </View>
+          </PanelCard>
+        </Animated.View>
       </Screen>
     )
   }
 
-const SettingsLink = ({
-  label,
-  description,
-  onPress,
+function PanelCard({
+  children,
+  subtitle,
+  title,
+  compact = false,
 }: {
-  label: string
-  description: string
-  onPress: () => void
-}) => {
+  children: ReactNode
+  subtitle?: string
+  title: string
+  compact?: boolean
+}) {
   const { themed } = useAppTheme()
 
   return (
-    <Pressable style={({ pressed }) => [themed($linkCard), pressed && themed($linkCardPressed)]} onPress={onPress}>
-      <Text preset="bold" style={themed($linkTitle)}>
-        {label}
-      </Text>
-      <Text style={themed($linkDescription)}>{description}</Text>
+    <View style={themed([$panel, compact && $panelCompact])}>
+      <View style={themed($panelHeader)}>
+        <Text preset="bold" style={themed($sectionTitle)}>
+          {title}
+        </Text>
+        {subtitle ? <Text style={themed($sectionSubtitle)}>{subtitle}</Text> : null}
+      </View>
+      {children}
+    </View>
+  )
+}
+
+function ControlTile({
+  accent,
+  caption,
+  icon,
+  label,
+  onPress,
+}: {
+  accent: "pink" | "blue" | "warm" | "neutral"
+  caption: string
+  icon: ReactNode
+  label: string
+  onPress: () => void
+}) {
+  const { themed, theme } = useAppTheme()
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [themed($tile), pressed && themed($tilePressed)]}>
+      <View
+        style={themed([
+          $tileIconWrap,
+          accent === "pink" && $tileIconWrapPink,
+          accent === "blue" && $tileIconWrapBlue,
+          accent === "warm" && $tileIconWrapWarm,
+          accent === "neutral" && $tileIconWrapNeutral,
+        ])}
+      >
+        {icon}
+      </View>
+
+      <View style={themed($tileCopy)}>
+        <Text preset="bold" style={themed($tileTitle)}>
+          {label}
+        </Text>
+        <Text style={themed($tileCaption)}>{caption}</Text>
+      </View>
+
+      <View style={themed($tileChevron)}>
+        <ChevronRight size={16} color={theme.colors.vaultHub.vaultHubMuted} />
+      </View>
     </Pressable>
   )
 }
 
-const $screen: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  backgroundColor: colors.background,
-})
+function MiniToolRow({
+  accent,
+  icon,
+  label,
+  onPress,
+  value,
+}: {
+  accent: "pink" | "blue" | "warm" | "neutral"
+  icon: ReactNode
+  label: string
+  onPress: () => void
+  value: string
+}) {
+  const { themed, theme } = useAppTheme()
 
-const $headerWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
-  paddingTop: spacing.lg,
-  marginBottom: spacing.md,
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [themed($miniRow), pressed && themed($miniRowPressed)]}>
+      <View
+        style={themed([
+          $miniRowIconWrap,
+          accent === "pink" && $tileIconWrapPink,
+          accent === "blue" && $tileIconWrapBlue,
+          accent === "warm" && $tileIconWrapWarm,
+          accent === "neutral" && $tileIconWrapNeutral,
+        ])}
+      >
+        {icon}
+      </View>
+
+      <View style={themed($miniRowCopy)}>
+        <Text preset="bold" style={themed($miniRowTitle)}>
+          {label}
+        </Text>
+        <Text style={themed($miniRowValue)}>{value}</Text>
+      </View>
+
+      <ChevronRight size={16} color={theme.colors.vaultHub.vaultHubMuted} />
+    </Pressable>
+  )
+}
+
+function HeroChip({
+  label,
+  tone,
+}: {
+  label: string
+  tone: "pink" | "blue" | "warm"
+}) {
+  const { themed } = useAppTheme()
+
+  return (
+    <View
+      style={themed([
+        $chip,
+        // tone === "pink" && $chipPink,
+        // tone === "blue" && $chipBlue,
+        // tone === "warm" && $chipWarm,
+      ])}
+    >
+      <Text style={themed($chipText)}>{label}</Text>
+    </View>
+  )
+}
+
+const $screen: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  flex: 1,
+  backgroundColor: colors.vaultHub.vaultHubBg,
 })
 
 const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
-  paddingBottom: spacing.xl,
-  gap: spacing.lg,
+  paddingHorizontal: spacing.md,
+  paddingTop: spacing.sm,
+  paddingBottom: spacing.xl * 2,
+  gap: spacing.md,
 })
 
-const $title: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textStrong,
-})
-
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textMuted,
-})
-
-const $sectionTitle: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.textStrong,
-  marginBottom: spacing.sm,
-})
-
-const $linkCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  backgroundColor: colors.glass,
-  borderRadius: 16,
-  borderWidth: 1,
-  borderColor: colors.glassBorder,
+const $hero: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  gap: spacing.sm,
   padding: spacing.md,
-  marginTop: spacing.sm,
+  borderRadius: 24,
+  backgroundColor: "rgba(24, 27, 37, 0.46)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+  shadowColor: "rgba(0,0,0,0.82)",
+  shadowOpacity: 0.28,
+  shadowRadius: 18,
+  shadowOffset: { width: 0, height: 10 },
+  elevation: 8,
+})
+
+const $heroTopRow: ThemedStyle<ViewStyle> = () => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+})
+
+const $heroBadge: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  paddingHorizontal: spacing.sm,
+  paddingVertical: 6,
+  borderRadius: 999,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+})
+
+const $heroStatusPill: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingHorizontal: spacing.sm,
+  paddingVertical: 6,
+  borderRadius: 999,
+  backgroundColor: "rgba(255, 77, 186, 0.12)",
+  borderWidth: 1,
+  borderColor: "rgba(255, 154, 219, 0.28)",
+})
+
+const $heroStatusText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 11,
+  fontWeight: "600",
+})
+
+const $heroEyebrow: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vaultHub.vaultHubTextSecondary,
+  fontFamily: typography.primary.medium,
+  textTransform: "uppercase",
+  letterSpacing: 1.2,
+})
+
+const $heroTitle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontFamily: typography.primary.medium,
+  fontSize: 28,
+  lineHeight: 32,
+})
+
+const $heroSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 12,
+  lineHeight: 22,
+})
+
+const $heroMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+  marginTop: 4,
+})
+
+const $chip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  borderRadius: 999,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: 2,
+  borderWidth: 1,
+  borderColor: "rgba(123, 117, 121, 0.42)",
+  backgroundColor: "rgba(116, 115, 117, 0.08)",
+})
+
+const $chipPink: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "rgba(102, 101, 101, 0.14)",
+  borderColor: "rgba(123, 117, 121, 0.42)",
+})
+
+const $chipBlue: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "rgba(123, 211, 255, 0.12)",
+  borderColor: "rgba(123, 211, 255, 0.32)",
+})
+
+const $chipWarm: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  backgroundColor: "rgba(255, 214, 90, 0.14)",
+  borderColor: colors.accentYellow,
+})
+
+const $chipText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontFamily: typography.primary.medium,
+  fontSize: 11,
+})
+
+const $stack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.md,
+})
+
+const $panel: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  borderRadius: 24,
+  padding: spacing.md,
+  gap: spacing.md,
+  backgroundColor: "rgba(24, 27, 37, 0.56)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+  shadowColor: "rgba(0,0,0,0.82)",
+  shadowOpacity: 0.28,
+  shadowRadius: 18,
+  shadowOffset: { width: 0, height: 12 },
+  elevation: 8,
+})
+
+const $panelCompact: ThemedStyle<ViewStyle> = () => ({
+  gap: 12,
+})
+
+const $panelHeader: ThemedStyle<ViewStyle> = () => ({
+  gap: 2,
+})
+
+const $sectionTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 15,
+})
+
+const $sectionSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 12,
+  lineHeight: 17,
+})
+
+const $grid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.sm,
+})
+
+const $tile: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  width: "48%",
+  minHeight: 112,
+  borderRadius: 20,
+  padding: spacing.sm,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+  justifyContent: "space-between",
+})
+
+const $tilePressed: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.9,
+  transform: [{ scale: 0.985 }],
+})
+
+const $tileIconWrap: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 38,
+  height: 38,
+  borderRadius: 12,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(255,255,255,0.05)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+})
+
+const $tileIconWrapPink: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "rgba(255, 77, 186, 0.12)",
+  borderColor: "rgba(255, 154, 219, 0.28)",
+})
+
+const $tileIconWrapBlue: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "rgba(123, 211, 255, 0.08)",
+  borderColor: "rgba(123, 211, 255, 0.22)",
+})
+
+const $tileIconWrapWarm: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "rgba(255, 214, 90, 0.10)",
+  borderColor: "rgba(255, 214, 90, 0.24)",
+})
+
+const $tileIconWrapNeutral: ThemedStyle<ViewStyle> = () => ({
+  backgroundColor: "rgba(255,255,255,0.06)",
+  borderColor: "rgba(114, 115, 115, 0.22)",
+})
+
+const $tileCopy: ThemedStyle<ViewStyle> = () => ({
+  gap: 3,
+})
+
+const $tileTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 13,
+})
+
+const $tileCaption: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 11,
+  lineHeight: 15,
+})
+
+const $tileChevron: ThemedStyle<ViewStyle> = () => ({
+  position: "absolute",
+  right: 10,
+  bottom: 10,
+  opacity: 0.9,
+})
+
+const $toolStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
 })
 
-const $linkCardPressed: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.82,
+const $miniRow: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  minHeight: 58,
+  borderRadius: 18,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  backgroundColor: "rgba(255,255,255,0.04)",
+  borderWidth: 1,
+  borderColor: colors.vaultHub.vaultHubBorderSubtle,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
 })
 
-const $linkTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textStrong,
+const $miniRowPressed: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.9,
 })
 
-const $linkDescription: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textMuted,
-  lineHeight: 20,
+const $miniRowIconWrap: ThemedStyle<ViewStyle> = () => ({
+  width: 34,
+  height: 34,
+  borderRadius: 11,
+  alignItems: "center",
+  justifyContent: "center",
+})
+
+const $miniRowCopy: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+  gap: 2,
+})
+
+const $miniRowTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubTextPrimary,
+  fontSize: 13,
+})
+
+const $miniRowValue: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.vaultHub.vaultHubMuted,
+  fontSize: 11,
+  lineHeight: 15,
 })

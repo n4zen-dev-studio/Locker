@@ -27,6 +27,7 @@ import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
 import { navigationRef, useBackButtonHandler } from "./navigationUtilities"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 
 /**
  * This is a list of all the route names that will exit the app if the back button
@@ -47,9 +48,9 @@ const AppStack = () => {
       initialRouteName="Calculator"
       screenOptions={{
         headerShown: false,
-        navigationBarColor: colors.background,
+        // navigationBarColor: "transparent",
         contentStyle: {
-          backgroundColor: colors.background,
+          backgroundColor: "transparent",
         },
       }}
     >
@@ -79,10 +80,12 @@ export const AppNavigator = (props: NavigationProps) => {
   useBackButtonHandler((routeName) => exitRoutes.includes(routeName))
 
   return (
+      // <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer ref={navigationRef} theme={navigationTheme} {...props}>
       <ErrorBoundary catchErrors={Config.catchErrors}>
         <AppStack />
       </ErrorBoundary>
     </NavigationContainer>
+      // </GestureHandlerRootView>
   )
 }
