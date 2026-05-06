@@ -36,7 +36,7 @@ import {
   matchesDecoyVaultEntryCode,
   matchesRealVaultEntryCode,
 } from "@/locker/storage/stealthEntryRepo";
-import { getPostUnlockRoute } from "@/navigators/postUnlockRoute";
+import { resolveVaultEntryRoute } from "@/navigators/postUnlockRoute";
 import type { AppStackScreenProps } from "@/navigators/navigationTypes";
 import {
   createMoldedSurface,
@@ -570,6 +570,19 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
       handleOperator("^");
     };
 
+    const handleVaultEntry = async () => {
+      const next = await resolveVaultEntryRoute({ unlocked: vaultSession.isUnlocked() });
+      if (next.name === "VaultPasskeySetup") {
+        navigation.navigate("VaultPasskeySetup", next.params);
+        return;
+      }
+      if (next.name === "VaultTabs") {
+        navigation.navigate("VaultTabs", next.params);
+        return;
+      }
+      navigation.navigate(next.name);
+    };
+
     const handleEquals = () => {
       if (longPressTriggered.current) {
         longPressTriggered.current = false;
@@ -577,16 +590,7 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
       }
 
       if (matchesRealVaultEntryCode(display)) {
-        if (vaultSession.isUnlocked()) {
-          const next = getPostUnlockRoute();
-          if (next.name === "VaultOnboarding") {
-            navigation.navigate("VaultOnboarding");
-          } else {
-            navigation.navigate("VaultTabs", next.params);
-          }
-        } else {
-          navigation.navigate("VaultLocked");
-        }
+        void handleVaultEntry();
         return;
       }
 
@@ -624,7 +628,7 @@ export const CalculatorScreen: FC<AppStackScreenProps<"Calculator">> =
 
     const handleEqualsLongPress = () => {
       longPressTriggered.current = true;
-      navigation.navigate("VaultLocked");
+      void handleVaultEntry();
     };
 
     const toggleHistory = () => {

@@ -7,7 +7,6 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import Animated, {
   Easing,
   FadeIn,
@@ -45,19 +44,6 @@ export const VaultPasskeySetupScreen: FC<
   const mode = route.params?.mode ?? "fresh";
   const meta = useMemo(() => getMeta(), []);
   const needsLegacyUnlock = meta?.v === 1 && !vaultSession.isUnlocked();
-
-  useFocusEffect(
-    useCallback(() => {
-      if (vaultSession.isUnlocked() && meta?.v === 2) {
-        const next = getPostUnlockRoute();
-        if (next.name === "VaultOnboarding") {
-          navigation.replace("VaultOnboarding");
-          return;
-        }
-        navigation.replace(next.name, next.params);
-      }
-    }, [navigation, meta]),
-  );
 
   useEffect(() => {
     isPasskeyEnabled().then(setPasskeyReady);
@@ -103,8 +89,8 @@ export const VaultPasskeySetupScreen: FC<
       });
 
       const next = getPostUnlockRoute();
-      if (next.name === "VaultOnboarding") {
-        navigation.replace("VaultOnboarding");
+      if (next.name === "VaultSelection") {
+        navigation.replace("VaultSelection");
       } else {
         navigation.replace(next.name, next.params);
       }

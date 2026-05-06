@@ -2,7 +2,7 @@ import { Platform } from "react-native"
 
 import { randomBytes } from "@/locker/crypto/random"
 import { bytesToBase64 } from "@/locker/crypto/encoding"
-import { load, save } from "@/utils/storage"
+import { load, remove, save } from "@/utils/storage"
 
 const BOOTSTRAP_KEY = "locker:bootstrap:v1"
 
@@ -49,4 +49,8 @@ export function markBootstrapCompleted(): BootstrapState {
   const state = { ...ensureBootstrapState(), requested: true, completedAt: new Date().toISOString() }
   save(BOOTSTRAP_KEY, state)
   return state
+}
+
+export function clearBootstrapState(): void {
+  remove(BOOTSTRAP_KEY)
 }

@@ -13,6 +13,7 @@ import { CalculatorScreen } from "@/screens/CalculatorScreen"
 import { VaultTabsNavigator } from "@/navigators/VaultTabsNavigator"
 import { VaultLockedScreen } from "@/screens/VaultLockedScreen"
 import { VaultOnboardingScreen } from "@/screens/VaultOnboardingScreen"
+import { VaultSelectionScreen } from "@/screens/VaultSelectionScreen"
 import { VaultPasskeySetupScreen } from "@/screens/VaultPasskeySetupScreen"
 import { VaultPinScreen } from "@/screens/VaultPinScreen"
 import { CalculatorEntryCodesScreen } from "@/screens/CalculatorEntryCodesScreen"
@@ -60,6 +61,7 @@ const AppStack = () => {
       <Stack.Screen name="VaultPin" component={VaultPinScreen} />
       <Stack.Screen name="VaultPasskeySetup" component={VaultPasskeySetupScreen} />
       <Stack.Screen name="VaultOnboarding" component={VaultOnboardingScreen} />
+      <Stack.Screen name="VaultSelection" component={VaultSelectionScreen} />
       <Stack.Screen name="VaultTabs" component={VaultTabsNavigator} />
       <Stack.Screen name="CalculatorEntryCodes" component={CalculatorEntryCodesScreen} />
       <Stack.Screen name="VaultLinkDevice" component={VaultLinkDeviceScreen} />

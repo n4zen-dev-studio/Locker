@@ -50,6 +50,7 @@ export type AppStackParamList = {
   VaultPin: undefined
   VaultPasskeySetup: { mode?: "fresh" | "migrate" | "recovery" } | undefined
   VaultOnboarding: undefined
+  VaultSelection: undefined
   VaultTabs: NavigatorScreenParams<VaultTabsParamList>
   CalculatorEntryCodes: undefined
   VaultLinkDevice: { initialPayload?: string } | undefined
