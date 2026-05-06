@@ -10,6 +10,11 @@ import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
 import { fetchJson } from "@/locker/net/apiClient"
 import { getRemoteVaultId, setRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
+import { getRemoteVaultKey, setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
+import { randomBytes } from "@/locker/crypto/random"
+import { encryptV1 } from "@/locker/crypto/aead"
+import { sha256Hex } from "@/locker/crypto/sha"
+import { utf8ToBytes } from "@/locker/crypto/encoding"
 import { VaultDTO, DeviceDTO } from "@locker/types"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
@@ -37,6 +42,50 @@ export const VaultSwitcherScreen: FC<AppStackScreenProps<"VaultSwitcher">> = fun
       setError(message)
     }
   }, [])
+
+  const handleCreateVault = async () => {
+    setError(null)
+    setStatus(null)
+    try {
+      const data = await fetchJson<{ vault: VaultDTO }>("/v1/vaults", {
+        method: "POST",
+        body: JSON.stringify({ name: "My Vault" }),
+      })
+      setRemoteVaultId(data.vault.id, data.vault.name)
+      setVaults((prev) => [data.vault, ...prev])
+      let rvk = await getRemoteVaultKey(data.vault.id)
+      if (!rvk) {
+        rvk = randomBytes(32)
+        await setRemoteVaultKey(data.vault.id, rvk)
+        await uploadSyncKeyCheck(data.vault.id, rvk)
+      }
+      setStatus("Vault created and set active")
+      navigation.replace("VaultHome")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Create vault failed"
+      setError(message)
+    }
+  }
+
+  const uploadSyncKeyCheck = async (vaultId: string, rvk: Uint8Array) => {
+    const payload = {
+      v: 1,
+      type: "sync-key-check",
+      vaultId,
+      createdAt: new Date().toISOString(),
+    }
+    const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(payload)))
+    const bytes = utf8ToBytes(JSON.stringify(envelope))
+    const sha256 = sha256Hex(bytes)
+    await fetchJson<{ ok: boolean }>(
+      `/v1/vaults/${vaultId}/blobs/sync-key-check-v1?sha256=${sha256}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/octet-stream" },
+        body: bytes,
+      },
+    )
+  }
 
   const loadDevices = useCallback(async (vaultId: string) => {
     try {
@@ -83,10 +132,21 @@ export const VaultSwitcherScreen: FC<AppStackScreenProps<"VaultSwitcher">> = fun
         <Text preset="subheading" style={themed($subtitle)}>
           Select an active remote vault
         </Text>
+        <Pressable style={themed($linkButton)} onPress={() => navigation.navigate("ServerUrl")}>
+          <Text preset="bold" style={themed($linkText)}>
+            Server URL
+          </Text>
+        </Pressable>
       </View>
 
       {error ? <Text style={themed($errorText)}>{error}</Text> : null}
       {status ? <Text style={themed($statusText)}>{status}</Text> : null}
+
+      <Pressable style={themed($primaryButton)} onPress={handleCreateVault}>
+        <Text preset="bold" style={themed($primaryButtonText)}>
+          Create Vault
+        </Text>
+      </Pressable>
 
       {vaults.length === 0 ? (
         <View style={themed($card)}>

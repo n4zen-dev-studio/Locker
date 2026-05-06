@@ -10,6 +10,8 @@ import type { ThemedStyle } from "@/theme/types"
 import { vaultSession } from "@/locker/session"
 import { fetchJson } from "@/locker/net/apiClient"
 import { DEFAULT_API_BASE_URL } from "@/locker/config"
+import { getServerUrl, setServerUrl } from "@/locker/storage/serverConfigRepo"
+import { normalizeApiBaseUrl } from "@/locker/net/apiClient"
 import { setToken } from "@/locker/auth/tokenStore"
 import { AccountState, setAccount } from "@/locker/storage/accountRepo"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
@@ -53,7 +55,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
     }
 
     let linkCode = ""
-    let apiBase = DEFAULT_API_BASE_URL
+    let apiBase = getServerUrl() || DEFAULT_API_BASE_URL
 
     if (trimmed.startsWith("{")) {
       try {
@@ -75,6 +77,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
 
     try {
       setStatus("Redeeming link code...")
+      apiBase = normalizeApiBaseUrl(apiBase)
       const data = await fetchJson<{ token: string; user: UserDTO; device: DeviceDTO }>(
         "/v1/devices/link-code/redeem",
         {
@@ -89,6 +92,7 @@ export const VaultLinkDeviceScreen: FC<AppStackScreenProps<"VaultLinkDevice">> =
       )
 
       await setToken(data.token)
+      setServerUrl(apiBase)
 
       const account: AccountState = {
         user: data.user,

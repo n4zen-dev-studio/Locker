@@ -208,6 +208,9 @@ export default function DashboardPage() {
               <li key={vault.id} style={{ marginBottom: 8 }}>
                 <div>{vault.name} — {vault.id}</div>
                 <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                  <button onClick={() => router.push(`/vaults/${vault.id}/notes`)}>
+                    Notes
+                  </button>
                   <button onClick={() => handleDeleteVault(vault.id)}>Delete Vault</button>
                   {env.NEXT_PUBLIC_ADMIN_PURGE_ENABLED === "true" ? (
                     <button onClick={() => handlePurgeVault(vault.id)}>Purge Vault</button>

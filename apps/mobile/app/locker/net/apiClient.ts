@@ -1,17 +1,26 @@
 import { DEFAULT_API_BASE_URL } from "../config"
 import { getToken } from "../auth/tokenStore"
 import { getAccount } from "../storage/accountRepo"
+import { getServerUrl } from "../storage/serverConfigRepo"
 
 export type ApiRequestOptions = {
   token?: string | null
   baseUrl?: string
 }
 
+export function normalizeApiBaseUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) return trimmed
+  return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed
+}
+
 export function getApiBaseUrl(override?: string): string {
-  if (override) return override
+  if (override) return normalizeApiBaseUrl(override)
+  const stored = getServerUrl()
+  if (stored) return normalizeApiBaseUrl(stored)
   const account = getAccount()
-  if (account?.apiBase) return account.apiBase
-  return DEFAULT_API_BASE_URL
+  if (account?.apiBase) return normalizeApiBaseUrl(account.apiBase)
+  return normalizeApiBaseUrl(DEFAULT_API_BASE_URL)
 }
 
 async function buildHeaders(init: RequestInit, token: string | null, hasBody: boolean): Promise<Headers> {
@@ -33,9 +42,17 @@ export async function fetchJson<T>(
   const headers = await buildHeaders(init, token, !!init.body)
   const url = `${baseUrl}${path}`
   const method = (init.method || "GET").toUpperCase()
-  const res = await fetch(url, { ...init, headers })
+  let res: Response
+  try {
+    res = await fetch(url, { ...init, headers })
+  } catch (err) {
+    if (__DEV__) console.log("[api] network error", { url })
+    throw new Error("Cannot reach server. Check Server URL and Wi-Fi.")
+  }
   if (!res.ok) {
     const text = await safeReadBody(res)
+    if (res.status === 401) throw new Error("Session expired. Please link again.")
+    if (res.status === 403) throw new Error("No access to this vault.")
     throw new Error(`[HTTP ${res.status}] ${method} ${url} :: ${text}`)
   }
   return res.json() as Promise<T>
@@ -51,9 +68,17 @@ export async function fetchRaw(
   const headers = await buildHeaders(init, token, !!init.body)
   const url = `${baseUrl}${path}`
   const method = (init.method || "GET").toUpperCase()
-  const res = await fetch(url, { ...init, headers })
+  let res: Response
+  try {
+    res = await fetch(url, { ...init, headers })
+  } catch (err) {
+    if (__DEV__) console.log("[api] network error", { url })
+    throw new Error("Cannot reach server. Check Server URL and Wi-Fi.")
+  }
   if (!res.ok) {
     const text = await safeReadBody(res)
+    if (res.status === 401) throw new Error("Session expired. Please link again.")
+    if (res.status === 403) throw new Error("No access to this vault.")
     throw new Error(`[HTTP ${res.status}] ${method} ${url} :: ${text}`)
   }
   const buffer = await res.arrayBuffer()

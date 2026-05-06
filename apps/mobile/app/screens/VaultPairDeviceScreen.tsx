@@ -11,8 +11,10 @@ import { vaultSession } from "@/locker/session"
 import { getRemoteVaultId } from "@/locker/storage/remoteVaultRepo"
 import { getRemoteVaultKey, setRemoteVaultKey } from "@/locker/storage/remoteKeyRepo"
 import { randomBytes } from "@/locker/crypto/random"
-import { bytesToBase64 } from "@/locker/crypto/encoding"
-import { getApiBaseUrl } from "@/locker/net/apiClient"
+import { bytesToBase64, utf8ToBytes } from "@/locker/crypto/encoding"
+import { fetchJson, getApiBaseUrl } from "@/locker/net/apiClient"
+import { encryptV1 } from "@/locker/crypto/aead"
+import { sha256Hex } from "@/locker/crypto/sha"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
 export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> = function VaultPairDeviceScreen(
@@ -37,6 +39,7 @@ export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> =
     if (!rvk) {
       rvk = randomBytes(32)
       await setRemoteVaultKey(vaultId, rvk)
+      await uploadSyncKeyCheck(vaultId, rvk)
     }
 
     const data = {
@@ -49,6 +52,26 @@ export const VaultPairDeviceScreen: FC<AppStackScreenProps<"VaultPairDevice">> =
     setPayload(JSON.stringify(data))
     console.log("Generated pairing payload", JSON.stringify(data))
   }, [])
+
+  const uploadSyncKeyCheck = async (vaultId: string, rvk: Uint8Array) => {
+    const payload = {
+      v: 1,
+      type: "sync-key-check",
+      vaultId,
+      createdAt: new Date().toISOString(),
+    }
+    const envelope = encryptV1(rvk, utf8ToBytes(JSON.stringify(payload)))
+    const bytes = utf8ToBytes(JSON.stringify(envelope))
+    const sha256 = sha256Hex(bytes)
+    await fetchJson<{ ok: boolean }>(
+      `/v1/vaults/${vaultId}/blobs/sync-key-check-v1?sha256=${sha256}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/octet-stream" },
+        body: bytes,
+      },
+    )
+  }
 
   useFocusEffect(
     useCallback(() => {

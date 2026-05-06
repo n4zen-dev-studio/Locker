@@ -150,6 +150,43 @@ export async function registerVaultRoutes(app: FastifyInstance) {
       reply.send({ devices: rows })
     }
   )
+
+  app.get(
+    "/v1/vaults/:vaultId/notes",
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const user = request.user!
+      const { vaultId } = request.params as { vaultId: string }
+      const db = getDb()
+
+      const vault = db.prepare("SELECT deletedAt FROM vaults WHERE id = ?").get(vaultId) as
+        | { deletedAt?: string | null }
+        | undefined
+      if (!vault) {
+        reply.code(404).send({ error: "Not found" })
+        return
+      }
+      if (vault.deletedAt) {
+        reply.code(404).send({ error: "Vault deleted" })
+        return
+      }
+
+      const member = db.prepare(
+        "SELECT role FROM vault_members WHERE vaultId = ? AND userId = ?"
+      ).get(vaultId, user.id) as { role?: string } | undefined
+
+      if (!member) {
+        reply.code(403).send({ error: "Forbidden" })
+        return
+      }
+
+      const rows = db.prepare(
+        "SELECT id FROM blobs WHERE vaultId = ? AND id LIKE 'note-v1-%' ORDER BY createdAt DESC"
+      ).all(vaultId) as Array<{ id: string }>
+
+      reply.send({ notes: rows.map((row) => row.id) })
+    }
+  )
 }
 
 async function deleteVaultBlobFolder(vaultId: string): Promise<void> {

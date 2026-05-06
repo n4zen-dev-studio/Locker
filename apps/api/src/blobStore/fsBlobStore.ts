@@ -15,3 +15,8 @@ export async function getBlob(vaultId: string, blobId: string): Promise<Buffer> 
   const filePath = path.join(BASE_DIR, vaultId, `${blobId}.bin`)
   return fs.readFile(filePath)
 }
+
+export async function deleteBlob(vaultId: string, blobId: string): Promise<void> {
+  const filePath = path.join(BASE_DIR, vaultId, `${blobId}.bin`)
+  await fs.rm(filePath, { force: true })
+}
