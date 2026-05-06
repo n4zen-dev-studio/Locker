@@ -714,24 +714,25 @@ export const VaultHeroOrb: FC<VaultHeroOrbProps> = ({
                 >
                   <Stop
                     offset="0%"
-                    stopColor={theme.colors.vault.vaultAccentPinkSoft}
+                    stopColor={"#da75b7"}
                     stopOpacity="0.96"
                   />
                   <Stop
                     offset="28%"
-                    stopColor={theme.colors.vault.vaultAccentPink}
+                    stopColor={"#bd5e98"}
                     stopOpacity="0.82"
                   />
                   <Stop
                     offset="72%"
-                    stopColor={theme.colors.vault.vaultGlow}
+                    stopColor={"rgba(234, 99, 182, 0.3)"}
                     stopOpacity="0.22"
                   />
                   <Stop
                     offset="100%"
-                    stopColor={theme.colors.vault.vaultSurface}
+                    stopColor={"rgba(18, 12, 24, 0.72)"}
                     stopOpacity="0.1"
                   />
+   
                 </RadialGradient>
               </Defs>
               <Rect

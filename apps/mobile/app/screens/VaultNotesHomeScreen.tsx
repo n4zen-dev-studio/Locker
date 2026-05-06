@@ -1029,7 +1029,8 @@ const $metaPillText: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
 const $heroSection: ThemedStyle<ViewStyle> = () => ({
   alignItems: "center",
   justifyContent: "center",
-  marginTop: 40,
+  marginTop: 20,
+  marginBottom: 30,
   height: Dimensions.get("screen").height * 0.45,
 });
 
