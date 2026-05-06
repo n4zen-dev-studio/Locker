@@ -1,32 +1,27 @@
-import { useCallback, useMemo } from "react"
+import { useMemo } from "react"
 import { Pressable, View, ViewStyle, TextStyle } from "react-native"
 import { createBottomTabNavigator, BottomTabBarProps } from "@react-navigation/bottom-tabs"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 
 import { VaultNotesHomeScreen } from "@/screens/VaultNotesHomeScreen"
 import { VaultNoteScreen } from "@/screens/VaultNoteScreen"
-import { SyncDashboardScreen } from "@/screens/SyncDashboardScreen"
-import { CollabDashboardScreen } from "@/screens/CollabDashboardScreen"
 import { SecurityDashboardScreen } from "@/screens/SecurityDashboardScreen"
+import { SettingsHomeScreen } from "@/screens/SettingsHomeScreen"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import type {
-  CollabStackParamList,
   SecurityStackParamList,
-  SyncStackParamList,
+  SettingsStackParamList,
   VaultStackParamList,
   VaultTabsParamList,
 } from "@/navigators/navigationTypes"
-import { GlowFab } from "@/components/GlowFab"
 import { Text } from "@/components/Text"
-import { navigate } from "@/navigators/navigationUtilities"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
 const Tabs = createBottomTabNavigator<VaultTabsParamList>()
 const VaultStack = createNativeStackNavigator<VaultStackParamList>()
-const SyncStack = createNativeStackNavigator<SyncStackParamList>()
-const CollabStack = createNativeStackNavigator<CollabStackParamList>()
 const SecurityStack = createNativeStackNavigator<SecurityStackParamList>()
+const SettingsStack = createNativeStackNavigator<SettingsStackParamList>()
 
 const VaultStackScreen = () => {
   return (
@@ -34,22 +29,6 @@ const VaultStackScreen = () => {
       <VaultStack.Screen name="VaultHome" component={VaultNotesHomeScreen} />
       <VaultStack.Screen name="VaultNote" component={VaultNoteScreen} />
     </VaultStack.Navigator>
-  )
-}
-
-const SyncStackScreen = () => {
-  return (
-    <SyncStack.Navigator screenOptions={{ headerShown: false }}>
-      <SyncStack.Screen name="SyncDashboard" component={SyncDashboardScreen} />
-    </SyncStack.Navigator>
-  )
-}
-
-const CollabStackScreen = () => {
-  return (
-    <CollabStack.Navigator screenOptions={{ headerShown: false }}>
-      <CollabStack.Screen name="CollabDashboard" component={CollabDashboardScreen} />
-    </CollabStack.Navigator>
   )
 }
 
@@ -61,55 +40,32 @@ const SecurityStackScreen = () => {
   )
 }
 
+const SettingsStackScreen = () => {
+  return (
+    <SettingsStack.Navigator screenOptions={{ headerShown: false }}>
+      <SettingsStack.Screen name="SettingsHome" component={SettingsHomeScreen} />
+    </SettingsStack.Navigator>
+  )
+}
+
 const TabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
   const { themed } = useAppTheme()
   const $safeBottom = useSafeAreaInsetsStyle(["bottom"])
-  const handleFabPress = useCallback(() => {
-    navigate("VaultTabs", { screen: "Vault", params: { screen: "VaultNote", params: {} } })
-  }, [])
-  const handleFabLongPress = useCallback(() => {
-    navigate("VaultFabVaultPicker")
-  }, [])
 
   const tabs = useMemo(
     () => [
       { key: "Vault", label: "Vault" },
-      { key: "Sync", label: "Sync" },
-      { key: "Collab", label: "Collab" },
       { key: "Security", label: "Security" },
+      { key: "Settings", label: "Settings" },
     ],
     [],
   )
 
   return (
     <View style={themed([$tabBar, $safeBottom])}>
-      {tabs.slice(0, 2).map((tab, index) => {
+      {tabs.map((tab, index) => {
         const route = state.routes[index]
         const isFocused = state.index === index
-        return (
-          <Pressable
-            key={tab.key}
-            onPress={() => navigation.navigate(route.name)}
-            style={themed([$tabButton, isFocused && $tabButtonActive])}
-          >
-            <View style={themed([$tabDot, isFocused && $tabDotActive])} />
-            <View style={themed($tabLabelWrap)}>
-              <View style={themed([$tabLabelPill, isFocused && $tabLabelPillActive])}>
-                <TabLabel label={tab.label} isFocused={isFocused} />
-              </View>
-            </View>
-          </Pressable>
-        )
-      })}
-
-      <View style={themed($fabSlot)}>
-        <GlowFab onPress={handleFabPress} onLongPress={handleFabLongPress} />
-      </View>
-
-      {tabs.slice(2).map((tab, offset) => {
-        const routeIndex = offset + 2
-        const route = state.routes[routeIndex]
-        const isFocused = state.index === routeIndex
         return (
           <Pressable
             key={tab.key}
@@ -145,9 +101,8 @@ export const VaultTabsNavigator = () => {
       tabBar={(props) => <TabBar {...props} />}
     >
       <Tabs.Screen name="Vault" component={VaultStackScreen} />
-      <Tabs.Screen name="Sync" component={SyncStackScreen} />
-      <Tabs.Screen name="Collab" component={CollabStackScreen} />
       <Tabs.Screen name="Security" component={SecurityStackScreen} />
+      <Tabs.Screen name="Settings" component={SettingsStackScreen} />
     </Tabs.Navigator>
   )
 }
@@ -218,11 +173,4 @@ const $tabLabelTextActive: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textStrong,
   fontSize: 11,
   letterSpacing: 0.4,
-})
-
-const $fabSlot: ThemedStyle<ViewStyle> = () => ({
-  alignItems: "center",
-  justifyContent: "center",
-  marginTop: -26,
-  marginHorizontal: 12,
 })

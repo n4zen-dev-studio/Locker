@@ -10,6 +10,7 @@ import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 import { isPasskeyEnabled, unlockWithPasskey } from "@/locker/auth/passkey"
 import { getMeta } from "@/locker/storage/vaultMetaRepo"
 import { vaultSession } from "@/locker/session"
+import { getPostUnlockRoute } from "@/navigators/postUnlockRoute"
 
 export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = function VaultLockedScreen(
   props,
@@ -58,7 +59,12 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = functio
     try {
       const vmk = await unlockWithPasskey()
       vaultSession.setKey(vmk)
-      navigation.replace("VaultTabs", { screen: "Vault" })
+      const next = getPostUnlockRoute()
+      if (next.name === "VaultOnboarding") {
+        navigation.replace("VaultOnboarding")
+      } else {
+        navigation.replace(next.name, next.params)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to unlock"
       setError(message)
@@ -85,9 +91,9 @@ export const VaultLockedScreen: FC<AppStackScreenProps<"VaultLocked">> = functio
         </Pressable>
 
         {metaVersion === 1 ? (
-          <Pressable style={themed($button)} onPress={() => navigation.navigate("VaultPin")}> 
+          <Pressable style={themed($button)} onPress={() => navigation.navigate("VaultPin")}>
             <Text preset="bold" style={themed($buttonText)}>
-              Use PIN (Legacy)
+              Migrate Legacy Vault
             </Text>
           </Pressable>
         ) : null}

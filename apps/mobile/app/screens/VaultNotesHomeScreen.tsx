@@ -14,7 +14,6 @@ import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { Icon } from "@/components/Icon"
 import { GlassHeader } from "@/components/GlassHeader"
-import { GlassPillButton } from "@/components/GlassPillButton"
 import { AccentBadge } from "@/components/AccentBadge"
 import { AnimatedBlobBackground } from "@/components/AnimatedBlobBackground"
 import type { VaultStackScreenProps } from "@/navigators/navigationTypes"
@@ -183,23 +182,20 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
         <View style={themed($headerWrap)}>
           <GlassHeader>
             <View style={themed($headerRow)}>
-              <GlassPillButton
-                label={activeVaultName ?? "Local Vault"}
-                onPress={() => navigation.navigate("VaultSwitcherModal")}
-              />
+              <View>
+                <Text preset="bold" style={themed($vaultNameText)}>
+                  {activeVaultName ?? "Personal Vault"}
+                </Text>
+                <Text style={themed($metaText)}>
+                  {activeVaultId ? "Personal cloud vault" : "Local-only vault"}
+                </Text>
+              </View>
               <View style={themed($headerActions)}>
-                <Pressable onPress={() => navigation.navigate("VaultTabs", { screen: "Sync" })}>
-                  <AccentBadge label="Sync" tone="blue" />
+                <Pressable onPress={() => navigation.navigate("VaultTabs", { screen: "Security" })}>
+                  <AccentBadge label="Security" tone="blue" />
                 </Pressable>
-                <Pressable onPress={() => navigation.navigate("VaultTabs", { screen: "Collab" })}>
-                  <AccentBadge label="Members" tone="yellow" />
-                </Pressable>
-                <Pressable onPress={() => navigation.navigate("Profile")}>
-                  <View style={themed($avatar)}>
-                    <Text preset="bold" style={themed($avatarText)}>
-                      P
-                    </Text>
-                  </View>
+                <Pressable onPress={() => navigation.navigate("VaultTabs", { screen: "Settings" })}>
+                  <AccentBadge label="Settings" tone="yellow" />
                 </Pressable>
                 <Pressable onPress={handleLock} style={themed($lockButton)}>
                   <Icon icon="lock" size={16} color="#fff" />
@@ -207,10 +203,10 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
               </View>
             </View>
             <Text preset="heading" style={themed($title)}>
-              {activeVaultName ?? "Locker"}
+              Vault
             </Text>
             <Text preset="subheading" style={themed($subtitle)}>
-              {activeVaultId ? "Remote Vault" : "Local Vault"}
+              Unified encrypted notes and attachments
             </Text>
             {unlockMethod ? <Text style={themed($metaText)}>Unlock method: {unlockMethod}</Text> : null}
             <Text style={themed($metaText)}>
@@ -226,6 +222,12 @@ export const VaultNotesHomeScreen: FC<VaultStackScreenProps<"VaultHome">> = func
           contentContainerStyle={themed($content)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleSyncNow} />}
         >
+          <Pressable style={themed($primaryAction)} onPress={() => navigation.navigate("VaultNote")}>
+            <Text preset="bold" style={themed($primaryActionText)}>
+              New Secure Note
+            </Text>
+          </Pressable>
+
           <Pressable style={themed($searchButton)} onPress={() => navigation.navigate("VaultSearch")}>
             <Text style={themed($searchText)}>Search notes…</Text>
           </Pressable>
@@ -321,20 +323,8 @@ const $headerActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
 })
 
-const $avatar: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  width: 32,
-  height: 32,
-  borderRadius: 16,
-  backgroundColor: colors.glassHeavy,
-  alignItems: "center",
-  justifyContent: "center",
-  borderWidth: 1,
-  borderColor: colors.glassBorder,
-})
-
-const $avatarText: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $vaultNameText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textStrong,
-  fontSize: 12,
 })
 
 const $lockButton: ThemedStyle<ViewStyle> = ({ colors }) => ({
@@ -366,6 +356,17 @@ const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.lg,
   paddingBottom: spacing.xl,
   gap: spacing.md,
+})
+
+const $primaryAction: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  backgroundColor: colors.accentPink,
+  borderRadius: 16,
+  paddingVertical: spacing.md,
+  alignItems: "center",
+})
+
+const $primaryActionText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.palette.neutral100,
 })
 
 const $searchButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
