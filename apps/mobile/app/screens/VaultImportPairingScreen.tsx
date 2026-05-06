@@ -58,8 +58,7 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
     )
 
     const handleGoLink = useCallback(() => {
-      // Change this route if your link screen is named differently.
-      navigation.navigate("VaultAccount")
+      navigation.navigate("VaultLinkDevice")
     }, [navigation])
 
     const handleImport = async () => {
@@ -123,7 +122,7 @@ export const VaultImportPairingScreen: FC<AppStackScreenProps<"VaultImportPairin
 
         setRemoteVaultId(parsed.vaultId)
         setStatus("Pairing imported. You can sync now.")
-        navigation.replace("VaultSettings")
+        navigation.replace("RemoteVault")
       } catch (err) {
         const message = err instanceof Error ? err.message : "Import failed"
         setError(message)

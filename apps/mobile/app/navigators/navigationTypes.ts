@@ -12,14 +12,6 @@ export type VaultStackParamList = {
   VaultNote: { noteId?: string; importType?: "image" | "pdf" | "file" } | undefined
 }
 
-export type SyncStackParamList = {
-  SyncDashboard: undefined
-}
-
-export type CollabStackParamList = {
-  CollabDashboard: undefined
-}
-
 export type SecurityStackParamList = {
   SecurityDashboard: undefined
   DecoyVault: undefined
@@ -51,25 +43,12 @@ export type AppStackParamList = {
   VaultPasskeySetup: { mode?: "fresh" | "migrate" | "recovery" } | undefined
   VaultOnboarding: undefined
   VaultTabs: NavigatorScreenParams<VaultTabsParamList>
-  Profile: undefined
-  VaultSwitcherModal: undefined
-  VaultHome: undefined
-  VaultSwitcher: undefined
-  PairDeviceModal: undefined
-  ImportPairingModal: undefined
-  VaultFabVaultPicker: undefined
-  VaultSettings: undefined
-  VaultAccount: undefined
   VaultLinkDevice: undefined
   RemoteVault: undefined
   VaultPairDevice: undefined
   VaultImportPairing: undefined
-  VaultShare: undefined
-  VaultInvites: undefined
   VaultDiagnostics: undefined
-  VaultRecovery: undefined
   ThreatModel: undefined
-  VaultSearch: undefined
   ServerUrl: undefined
   Welcome: undefined
   Login: undefined
@@ -85,16 +64,6 @@ export type AppStackScreenProps<T extends keyof AppStackParamList> = NativeStack
 
 export type VaultStackScreenProps<T extends keyof VaultStackParamList> = CompositeScreenProps<
   NativeStackScreenProps<VaultStackParamList, T>,
-  AppStackScreenProps<keyof AppStackParamList>
->
-
-export type SyncStackScreenProps<T extends keyof SyncStackParamList> = CompositeScreenProps<
-  NativeStackScreenProps<SyncStackParamList, T>,
-  AppStackScreenProps<keyof AppStackParamList>
->
-
-export type CollabStackScreenProps<T extends keyof CollabStackParamList> = CompositeScreenProps<
-  NativeStackScreenProps<CollabStackParamList, T>,
   AppStackScreenProps<keyof AppStackParamList>
 >
 
