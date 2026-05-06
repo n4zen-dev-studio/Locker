@@ -17,6 +17,8 @@ type Props = {
   pulseStyle: ViewStyle
   isRecording: boolean
   isRecordingPaused: boolean
+  isProcessing?: boolean
+  processingLabel?: string
   isPlaying: boolean
   durationLabel: string
   playbackLabel: string
@@ -37,6 +39,8 @@ export function VoiceStudioCard(props: Props) {
     pulseStyle,
     isRecording,
     isRecordingPaused,
+    isProcessing,
+    processingLabel,
     isPlaying,
     durationLabel,
     playbackLabel,
@@ -56,7 +60,13 @@ export function VoiceStudioCard(props: Props) {
         <View>
           <Text style={themed($voiceTitle)}>{title}</Text>
           <Text style={themed($voiceSubtitle)}>
-            {isRecording ? (isRecordingPaused ? "Recording paused" : "Recording live") : hasVoice ? "Encrypted playback ready" : "Create a secure voice item"}
+            {isProcessing
+              ? processingLabel ?? "Saving recording..."
+              : isRecording
+                ? (isRecordingPaused ? "Recording paused" : "Recording live")
+                : hasVoice
+                  ? "Encrypted playback ready"
+                  : "Create a secure voice item"}
           </Text>
         </View>
         <View style={themed($voiceBadge)}>
@@ -99,7 +109,7 @@ export function VoiceStudioCard(props: Props) {
             label="Record"
             icon={<Mic size={14} color="#FFE8FD" />}
             onPress={onStartRecord}
-            disabled={!canRecord}
+            disabled={!canRecord || !!isProcessing}
           />
         ) : (
           <>
@@ -123,21 +133,21 @@ export function VoiceStudioCard(props: Props) {
           label={isPlaying ? "Pause" : "Play"}
           icon={<Ionicons name={isPlaying ? "pause" : "play"} size={14} color="#FFE8FD" />}
           onPress={onPlayPause}
-          disabled={!hasVoice}
+          disabled={!hasVoice || !!isProcessing}
         />
         <MiniIconButton
           themed={themed}
           label="Stop"
           icon={<Ionicons name="square" size={14} color="#FFE8FD" />}
           onPress={onStopPlayback}
-          disabled={!hasVoice}
+          disabled={!hasVoice || !!isProcessing}
         />
         <MiniIconButton
           themed={themed}
           label="Export"
           icon={<Download size={14} color="#FFE8FD" />}
           onPress={onExport}
-          disabled={!hasVoice}
+          disabled={!hasVoice || !!isProcessing}
         />
       </View>
     </View>

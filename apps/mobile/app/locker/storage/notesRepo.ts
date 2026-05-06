@@ -209,12 +209,16 @@ export function saveNote(
 ): Note {
   const now = new Date().toISOString()
   const existing = input.id ? load<EncryptedNoteRecord>(NOTE_KEY_PREFIX + input.id) : null
+  const hasPrimaryAttachmentId = Object.prototype.hasOwnProperty.call(input, "primaryAttachmentId")
+  const hasVoiceDurationMs = Object.prototype.hasOwnProperty.call(input, "voiceDurationMs")
   const id = input.id ?? generateId()
   const vaultId = input.vaultId ?? existing?.vaultId ?? null
   const classification = input.classification ?? existing?.classification ?? DEFAULT_VAULT_CLASSIFICATION
   const itemType = input.itemType ?? existing?.itemType ?? "note"
-  const primaryAttachmentId = input.primaryAttachmentId ?? existing?.primaryAttachmentId ?? null
-  const voiceDurationMs = input.voiceDurationMs ?? existing?.voiceDurationMs ?? null
+  const primaryAttachmentId = hasPrimaryAttachmentId
+    ? input.primaryAttachmentId ?? null
+    : existing?.primaryAttachmentId ?? null
+  const voiceDurationMs = hasVoiceDurationMs ? input.voiceDurationMs ?? null : existing?.voiceDurationMs ?? null
   const deletedAt = input.deletedAt ?? existing?.deletedAt ?? null
   const conflictParentNoteId = input.conflictParentNoteId ?? existing?.conflictParentNoteId ?? null
   const conflictOriginLamport = input.conflictOriginLamport ?? existing?.conflictOriginLamport ?? null
