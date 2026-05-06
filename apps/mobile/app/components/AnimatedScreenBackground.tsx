@@ -1,6 +1,5 @@
 import { FC, useEffect, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   Easing,
   interpolate,
@@ -11,8 +10,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import Svg, { Circle, Defs, Pattern, Rect } from "react-native-svg";
-
-import { useAppTheme } from "@/theme/context";
 
 type AnimatedScreenBackgroundProps = {
   reducedMotion?: boolean;
@@ -98,13 +95,10 @@ export const GlowOrb: FC<GlowOrbProps> = ({
 export const AnimatedScreenBackground: FC<AnimatedScreenBackgroundProps> = ({
   reducedMotion = false,
 }) => {
-  const { theme } = useAppTheme();
-
   const driftA = useSharedValue(0);
   const driftB = useSharedValue(0);
-  const driftC = useSharedValue(0);
   const dotShift = useSharedValue(0);
-  const bloom = useSharedValue(reducedMotion ? 0.92 : 0.84);
+  const bloom = useSharedValue(reducedMotion ? 0.94 : 0.88);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -124,17 +118,8 @@ export const AnimatedScreenBackground: FC<AnimatedScreenBackgroundProps> = ({
 
     driftB.value = withRepeat(
       withSequence(
-        withTiming(-1, { duration: 9200, easing: ease }),
-        withTiming(1, { duration: 8600, easing: ease }),
-      ),
-      -1,
-      true,
-    );
-
-    driftC.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 10400, easing: ease }),
-        withTiming(-1, { duration: 9600, easing: ease }),
+        withTiming(-1, { duration: 9800, easing: ease }),
+        withTiming(1, { duration: 9100, easing: ease }),
       ),
       -1,
       true,
@@ -142,8 +127,8 @@ export const AnimatedScreenBackground: FC<AnimatedScreenBackgroundProps> = ({
 
     dotShift.value = withRepeat(
       withSequence(
-        withTiming(1, { duration: 12000, easing: ease }),
-        withTiming(-1, { duration: 12000, easing: ease }),
+        withTiming(1, { duration: 14000, easing: ease }),
+        withTiming(-1, { duration: 14000, easing: ease }),
       ),
       -1,
       true,
@@ -151,13 +136,13 @@ export const AnimatedScreenBackground: FC<AnimatedScreenBackgroundProps> = ({
 
     bloom.value = withRepeat(
       withSequence(
-        withTiming(1, { duration: 4200, easing: ease }),
-        withTiming(0.84, { duration: 4200, easing: ease }),
+        withTiming(1, { duration: 4800, easing: ease }),
+        withTiming(0.88, { duration: 4800, easing: ease }),
       ),
       -1,
       true,
     );
-  }, [bloom, dotShift, driftA, driftB, driftC, reducedMotion]);
+  }, [bloom, dotShift, driftA, driftB, reducedMotion]);
 
   const dotPatternStyle = useAnimatedStyle(() => ({
     transform: [
@@ -167,47 +152,27 @@ export const AnimatedScreenBackground: FC<AnimatedScreenBackgroundProps> = ({
     opacity: interpolate(dotShift.value, [-1, 1], [0.4, 0.52]),
   }));
 
-  const orbAStyle = useAnimatedStyle(() => ({
+  const bloomTopStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: interpolate(driftA.value, [-1, 1], [-18, 24]) },
-      { translateY: interpolate(driftA.value, [-1, 1], [20, -16]) },
-      { scale: interpolate(bloom.value, [0.84, 1], [0.98, 1.04]) },
+      { translateX: interpolate(driftA.value, [-1, 1], [-18, 14]) },
+      { translateY: interpolate(driftA.value, [-1, 1], [14, -10]) },
+      { scale: interpolate(bloom.value, [0.88, 1], [0.98, 1.04]) },
     ],
-    opacity: interpolate(bloom.value, [0.84, 1], [0.68, 0.92]),
+    opacity: interpolate(bloom.value, [0.88, 1], [0.18, 0.28]),
   }));
 
-  const orbBStyle = useAnimatedStyle(() => ({
+  const bloomBottomStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: interpolate(driftB.value, [-1, 1], [22, -18]) },
-      { translateY: interpolate(driftB.value, [-1, 1], [-16, 20]) },
-      { scale: interpolate(driftB.value, [-1, 1], [0.98, 1.06]) },
+      { translateX: interpolate(driftB.value, [-1, 1], [16, -12]) },
+      { translateY: interpolate(driftB.value, [-1, 1], [-10, 14]) },
+      { scale: interpolate(driftB.value, [-1, 1], [0.97, 1.03]) },
     ],
-    opacity: interpolate(bloom.value, [0.84, 1], [0.52, 0.72]),
-  }));
-
-  const orbCStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: interpolate(driftC.value, [-1, 1], [-12, 12]) },
-      { translateY: interpolate(driftC.value, [-1, 1], [14, -10]) },
-      { scale: interpolate(driftC.value, [-1, 1], [0.94, 1.02]) },
-    ],
-    opacity: interpolate(driftC.value, [-1, 1], [0.24, 0.4]),
+    opacity: interpolate(bloom.value, [0.88, 1], [0.12, 0.2]),
   }));
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-      <LinearGradient
-        colors={theme.colors.calculator.backgroundGradient}
-        start={{ x: 0.12, y: 0 }}
-        end={{ x: 0.86, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
-      />
-      <LinearGradient
-        colors={theme.colors.calculator.backgroundFieldGradient}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
-      />
+      <View style={styles.base} />
 
       <Animated.View
         style={[
@@ -216,72 +181,60 @@ export const AnimatedScreenBackground: FC<AnimatedScreenBackgroundProps> = ({
           dotPatternStyle,
         ]}
       >
-        <DotPatternBackground color={theme.colors.calculator.dotPattern} opacity={1} />
+        <DotPatternBackground color="rgba(255, 201, 229, 0.66)" opacity={1} />
       </Animated.View>
 
       <View style={styles.vignette} />
       <View style={styles.edgeVignetteLeft} />
       <View style={styles.edgeVignetteRight} />
 
-      <Animated.View style={[styles.orbTopRight, orbAStyle]}>
-        <GlowOrb
-          size={420}
-          color={theme.colors.calculator.accentGlow}
-          coreColor={theme.colors.calculator.accentPink}
-          opacity={0.92}
-        />
+      <Animated.View style={[styles.bloomTop, bloomTopStyle]}>
+        <View style={styles.bloomHot} />
       </Animated.View>
 
-      <Animated.View style={[styles.orbBottomLeft, orbBStyle]}>
-        <GlowOrb
-          size={360}
-          color={theme.colors.calculator.accentPurpleSoft}
-          coreColor={theme.colors.calculator.accentPurple}
-          opacity={0.7}
-        />
-      </Animated.View>
-
-      <Animated.View style={[styles.orbCenter, orbCStyle]}>
-        <GlowOrb
-          size={320}
-          color={theme.colors.calculator.surfaceGlow}
-          coreColor={theme.colors.calculator.accentPinkSoft}
-          opacity={0.44}
-        />
+      <Animated.View style={[styles.bloomBottom, bloomBottomStyle]}>
+        <View style={styles.bloomSoft} />
       </Animated.View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  base: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#060607",
+  },
   dotPatternWrap: {
     top: -6,
     left: -6,
     right: -6,
     bottom: -6,
   },
-  orbTopRight: {
+  bloomTop: {
     position: "absolute",
-    top: -110,
-    right: -148,
+    top: -70,
+    right: -110,
   },
-  orbBottomLeft: {
+  bloomBottom: {
     position: "absolute",
-    left: -150,
-    bottom: 98,
+    left: -90,
+    bottom: 140,
   },
-  orbCenter: {
-    position: "absolute",
-    right: -96,
-    top: "34%",
+  bloomHot: {
+    width: 340,
+    height: 340,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 79, 163, 0.94)",
+  },
+  bloomSoft: {
+    width: 260,
+    height: 260,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 79, 163, 0.72)",
   },
   vignette: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.22)",
-    shadowColor: "#000",
-    shadowOpacity: 0.45,
-    shadowRadius: 36,
-    shadowOffset: { width: 0, height: 0 },
+    backgroundColor: "rgba(0,0,0,0.16)",
   },
   edgeVignetteLeft: {
     position: "absolute",
@@ -290,7 +243,7 @@ const styles = StyleSheet.create({
     left: -36,
     width: 92,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.32)",
+    backgroundColor: "rgba(0,0,0,0.46)",
   },
   edgeVignetteRight: {
     position: "absolute",
@@ -299,6 +252,6 @@ const styles = StyleSheet.create({
     right: -36,
     width: 92,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.32)",
+    backgroundColor: "rgba(0,0,0,0.46)",
   },
 });

@@ -26,16 +26,20 @@ import { useAppTheme } from "@/theme/context";
 import type { ThemedStyle } from "@/theme/types";
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle";
 import { getMeta } from "@/locker/storage/vaultMetaRepo";
+// import { DotLottie, Mode, type Dotlottie } from '@lottiefiles/dotlottie-react-native';
+import LottieView from 'lottie-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 
 const AppLogo = require("@assets/images/logo.png")
+const OnboardingIcon1 = require("@assets/animations/Onboarding-Kit.json")
 
 type CarouselSlide = {
   id: string;
   title: string;
   body: string;
+  item: string;
 };
 
 export const VaultOnboardingScreen: FC<AppStackScreenProps<"VaultOnboarding">> =
@@ -66,24 +70,28 @@ export const VaultOnboardingScreen: FC<AppStackScreenProps<"VaultOnboarding">> =
           title: "Hidden in plain sight",
           body:
             "Locker stays tucked behind your calculator, so your private space does not appear like a regular vault app on your device.",
+          item: require("@assets/animations/empty-box-2.json")
         },
         {
           id: "security",
-          title: "Only you can open it",
+          title: "Store anything you want",
           body:
             "Your calculator PIN helps protect the hidden entry, while passkey and device biometrics add a stronger layer of secure unlock.",
+          item: require("@assets/animations/Onboarding-Kit.json")
         },
         {
           id: "transfer",
           title: "Move securely between devices",
           body:
             "You can transfer access from one device to another, so your Locker setup travels with you without exposing your data in plain form.",
+          item: require("@assets/animations/Talent-Search.json")
         },
         {
           id: "zero-trust",
           title: "Encrypted end to end",
           body:
             "Locker uses a zero-trust approach with the server, meaning your data stays encrypted and unreadable outside your own trusted devices.",
+          item: require("@assets/animations/locker-and-secure.json")
         },
       ],
       [],
@@ -176,13 +184,15 @@ export const VaultOnboardingScreen: FC<AppStackScreenProps<"VaultOnboarding">> =
               <View key={slide.id} style={themed($slide)}>
                 <View style={themed($visualWrap)}>
                   <View style={themed($glowHalo)} />
-                  <View style={themed($imageShell)}>
-                    <Image
+                  {/* <View style={themed($imageShell)}> */}
+                    {/* <Image
                       source={AppLogo}
                       resizeMode="contain"
                       style={themed($placeholderImage)}
-                    />
-                  </View>
+                    /> */}
+                    <LottieView source={slide.item} autoPlay loop style={themed($placeholderImage)}/>
+
+                  {/* </View> */}
                 </View>
 
                 <View style={themed($copyWrap)}>
@@ -302,8 +312,8 @@ const $imageShell: ThemedStyle<ViewStyle> = ({ colors }) => ({
 });
 
 const $placeholderImage: ThemedStyle<ImageStyle> = () => ({
-  width: 104,
-  height: 104,
+  width: 350,
+  height: 350,
 });
 
 const $copyWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
