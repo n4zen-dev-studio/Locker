@@ -12,7 +12,6 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated"
-import Svg, { Circle, Path } from "react-native-svg"
 
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
@@ -28,7 +27,7 @@ import type {
   VaultTabsParamList,
 } from "@/navigators/navigationTypes"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
-import { Home, Lock, Settings, Shield } from "lucide-react-native"
+import { Home, Settings, Shield } from "lucide-react-native"
 
 const Tabs = createBottomTabNavigator<VaultTabsParamList>()
 const VaultStack = createNativeStackNavigator<VaultStackParamList>()
@@ -97,6 +96,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   const containerWidth = useSharedValue(0)
   const indicatorTranslateX = useSharedValue(0)
+  const indicatorWidth = useSharedValue(0)
   const visibleProgress = useSharedValue(1)
   const hasMeasured = useRef(false)
 
@@ -131,41 +131,33 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
       const width = event.nativeEvent.layout.width
+      const slotWidth = width / TAB_ITEMS.length
+
       containerWidth.value = width
+      indicatorWidth.value = Math.max(0, slotWidth - INDICATOR_HORIZONTAL_PADDING * 2)
       indicatorTranslateX.value = getIndicatorTranslateX(width, state.index)
       hasMeasured.current = true
     },
-    [containerWidth, getIndicatorTranslateX, indicatorTranslateX, state.index],
+    [containerWidth, getIndicatorTranslateX, indicatorTranslateX, indicatorWidth, state.index],
   )
 
-  const containerStyle = useAnimatedStyle(() => {
+  const animatedWrapperStyle = useAnimatedStyle(() => {
     return {
       opacity: visibleProgress.value,
       transform: [
         {
-          translateY: interpolate(
-            visibleProgress.value,
-            [0, 1],
-            [TAB_BAR_HIDE_TRANSLATE_Y, 0],
-          ),
+          translateY: interpolate(visibleProgress.value, [0, 1], [TAB_BAR_HIDE_TRANSLATE_Y, 0]),
         },
         {
-          scale: interpolate(visibleProgress.value, [0, 1], [0.98, 1]),
+          scale: interpolate(visibleProgress.value, [0, 1], [0.985, 1]),
         },
       ],
     }
   })
 
   const indicatorStyle = useAnimatedStyle(() => {
-    const slotWidth =
-      containerWidth.value > 0 ? containerWidth.value / TAB_ITEMS.length : 0
-    const indicatorWidth = Math.max(
-      0,
-      slotWidth - INDICATOR_HORIZONTAL_PADDING * 2,
-    )
-
     return {
-      width: indicatorWidth,
+      width: indicatorWidth.value,
       transform: [{ translateX: indicatorTranslateX.value }],
     }
   })
@@ -174,61 +166,63 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     <View pointerEvents="box-none" style={themed($tabBarPortal)}>
       <Animated.View
         pointerEvents={shouldHide ? "none" : "auto"}
-        style={[themed($tabBarFrame), themed($safeBottom), containerStyle]}
+        style={[themed($tabBarAnimatedWrapper), themed($safeBottom), animatedWrapperStyle]}
       >
-        <View onLayout={onLayout} style={themed($tabBarShell)}>
-          <Animated.View
-            pointerEvents="none"
-            style={[themed($activeBubble), indicatorStyle]}
-          >
-            <View style={themed($activeBubbleCore)} />
-          </Animated.View>
+        <View style={themed($tabBarFrame)}>
+          <View onLayout={onLayout} style={themed($tabBarShell)}>
+            <Animated.View
+              pointerEvents="none"
+              style={[themed($activeBubble), indicatorStyle]}
+            >
+              <View style={themed($activeBubbleCore)} />
+            </Animated.View>
 
-          {TAB_ITEMS.map((tab, index) => {
-            const route = state.routes[index]
-            const isFocused = state.index === index
-            const { options } = descriptors[route.key]
+            {TAB_ITEMS.map((tab, index) => {
+              const route = state.routes[index]
+              const isFocused = state.index === index
+              const { options } = descriptors[route.key]
 
-            const onPress = () => {
-              if (isFocused) return
+              const onPress = () => {
+                if (isFocused) return
 
-              if (hasMeasured.current && containerWidth.value > 0) {
-                cancelAnimation(indicatorTranslateX)
-                indicatorTranslateX.value = withSpring(
-                  getIndicatorTranslateX(containerWidth.value, index),
-                  SPRING_CONFIG,
-                )
+                if (hasMeasured.current && containerWidth.value > 0) {
+                  cancelAnimation(indicatorTranslateX)
+                  indicatorTranslateX.value = withSpring(
+                    getIndicatorTranslateX(containerWidth.value, index),
+                    SPRING_CONFIG,
+                  )
+                }
+
+                const event = navigation.emit({
+                  type: "tabPress",
+                  target: route.key,
+                  canPreventDefault: true,
+                })
+
+                if (!event.defaultPrevented) {
+                  navigation.navigate(route.name, route.params)
+                }
               }
 
-              const event = navigation.emit({
-                type: "tabPress",
-                target: route.key,
-                canPreventDefault: true,
-              })
-
-              if (!event.defaultPrevented) {
-                navigation.navigate(route.name, route.params)
+              const onLongPress = () => {
+                navigation.emit({
+                  type: "tabLongPress",
+                  target: route.key,
+                })
               }
-            }
 
-            const onLongPress = () => {
-              navigation.emit({
-                type: "tabLongPress",
-                target: route.key,
-              })
-            }
-
-            return (
-              <MemoizedTabBarItem
-                key={tab.key}
-                accessibilityLabel={options.tabBarAccessibilityLabel}
-                icon={tab.icon}
-                isFocused={isFocused}
-                onLongPress={onLongPress}
-                onPress={onPress}
-              />
-            )
-          })}
+              return (
+                <MemoizedTabBarItem
+                  key={tab.key}
+                  accessibilityLabel={options.tabBarAccessibilityLabel}
+                  icon={tab.icon}
+                  isFocused={isFocused}
+                  onLongPress={onLongPress}
+                  onPress={onPress}
+                />
+              )
+            })}
+          </View>
         </View>
       </Animated.View>
     </View>
@@ -265,7 +259,7 @@ function TabBarItem({
     >
       <View style={themed($tabInner)}>
         <MemoizedVaultTabIcon
-          color={isFocused ? "#000" : "#ffffffcd"}
+          color={isFocused ? "#000000" : "#ffffffcd"}
           focused={isFocused}
           icon={icon}
         />
@@ -286,20 +280,14 @@ function VaultTabIcon({
   icon: "vault" | "security" | "settings"
 }) {
   if (icon === "vault") {
-    return (
-      <Home size={20} fill={focused ?color: null}  fillOpacity={0.2} color={color} />
-    )
+    return <Home size={20} fill={focused ? color : undefined} fillOpacity={0.2} color={color} />
   }
 
   if (icon === "security") {
-    return (
-      <Shield size={20} fill={focused ?color: null} color={color} />
-    )
+    return <Shield size={20} fill={focused ? color : undefined} color={color} />
   }
 
-  return (
-    <Settings size={20} fill={focused ?color: null} fillOpacity={0.2} color={color} />
-  )
+  return <Settings size={20} fill={focused ? color : undefined} fillOpacity={0.2} color={color} />
 }
 
 const MemoizedVaultTabIcon = memo(VaultTabIcon)
@@ -312,8 +300,12 @@ function shouldHideTabBar(
   if (!focused) return false
 
   if (route.name === "Vault") return hiddenVaultScreens.includes(focused as keyof VaultStackParamList)
-  if (route.name === "Security") return hiddenSecurityScreens.includes(focused as keyof SecurityStackParamList)
-  if (route.name === "Settings") return hiddenSettingsScreens.includes(focused as keyof SettingsStackParamList)
+  if (route.name === "Security") {
+    return hiddenSecurityScreens.includes(focused as keyof SecurityStackParamList)
+  }
+  if (route.name === "Settings") {
+    return hiddenSettingsScreens.includes(focused as keyof SettingsStackParamList)
+  }
   return false
 }
 
@@ -338,7 +330,7 @@ function getDeepFocusedRouteName(
 export const VaultTabsNavigator = () => {
   return (
     <Tabs.Navigator
-      detachInactiveScreens={false}
+      // detachInactiveScreens={true}
       screenOptions={{
         headerShown: false,
         animation: "none",
@@ -371,8 +363,11 @@ const $tabBarPortal: ThemedStyle<ViewStyle> = () => ({
   alignItems: "center",
 })
 
-const $tabBarFrame: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $tabBarAnimatedWrapper: ThemedStyle<ViewStyle> = () => ({
   width: "70%",
+})
+
+const $tabBarFrame: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.lg,
   paddingBottom: spacing.md + 8,
 })
@@ -386,14 +381,14 @@ const $tabBarShell: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: 0,
   paddingVertical: spacing.xs,
   borderRadius: 38,
-  backgroundColor: "rgba(4, 3, 9, 0.92)",
+  backgroundColor: "rgba(4, 3, 9, 0.94)",
   borderWidth: 1,
-  borderColor: "#a1a15679",
-  shadowColor: "rgba(0, 0, 0, 0.85)",
-  shadowOpacity: 0.42,
-  shadowRadius: 24,
-  shadowOffset: { width: 0, height: 18 },
-  elevation: 16,
+  borderColor: "#a1a15666",
+  shadowColor: "#000000",
+  shadowOpacity: 0.18,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 6,
   overflow: "hidden",
 })
 
@@ -405,15 +400,15 @@ const $activeBubble: ThemedStyle<ViewStyle> = () => ({
   zIndex: 0,
 })
 
-const $activeBubbleCore: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $activeBubbleCore: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
   borderRadius: 28,
   backgroundColor: "#F2FE0D",
-  shadowColor: colors.vaultHub.vaultHubGlow,
-  shadowOpacity: 0.48,
-  shadowRadius: 18,
-  shadowOffset: { width: 0, height: 10 },
-  elevation: 12,
+  shadowColor: "#F2FE0D",
+  shadowOpacity: 0.16,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 4,
 })
 
 const $tabButton: ThemedStyle<ViewStyle> = () => ({

@@ -169,7 +169,7 @@ export const AppNavigator = (props: NavigationProps) => {
   )
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    // <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer
         ref={navigationRef}
         theme={navigationTheme}
@@ -182,6 +182,6 @@ export const AppNavigator = (props: NavigationProps) => {
           <AppStack />
         </ErrorBoundary>
       </NavigationContainer>
-    </GestureHandlerRootView>
+    // </GestureHandlerRootView>
   )
 }

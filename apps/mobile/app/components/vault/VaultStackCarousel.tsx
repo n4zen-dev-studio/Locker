@@ -163,6 +163,7 @@ export function VaultStackCarousel(props: VaultStackCarouselProps) {
   }
 
   return (
+    <GestureHandlerRootView>
     <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(320)} style={themed($stack)}>
     
 {/* <View style={{height: 60}}/> */}
@@ -212,6 +213,7 @@ export function VaultStackCarousel(props: VaultStackCarouselProps) {
         </View>
       </View> */}
     </Animated.View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -233,7 +235,7 @@ function StackCard(props: StackCardProps) {
   const isActive = index === activeIndex;
 
   const animatedStyle = useAnimatedStyle(() => {
-    const relative = index - activeIndexSv.value - dragX.value / Math.max(cardWidth, 1);
+    const relative = index - activeIndexSv.value + dragX.value / Math.max(cardWidth, 1);
     const opening = openingIndex.value === index ? openProgress.value : 0;
     const translateX = interpolate(
       relative,

@@ -79,7 +79,7 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
         contentContainerStyle={themed([$content, $insets, { paddingBottom: spacing.xxxl + 28 }])}
         systemBarStyle="light"
       >
-        <VaultHubBackground />
+        {/* <VaultHubBackground /> */}
 
         <Animated.View
           entering={
@@ -89,6 +89,8 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
           }
           // style={themed($hero)}
         >
+                <VaultHubBackground reducedMotion={true} />
+
           <View style={themed($heroTopRow)}>
               <Text size="xs" style={themed($heroEyebrow)}>
                 Settings
@@ -192,14 +194,6 @@ export const SettingsHomeScreen: FC<SettingsStackScreenProps<"SettingsHome">> =
                 icon={<ShieldAlert size={16} color={theme.colors.vaultHub.vaultHubAccentPink} />}
                 onPress={() => navigation.navigate("ThreatModel")}
               />
-
-              {/* <MiniToolRow
-                label="Replay Onboarding"
-                value="Show setup gate again"
-                accent="neutral"
-                icon={<RotateCcw size={16} color={theme.colors.vaultHub.vaultHubAccentPink} />}
-                onPress={handleReplayOnboarding}
-              /> */}
 
               <MiniToolRow
                 label="Log out"

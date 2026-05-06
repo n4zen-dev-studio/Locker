@@ -18,7 +18,7 @@ import { useAppTheme } from "@/theme/context"
 import { $styles } from "@/theme/styles"
 import { ExtendedEdge, useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
 
-export const DEFAULT_BOTTOM_OFFSET = 50
+export const DEFAULT_BOTTOM_OFFSET = 0
 
 interface BaseScreenProps {
   /**
