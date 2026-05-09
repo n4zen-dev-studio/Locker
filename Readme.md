@@ -9,6 +9,7 @@
 # 📚 Table of Contents
 
 * [Executive Summary](#-executive-summary)
+* [Visuals & Media](#-visuals--media)
 * [System Architecture](#-system-architecture)
 * [Data Flow & Pipeline](#-data-flow--pipeline)
 * [Technical Deep Dive](#-technical-deep-dive)
@@ -17,7 +18,6 @@
 * [Performance & Metrics](#-performance--metrics)
 * [Model Outputs (Vault Data Structure)](#-model-outputs-vault-data-structure)
 * [Developer Experience & Setup](#-developer-experience--setup)
-* [Visuals & Media](#-visuals--media)
 
 ---
 
@@ -53,6 +53,86 @@ Locker introduces a **zero-trust vault architecture** with:
 * Enables **secure multi-device access without weakening encryption**
 * Provides **recoverability without compromising secrecy**
 * Reduces attack surface through **UI obfuscation + local-first design**
+
+---
+
+<a id="visuals--media"></a>
+
+## 🧪 Demo & Visuals
+
+### 📱 Vault Interface
+
+
+<table>
+<tr>
+<td align="center"><img src="docs/ui1.png" width="180"/></td>
+<td align="center"><img src="docs/ui2.png" width="180"/></td>
+<td align="center"><img src="docs/ui3.png" width="180"/></td>
+<td align="center"><img src="docs/ui4.png" width="180"/></td>
+<td align="center"><img src="docs/ui5.png" width="180"/></td>
+</tr>
+</table>
+
+
+
+---
+
+### 🎬 Demo Videos
+
+See Locker in action — a zero-trust encrypted vault designed for secure, cross-device data storage.
+
+<table>
+<tr>
+
+<td width="50%" valign="top">
+
+### 🔐 Vault Access & Unlock
+
+<!-- https://github.com/user-attachments/assets/c31ece8b-6430-4c3a-8e3b-509d589af98a -->
+
+<!-- with-onboarding -->
+<!-- https://github.com/user-attachments/assets/498b89de-9ed8-4839-ac1c-6b35ab57f5d6 -->
+
+<a href="https://github.com/user-attachments/assets/498b89de-9ed8-4839-ac1c-6b35ab57f5d6" target="_blank">
+  <img src="docs/demo/locker-ui.png" alt="Vault Unlock Demo" width="100%" />
+</a>
+
+> Secure vault access using passkeys and encrypted local storage.
+
+**Highlights**
+- Passkey authentication flow  
+- Encrypted vault unlock  
+- Calculator disguise interaction  
+- Secure session handling  
+
+</td>
+
+<td width="50%" valign="top">
+
+### 🔄 Sync & Vault Management
+
+<a href="https://github.com/user-attachments/assets/f9db873c-6edb-434d-b871-a8aa5c12f2e5" target="_blank">
+  <img src="docs/demo/locker-security.png" alt="Vault Sync Demo" width="100%" />
+</a>
+
+> Cross-device sync with zero-trust architecture and secure key handling.
+
+**Highlights**
+- Encrypted sync workflow  
+- Multi-device vault access  
+- Recovery key usage  
+- Secure data isolation  
+
+</td>
+
+</tr>
+</table>
+
+---
+
+<p align="right">
+  <a href="#top">⬆️ Back to top</a>
+</p>
 
 ---
 
@@ -348,26 +428,6 @@ pnpm start
 ```bash
 pnpm test
 ```
-
----
-
-# 🎥 Visuals & Media
-
-### Demo Video
-
-<!-- ![Demo Video](docs/demo.mp4) -->
-
-> Visuals and media coming soon!
-
-### Architecture Diagram
-
-![System Architecture Diagram](docs/architecture.png)
-
-### Sync Dashboard / Metrics
-
-<!-- ![Metrics Dashboard](docs/metrics.png) -->
-> Metrics Dashboard coming soon!
-
 
 ---
 
